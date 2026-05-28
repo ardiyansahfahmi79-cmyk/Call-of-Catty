@@ -1,53 +1,45 @@
 import streamlit as st
-import random
+import base64
 
 # ================= KONFIGURASI HALAMAN =================
 st.set_page_config(
-    page_title="🐱 PERANG KERAJAAN KUCING | MEOWSTAR vs CAKAR BESI",
-    page_icon="🐱‍🚀",
+    page_title="🐱 CALL OF CATTY: MEOWFARE | Perang Kucing Epic",
+    page_icon="🐱‍👑",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# ================= CSS KHUSUS untuk nuansa perang =================
+# ================= CSS =================
 st.markdown("""
 <style>
     .stApp {
         background: radial-gradient(circle at 20% 30%, #0a0f1e, #010101);
     }
-    .reportview-container .main .block-container {
-        padding-top: 0rem;
-        padding-bottom: 0rem;
-    }
-    h1, h2, h3 {
+    h1 {
         font-family: 'Courier New', monospace;
         text-shadow: 0 0 5px #ff5500;
+        text-align: center;
+        color: #ffaa44;
     }
-    .stButton > button {
-        background: #2c2118;
-        border: 2px solid #e67e22;
-        color: #ffd966;
-        font-weight: bold;
-        border-radius: 30px;
-        transition: 0.1s;
-    }
-    .stButton > button:hover {
-        background: #e67e22;
-        color: black;
-        transform: scale(1.02);
+    .subtitle {
+        text-align: center;
+        color: #ccccaa;
+        font-family: monospace;
+        font-size: 18px;
+        margin-bottom: 20px;
     }
     footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
-# ================= GAME HTML (Embed dengan tinggi penuh) =================
+# ================= GAME HTML (LENGKAP) =================
 GAME_HTML = """
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>🐱 PERANG TOTAL: MEOWSTAR vs CAKAR BESI 🐱</title>
+    <title>🐱 CALL OF CATTY: MEOWFARE 🐱</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
         body { background: #000; display: flex; justify-content: center; align-items: center; min-height: 100vh; font-family: 'Courier New', monospace; }
@@ -84,24 +76,24 @@ GAME_HTML = """
         const canvas = document.getElementById('warCanvas');
         const ctx = canvas.getContext('2d');
         
-        // =============== CERITA PANJANG (EPIC DRAMA) ===============
+        // =============== CERITA EPIK ===============
         let gamePhase = 'story';
         let storyQueue = [];
         const WAR_STORY = [
-            { speaker: "🇫🇲 JENDERAL KUMIS EMAS", avatar: "🐱‍👑", text: "Federasi Meowstar diserang tanpa peringatan! Kerajaan Cakar Besi melintasi batas dengan 300 tank!" },
-            { speaker: "🇮🇷 KOMANDAN BAJINGAN", avatar: "😾⚙️", text: "Hahaha! Tanah kalian akan menjadi padang pasir! Artileri kami akan menghujani kota!" },
-            { speaker: "🇫🇲 LETNAN BULU PERAK", avatar: "🐱‍✈️", text: "Jenderal! Mereka membantai warga sipil! Jalanan dipenuhi kawah dan jejak tank!" },
+            { speaker: "🇫🇲 JENDERAL KUMIS EMAS", avatar: "🐱‍👑", text: "Federasi Meowstar diserang! Kerajaan Cakar Besi melintasi batas dengan 300 tank!" },
+            { speaker: "🇮🇷 KOMANDAN BAJINGAN", avatar: "😾⚙️", text: "Tanah kalian akan menjadi padang pasir! Artileri kami menghujani kota!" },
+            { speaker: "🇫🇲 LETNAN BULU PERAK", avatar: "🐱‍✈️", text: "Jenderal! Mereka membantai warga sipil! Jalanan dipenuhi kawah!" },
             { speaker: "🇫🇲 JENDERAL", avatar: "🐱‍👑", text: "Aktifkan semua kucing tentara! Jangan biarkan satu pun musuh hidup!" },
-            { speaker: "🇫🇲 SERGEANT COMBAT", avatar: "🐱‍🔫", text: "Kami sudah siap, Pak! Rudal ikan terisi penuh!" },
+            { speaker: "🇫🇲 SERGEANT COMBAT", avatar: "🐱‍🔫", text: "Rudal ikan terisi penuh, Pak!" },
             { speaker: "🇮🇷 TANK COMMANDER", avatar: "💀😾", text: "Tak ada yang bisa hentikan kendaraan lapis baja kami!" },
-            { speaker: "🇫🇲 JENDERAL", avatar: "🐱‍👑", text: "Untuk Meowstar! SERBU! Tembak tepat di celah baju besi mereka!" }
+            { speaker: "🇫🇲 JENDERAL", avatar: "🐱‍👑", text: "Untuk Meowstar! SERBU!" }
         ];
         
         let currentMission = 0;
         const missions = [
-            { name: "🌆 KOTA HANCUR", bg: "#4a2e2e", enemyCount: 6, hasArtillery: true },
-            { name: "🌲 HUTAN BAKAR", bg: "#2b4a2f", enemyCount: 8, hasArtillery: true },
-            { name: "💀 SARANG TERAKHIR", bg: "#1e1a2f", enemyCount: 10, hasArtillery: true, boss: true }
+            { name: "🌆 KOTA HANCUR", bg: "#4a2e2e", enemyCount: 6 },
+            { name: "🌲 HUTAN BAKAR", bg: "#2b4a2f", enemyCount: 8 },
+            { name: "💀 SARANG TERAKHIR", bg: "#1e1a2f", enemyCount: 10, boss: true }
         ];
         
         function startStory(){
@@ -118,7 +110,7 @@ GAME_HTML = """
         }
         function skipStory(){ if(gamePhase==='story'){ if(window.storyTimeout) clearTimeout(window.storyTimeout); if(storyQueue.length) advanceStoryDialog(); else startBattleMission(0); } }
         
-        // =============== GAME ENGINE (Battle Royale style) ===============
+        // =============== GAME ENGINE ===============
         let gameRunning = true, player, enemies=[], bullets=[], effects=[], particles=[], score=0, keys={}, mouse={x:500,y:300}, mouseLeftDown=false, shootCooldown=0, moveTarget=null, isSprinting=false, shake=0, walls=[];
         let craters = [], tankTracks = [];
         
@@ -279,11 +271,11 @@ GAME_HTML = """
         
         function gameLoop(){
             if(gamePhase === 'battle'){ updateBattle(); drawBattlefield(); }
-            else { ctx.fillStyle='#001133'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.font='bold 26px monospace'; ctx.fillStyle='#ffd966'; ctx.fillText("🔥 PERANG DUA NEGARA KUCING 🔥", canvas.width/2-280,100); ctx.font='16px monospace'; ctx.fillStyle='#bbddff'; ctx.fillText("Tekan SPASI untuk lanjut cerita dramatis", canvas.width/2-180,540); }
+            else { ctx.fillStyle='#001133'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.font='bold 26px monospace'; ctx.fillStyle='#ffd966'; ctx.fillText("🔥 CALL OF CATTY: MEOWFARE 🔥", canvas.width/2-280,100); ctx.font='16px monospace'; ctx.fillStyle='#bbddff'; ctx.fillText("Tekan SPASI untuk lanjut cerita dramatis", canvas.width/2-180,540); }
             requestAnimationFrame(gameLoop);
         }
         
-        // =============== EVENT ===============
+        // EVENT HANDLER
         function handleCanvasClick(e){
             const rect = canvas.getBoundingClientRect(), scaleX = canvas.width/rect.width, scaleY = canvas.height/rect.height;
             let cx = (e.clientX - rect.left) * scaleX, cy = (e.clientY - rect.top) * scaleY;
@@ -299,9 +291,33 @@ GAME_HTML = """
         document.getElementById('reloadBtn').addEventListener('click', () => { if(gamePhase==='battle' && player) player.reload(); });
         document.getElementById('sprintBtn').addEventListener('mousedown', () => { if(gamePhase==='battle' && player && !player.reloading) isSprinting=true; });
         document.getElementById('sprintBtn').addEventListener('mouseup', () => isSprinting=false);
-        startStory(); gameLoop();
+        
+        startStory();
+        gameLoop();
     })();
 </script>
 </body>
 </html>
 """
+
+# ================= TAMPILKAN GAME DENGAN IFRAME (Base64) =================
+st.markdown("<h1>🐱‍🚀 CALL OF CATTY: MEOWFARE 🐱‍🚀</h1>", unsafe_allow_html=True)
+st.markdown("<p class='subtitle'>🇫🇲 Federasi Meowstar  vs  🇮🇷 Kerajaan Cakar Besi 🇮🇷</p>", unsafe_allow_html=True)
+
+# Encode HTML ke base64 untuk srcdoc
+b64_game = base64.b64encode(GAME_HTML.encode()).decode()
+iframe_html = f"""
+<div style="display: flex; justify-content: center;">
+    <iframe srcdoc="{b64_game}" width="1000" height="700" style="border: 3px solid #ffb347; border-radius: 20px; background: black;"></iframe>
+</div>
+"""
+st.markdown(iframe_html, unsafe_allow_html=True)
+
+# ================= FOOTER (Opsional) =================
+st.markdown("---")
+st.markdown("""
+<div style='text-align: center; color: #aaaa77; font-size: 13px;'>
+🎮 <strong>Kontrol:</strong> Klik kanan = gerak | Klik kiri = tembak | R = Reload | Shift = Sprint | Spasi = lanjut cerita<br>
+🔥 <strong>3 Misi Epik:</strong> Kota Hancur → Hutan Bakar → Sarang Teroris → Kalahkan Bos!
+</div>
+""", unsafe_allow_html=True)
