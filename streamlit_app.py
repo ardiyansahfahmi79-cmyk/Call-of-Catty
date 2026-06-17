@@ -64,9 +64,19 @@ html, body, .stApp {
     gap: 8px !important;
     padding: 5px 0 0 0 !important;
     height: auto !important;
-    min-height: 600px !important;
+    min-height: 620px !important;
     align-items: stretch !important;
 }
+
+/* FIX: Mencegah Kolom Input Bersarang (Nested) Mewarisi Tinggi 620px */
+[data-testid="column"] [data-testid="stHorizontalBlock"] {
+    min-height: unset !important;
+    height: auto !important;
+    gap: 4px !important;
+    padding: 0 !important;
+    margin-bottom: 6px !important;
+}
+
 [data-testid="column"] {
     height: auto !important;
     display: flex !important;
@@ -203,6 +213,11 @@ html, body, .stApp {
     gap: 6px;
     padding: 2px;
 }
+
+/* Menghilangkan margin bawaan widget input Streamlit agar makin padat */
+div[data-testid="stTextInput"] {
+    margin-bottom: 0px !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -321,9 +336,8 @@ with col1:
     </div>
     """, unsafe_allow_html=True)
 
-# --- KOLOM 2: DXY + CHART RSI (DIBAIKI) ---
+# --- KOLOM 2: DXY + CHART RSI ---
 with col2:
-    # Memperbaiki simbol kueri agar memuat grafik interaktif TVC:DXY & menyuntikkan CSS panel
     dxy_html = """
     <div class="tradingview-widget-container" style="height:100%;">
         <div class="tradingview-widget-container__widget" style="height:100%;"></div>
@@ -409,9 +423,8 @@ with col2:
     """
     components.html(col2_content, height=620)
 
-# --- KOLOM 3: AI SIGNAL FEED + INPUT + HEATMAP (DIBAIKI) ---
+# --- KOLOM 3: AI SIGNAL FEED + INPUT + HEATMAP ---
 with col3:
-    # Header panel murni mandiri tanpa memotong tag div
     st.markdown("""
     <div class="cyber-panel-native">
         <div class="panel-header">
@@ -421,21 +434,19 @@ with col3:
     </div>
     """, unsafe_allow_html=True)
 
-    # Info & Navigasi Input Utama
     st.markdown("""
     <div style="font-family:'Share Tech Mono',monospace; font-size:9px; color:#4B6A8A; background:rgba(0,238,255,0.05); border-left:2px solid #00EEFF; padding:5px 6px; border-radius:4px; margin-bottom: 4px;">
         [INFO] Masukkan pair atau berita untuk analisis AI (contoh: EURUSD, CPI, FOMC)
     </div>
     """, unsafe_allow_html=True)
 
-    # Area Input Native Streamlit
+    # Area Input Native Streamlit (Aman dari Bug Melar Berkat Reset CSS di Atas)
     col_input, col_btn = st.columns([3, 1])
     with col_input:
         user_input = st.text_input("", placeholder="EURUSD, CPI, FOMC...", key="ai_input", label_visibility="collapsed")
     with col_btn:
         send_clicked = st.button("Kirim", key="ai_send", use_container_width=True)
 
-    # Memproses respon interaksi input
     if send_clicked and user_input:
         st.markdown(f"""
         <div class="analysis-card" style="border-left-color: #00EEFF; margin-top:4px;">
@@ -444,7 +455,6 @@ with col3:
         </div>
         """, unsafe_allow_html=True)
 
-    # Menggabungkan data metrik & analisa ke satu blok markdown tertutup rapat untuk menghindari gap hantu
     feed_html = ""
     sentiments = [
         {"label": "USD Sentiment", "val": "BULLISH", "cls": "bullish", "conf": 78},
@@ -478,7 +488,6 @@ with col3:
         """
     st.markdown(feed_html, unsafe_allow_html=True)
 
-    # HEATMAP WIDGET (Dibungkus panel aman di dalam iframe)
     heatmap_html = """
     <div class="tradingview-widget-container" style="width:100%; height:100%;">
         <div class="tradingview-widget-container__widget"></div>
@@ -511,7 +520,7 @@ with col3:
 
 
 # ==============================================================================
-# BAGIAN BAWAH (STRUKTUR HTML DIKONSOLIDASI AGAR AKURAT & RAPI)
+# BAGIAN BAWAH (STRUKTUR HORIZONTAL UTAMA SUDAH SELESAI, MASUK KE PANEL STRIP)
 # ==============================================================================
 
 # --- ACTIVE TRADE SETUPS ---
