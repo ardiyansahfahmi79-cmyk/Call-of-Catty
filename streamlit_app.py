@@ -11,7 +11,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# CSS CYBERTECH - GAP FIX & TATA LETAK PRESISI
+# CSS CYBERTECH - GABUNGAN DARI KODE AI LAIN + MODIFIKASI
 # ==============================================================================
 st.markdown("""
 <style>
@@ -54,7 +54,7 @@ html, body, .stApp {
     padding-right: 0.5rem !important;
 }
 
-/* --- FIX: GAP KOSONG DIHAPUS DENGAN TINGGI PIXEL TETAP --- */
+/* --- 3 KOLOM UTAMA --- */
 [data-testid="stHorizontalBlock"] {
     display: flex !important;
     flex-direction: row !important;
@@ -63,33 +63,27 @@ html, body, .stApp {
     overflow-y: hidden !important;
     gap: 8px !important;
     padding: 5px 0 0 0 !important;
-    height: 550px !important; /* Fixed height, bukan persentase layar, agar tidak ada gap */
+    height: 600px !important;
 }
-
-/* Menjaga lebar kolom agar tidak mengkeret/gepeng di HP */
 [data-testid="column"] {
     height: 100% !important;
     display: flex !important;
     flex-direction: column !important;
     flex-shrink: 0 !important;
 }
-[data-testid="column"]:nth-of-type(1) { min-width: 300px !important; width: 300px !important; }
+[data-testid="column"]:nth-of-type(1) { min-width: 280px !important; width: 280px !important; }
 [data-testid="column"]:nth-of-type(2) { min-width: 420px !important; width: 420px !important; }
 [data-testid="column"]:nth-of-type(3) { min-width: 280px !important; width: 280px !important; }
 
-/* Kustomisasi Scrollbar Horizontal Baris Atas */
-[data-testid="stHorizontalBlock"]::-webkit-scrollbar {
-    height: 4px;
-}
-[data-testid="stHorizontalBlock"]::-webkit-scrollbar-thumb {
-    background: #00EEFF;
-    border-radius: 2px;
-}
+/* Scrollbar Horizontal */
+[data-testid="stHorizontalBlock"]::-webkit-scrollbar { height: 4px; }
+[data-testid="stHorizontalBlock"]::-webkit-scrollbar-thumb { background: #00EEFF; border-radius: 2px; }
+[data-testid="stHorizontalBlock"]::-webkit-scrollbar-track { background: transparent; }
 
 /* --- BAGIAN BAWAH --- */
 .bottom-section {
     width: 100% !important;
-    margin-top: 6px !important; /* Didekatkan ke baris atas */
+    margin-top: 6px !important;
 }
 
 /* --- PANEL --- */
@@ -164,14 +158,21 @@ html, body, .stApp {
     flex-direction: column;
 }
 
-/* --- DATA GRIDS --- */
-.trade-grid, .signal-grid {
+/* --- GRID --- */
+.trade-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 6px;
+    padding: 4px;
+}
+.signal-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
     gap: 6px;
     padding: 4px;
 }
 
+/* --- METRIC --- */
 .cyber-metric {
     background: #111D35;
     border: 1px solid #162035;
@@ -179,20 +180,81 @@ html, body, .stApp {
     padding: 6px 8px;
     margin-bottom: 4px;
 }
-.cyber-metric-label { font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #4B6A8A; letter-spacing: 2px; text-transform: uppercase; }
-.cyber-metric-value { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; }
+.cyber-metric-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 7px;
+    color: #4B6A8A;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+.cyber-metric-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+}
 .cyber-metric-value.bullish { color: #00FF9D; }
 .cyber-metric-value.bearish { color: #FF3D71; }
-.cyber-metric-conf { font-family: 'JetBrains Mono', monospace; font-size: 8px; color: #4B6A8A; }
+.cyber-metric-value.neutral { color: #00EEFF; }
+.cyber-metric-conf {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    color: #4B6A8A;
+}
 
 .cyber-divider { height: 1px; background: #162035; margin: 4px 0; }
 
-.analysis-card { background: #111D35; border: 1px solid #162035; border-left: 2px solid #8B5CF6; border-radius: 6px; padding: 6px 8px; margin-bottom: 4px; }
-.analysis-title { font-family: 'Share Tech Mono', monospace; font-size: 8px; color: #8B5CF6; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 3px; }
-.analysis-text { font-size: 9px; line-height: 1.3; color: #C8D8F0; }
-.cyber-tag { font-family: 'Share Tech Mono', monospace; font-size: 6px; letter-spacing: 1px; padding: 1px 4px; border-radius: 3px; display: inline-block; }
-.cyber-tag.buy { background: rgba(0,255,157,0.12); color: #00FF9D; border: 1px solid rgba(0,255,157,0.25); }
-.cyber-tag.sell { background: rgba(255,61,113,0.12); color: #FF3D71; border: 1px solid rgba(255,61,113,0.25); }
+/* --- ANALYSIS CARD --- */
+.analysis-card {
+    background: #111D35;
+    border: 1px solid #162035;
+    border-left: 2px solid #8B5CF6;
+    border-radius: 6px;
+    padding: 6px 8px;
+    margin-bottom: 4px;
+}
+.analysis-title {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 8px;
+    color: #8B5CF6;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 3px;
+}
+.analysis-text {
+    font-size: 9px;
+    line-height: 1.3;
+    color: #C8D8F0;
+}
+
+/* --- TAG --- */
+.cyber-tag {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 6px;
+    letter-spacing: 1px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    display: inline-block;
+}
+.cyber-tag.buy {
+    background: rgba(0,255,157,0.12);
+    color: #00FF9D;
+    border: 1px solid rgba(0,255,157,0.25);
+}
+.cyber-tag.sell {
+    background: rgba(255,61,113,0.12);
+    color: #FF3D71;
+    border: 1px solid rgba(255,61,113,0.25);
+}
+.cyber-tag.neutral {
+    background: rgba(0,238,255,0.10);
+    color: #00EEFF;
+    border: 1px solid rgba(0,238,255,0.22);
+}
+.cyber-tag.watch {
+    background: rgba(139,92,246,0.10);
+    color: #8B5CF6;
+    border: 1px solid rgba(139,92,246,0.25);
+}
 
 .mt5-fallback {
     position: absolute;
@@ -201,7 +263,9 @@ html, body, .stApp {
     background: rgba(0,0,0,0.7);
     padding: 2px 6px;
     border-radius: 3px;
-    font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #4B6A8A;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 7px;
+    color: #4B6A8A;
 }
 .mt5-fallback a { color: #00EEFF; text-decoration: none; }
 </style>
@@ -214,35 +278,56 @@ st.markdown("""
 <div style="height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; background: rgba(7,12,24,0.97); border-bottom: 1px solid #162035; flex-shrink: 0;">
     <div style="display: flex; align-items: center; gap: 6px;">
         <div style="width: 26px; height: 26px; background: linear-gradient(135deg, #00EEFF, #8B5CF6); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-family: 'Share Tech Mono', monospace; font-size: 10px; font-weight: 700; color: #fff; box-shadow: 0 0 10px rgba(0,238,255,0.25);">AV</div>
-        <div><div style="font-family: 'Share Tech Mono', monospace; font-size: 13px; color: #00EEFF; letter-spacing: 1.5px;">AEROVULPIS PRO TERMINAL</div></div>
+        <div>
+            <div style="font-family: 'Share Tech Mono', monospace; font-size: 13px; color: #00EEFF; letter-spacing: 1.5px;">AEROVULPIS PRO TERMINAL</div>
+        </div>
     </div>
     <div style="display: flex; align-items: center; gap: 8px;">
         <div style="display: flex; align-items: center; gap: 4px; font-family: 'Share Tech Mono', monospace; font-size: 8px; color: #00FF9D; letter-spacing: 1px;">
-            <div style="width: 5px; height: 5px; background: #00FF9D; border-radius: 50%;"></div>LIVE FEED
+            <div style="width: 5px; height: 5px; background: #00FF9D; border-radius: 50%; animation: blink 2s infinite;"></div>
+            LIVE FEED
+        </div>
+        <div style="font-family: 'Share Tech Mono', monospace; font-size: 8px; color: #00EEFF; background: rgba(0,238,255,0.10); border: 1px solid rgba(0,238,255,0.22); padding: 2px 8px; border-radius: 3px; letter-spacing: 1px;">
+            LONDON / NY
         </div>
     </div>
 </div>
+<style>
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.2; } }
+</style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 3 KOLOM UTAMA (TERKUNCI HORIZONTAL SCROLL)
+# 3 KOLOM UTAMA (SCROLL HORIZONTAL)
 # ==============================================================================
 col1, col2, col3 = st.columns(3)
 
+# --- KOLOM 1: ECONOMIC CALENDAR (Tradays) ---
 with col1:
     st.markdown("""
     <div class="cyber-panel">
-        <div class="cyber-header"><span class="cyber-title">Economic Calendar</span><span class="cyber-badge">Tradays</span></div>
+        <div class="cyber-header">
+            <span class="cyber-title">Economic Calendar</span>
+            <span class="cyber-badge">Tradays</span>
+        </div>
         <div class="cyber-body-iframe">
-            <iframe src="https://www.tradays.com/en/economic-calendar/widget?mode=2&colorTheme=dark" style="width:100%; height:100%; border:none; background:#0C1425;" frameborder="0" scrolling="auto"></iframe>
+            <iframe src="https://www.tradays.com/en/economic-calendar/widget?mode=2&colorTheme=dark" 
+                    style="width:100%; height:100%; border:none; background:#0C1425;" 
+                    frameborder="0" scrolling="auto">
+            </iframe>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
+# --- KOLOM 2: DXY & RSI + MT5 ---
 with col2:
+    # DXY Chart (TradingView)
     st.markdown("""
     <div class="cyber-panel" style="flex: 0.8;">
-        <div class="cyber-header"><span class="cyber-title">DXY & RSI MOMENTUM</span><span class="cyber-badge">TradingView</span></div>
+        <div class="cyber-header">
+            <span class="cyber-title">DXY & RSI Analysis</span>
+            <span class="cyber-badge">TradingView</span>
+        </div>
         <div class="cyber-body-iframe" style="flex:1;">
             <div class="tradingview-widget-container" style="height:100%;width:100%;">
                 <div id="tradingview_dxy" style="height:100%;width:100%;"></div>
@@ -257,7 +342,7 @@ with col2:
                     "style": "2",
                     "locale": "id",
                     "enable_publishing": false,
-                    "hide_top_toolbar": true,
+                    "hide_top_toolbar": false,
                     "hide_legend": false,
                     "save_image": false,
                     "container_id": "tradingview_dxy",
@@ -269,61 +354,96 @@ with col2:
             </div>
         </div>
     </div>
+    """, unsafe_allow_html=True)
+
+    # MT5 Terminal
+    st.markdown("""
     <div class="cyber-panel" style="flex: 1.2; margin-top: 4px;">
-        <div class="cyber-header"><span class="cyber-title">WEB TERMINAL (MT4/MT5)</span><span class="cyber-badge">MetaQuotes</span></div>
+        <div class="cyber-header">
+            <span class="cyber-title">MT5 Execution Terminal</span>
+            <span class="cyber-badge">Web Terminal</span>
+        </div>
         <div class="cyber-body-iframe">
-            <iframe src="https://metatraderweb.app/trade" style="width:100%; height:100%; border:none; background:#0C1425;" frameborder="0" allowfullscreen="true" scrolling="no"></iframe>
-            <div class="mt5-fallback">[MT4/5] <a href="https://metatraderweb.app/trade" target="_blank">Full Screen</a></div>
+            <iframe src="https://metatraderweb.app/trade" 
+                    style="width:100%; height:100%; border:none; background:#0C1425;" 
+                    frameborder="0" allowfullscreen="true" scrolling="no">
+            </iframe>
+            <div class="mt5-fallback">
+                [MT5] <a href="https://metatraderweb.app/trade" target="_blank">Full Screen</a>
+            </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
+# --- KOLOM 3: AI SIGNAL FEED ---
 with col3:
     st.markdown("""
     <div class="cyber-panel">
-        <div class="cyber-header"><span class="cyber-title">AI SIGNAL FEED</span><span class="cyber-badge">Core Engine</span></div>
+        <div class="cyber-header">
+            <span class="cyber-title">AI Signal Feed</span>
+            <span class="cyber-badge">Core Engine</span>
+        </div>
         <div class="cyber-body" style="overflow-y:auto;">
     """, unsafe_allow_html=True)
 
+    # Sentimen
     sentiments = [
         {"label": "USD Sentiment", "val": "BULLISH", "cls": "bullish", "conf": 78},
-        {"label": "EUR Sentiment", "val": "BEARISH", "cls": "bearish", "conf": 64}
+        {"label": "EUR Sentiment", "val": "BEARISH", "cls": "bearish", "conf": 64},
+        {"label": "XAU Sentiment", "val": "NEUTRAL-BEAR", "cls": "neutral", "conf": 51}
     ]
     for item in sentiments:
         st.markdown(f"""
-        <div class="cyber-metric"><div class="cyber-metric-label">{item['label']}</div><div class="cyber-metric-value {item['cls']}">{item['val']}</div><div class="cyber-metric-conf">Conf: {item['conf']}%</div></div>
+        <div class="cyber-metric">
+            <div class="cyber-metric-label">{item['label']}</div>
+            <div class="cyber-metric-value {item['cls']}">{item['val']}</div>
+            <div class="cyber-metric-conf">Confidence: {item['conf']}%</div>
+        </div>
         """, unsafe_allow_html=True)
 
     st.markdown('<div class="cyber-divider"></div>', unsafe_allow_html=True)
 
+    # Analisis berita
     analyses = [
-        {"title": "US CPI Update", "text": "USD menguat akibat inflasi tinggi. RSI DXY kokoh.", "tags": [("SELL EURUSD", "sell")]},
-        {"title": "XAUUSD Read", "text": "Tekanan jual teknikal dipicu yield obligasi AS.", "tags": [("BIAS SELL", "sell")]}
+        {"title": "US CPI Data Release", "text": "Inflasi AS lebih tinggi dari konsensus. USD menguat. RSI DXY di zona 58, momentum bullish.", "tags": [("SELL EURUSD", "sell"), ("BUY USDJPY", "buy")]},
+        {"title": "XAUUSD Technical Read", "text": "Tekanan jual XAU dipicu yield AS. Level 1985-1990 zona support kritis. Pantau data ADP.", "tags": [("WATCH 1985", "watch"), ("BIAS SELL", "sell")]},
+        {"title": "DXY Momentum Breakout", "text": "Breakout dari descending channel terkonfirmasi. Target resistance berikutnya di 107.20.", "tags": [("MOMENTUM BULL", "buy"), ("TARGET 107.20", "watch")]}
     ]
     for a in analyses:
         tags_html = ''.join([f'<span class="cyber-tag {cls}">{label}</span>' for label, cls in a['tags']])
         st.markdown(f"""
-        <div class="analysis-card"><div class="analysis-title">{a['title']}</div><div class="analysis-text">{a['text']}</div><div style="margin-top:2px;">{tags_html}</div></div>
+        <div class="analysis-card">
+            <div class="analysis-title">{a['title']}</div>
+            <div class="analysis-text">{a['text']}</div>
+            <div style="margin-top:2px; display:flex; gap:3px; flex-wrap:wrap;">{tags_html}</div>
+        </div>
         """, unsafe_allow_html=True)
 
-    st.markdown("</div></div>", unsafe_allow_html=True)
+    st.markdown("""
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # ==============================================================================
-# BAGIAN BAWAH (ACTIVE TRADES DAN SIGNAL MATRIX)
+# BAGIAN BAWAH (TIDAK IKUT SCROLL)
 # ==============================================================================
 st.markdown('<div class="bottom-section">', unsafe_allow_html=True)
 
+# --- Active Trade Setups ---
 st.markdown("""
 <div class="cyber-panel">
-    <div class="cyber-header"><span class="cyber-title">Active Trade Setups</span></div>
+    <div class="cyber-header">
+        <span class="cyber-title">Active Trade Setups</span>
+        <span class="cyber-badge">Prototype</span>
+    </div>
     <div class="cyber-body">
 """, unsafe_allow_html=True)
 
 setup_data = [
-    {"pair": "EURUSD", "dir": "SELL", "dir_cls": "sell", "entry": "1.08420", "gradient": "#FF3D71"},
-    {"pair": "USDJPY", "dir": "BUY", "dir_cls": "buy", "entry": "149.820", "gradient": "#00FF9D"},
-    {"pair": "XAUUSD", "dir": "SELL", "dir_cls": "sell", "entry": "2,014.50", "gradient": "#FF3D71"},
-    {"pair": "DXY", "dir": "LONG", "dir_cls": "buy", "entry": "105.840", "gradient": "#00FF9D"}
+    {"pair": "EURUSD", "dir": "SELL", "dir_cls": "sell", "entry": "1.08420", "tp1": "1.07950", "tp2": "1.07500", "tp3": "1.06800", "sl": "1.08900", "gradient": "#FF3D71"},
+    {"pair": "USDJPY", "dir": "BUY", "dir_cls": "buy", "entry": "149.820", "tp1": "150.500", "tp2": "151.200", "tp3": "152.000", "sl": "149.200", "gradient": "#00FF9D"},
+    {"pair": "XAUUSD", "dir": "SELL", "dir_cls": "sell", "entry": "2,014.50", "tp1": "2,000.00", "tp2": "1,990.00", "tp3": "1,975.00", "sl": "2,025.00", "gradient": "#FF3D71"},
+    {"pair": "DXY", "dir": "LONG BIAS", "dir_cls": "buy", "entry": "105.840", "tp1": "106.500", "tp2": "107.200", "tp3": "108.000", "sl": "104.900", "gradient": "#00FF9D"}
 ]
 
 st.markdown('<div class="trade-grid">', unsafe_allow_html=True)
@@ -335,18 +455,59 @@ for setup in setup_data:
             <span style="font-family:'Share Tech Mono',monospace; font-size:10px; color:#C8D8F0;">{setup['pair']}</span>
             <span class="cyber-tag {setup['dir_cls']}">{setup['dir']}</span>
         </div>
-        <div style="font-size:9px; color:#4B6A8A;">Entry: <span style="color:#C8D8F0; font-weight:700;">{setup['entry']}</span></div>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:2px; font-size:8px;">
+            <div><span style="color:#4B6A8A;">Entry</span> <span style="color:#C8D8F0;">{setup['entry']}</span></div>
+            <div><span style="color:#4B6A8A;">TP1</span> <span style="color:#00FF9D;">{setup['tp1']}</span></div>
+            <div><span style="color:#4B6A8A;">SL</span> <span style="color:#FF3D71;">{setup['sl']}</span></div>
+        </div>
     </div>
     """, unsafe_allow_html=True)
-st.markdown('</div></div></div>', unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
+st.markdown('</div></div>', unsafe_allow_html=True)
 
 # --- Signal Matrix & Watchlist ---
 st.markdown("""
 <div class="cyber-panel">
-    <div class="cyber-header"><span class="cyber-title">SIGNAL MATRIX &amp; WATCHLIST (TradingView)</span></div>
+    <div class="cyber-header">
+        <span class="cyber-title">Signal Matrix &amp; Watchlist</span>
+        <span class="cyber-badge">TradingView</span>
+    </div>
     <div class="cyber-body">
-        <div style="font-family:'Share Tech Mono',monospace; font-size:9px; color:#00EEFF; padding: 2px 4px;">XAUUSD BUY | BTCUSD BUY | EURUSD SELL | GBPUSD SELL</div>
-        <div style="font-family:'Share Tech Mono',monospace; font-size:7px; color:#4B6A8A; margin: 4px 0 2px 4px;">[WATCHLIST PRICES] - 3 tabs</div>
+""", unsafe_allow_html=True)
+
+# Signal Matrix (4 kartu)
+signal_data = [
+    {"symbol": "XAUUSD", "dir": "BUY", "entry": "2,014.50", "tp1": "2,025.00", "conf": 78},
+    {"symbol": "BTCUSD", "dir": "BUY", "entry": "65,790.00", "tp1": "66,800.00", "conf": 72},
+    {"symbol": "EURUSD", "dir": "SELL", "entry": "1.08420", "tp1": "1.07950", "conf": 65},
+    {"symbol": "GBPUSD", "dir": "SELL", "entry": "1.3430", "tp1": "1.3370", "conf": 60}
+]
+
+st.markdown('<div class="signal-grid">', unsafe_allow_html=True)
+for sig in signal_data:
+    cls = "buy" if sig['dir'] == "BUY" else "sell"
+    color = "#00FF9D" if sig['dir'] == "BUY" else "#FF3D71"
+    st.markdown(f"""
+    <div style="background:#111D35; border:1px solid #162035; border-radius:4px; padding:4px; position:relative; overflow:hidden;">
+        <div style="position:absolute; top:0; left:0; right:0; height:2px; background:{color};"></div>
+        <div style="display:flex; justify-content:space-between; font-family:'Share Tech Mono',monospace; font-size:9px;">
+            <span style="color:#00EEFF;">{sig['symbol']}</span>
+            <span class="cyber-tag {cls}">{sig['dir']}</span>
+        </div>
+        <div style="display:flex; gap:6px; font-size:8px; color:#4B6A8A; margin-top:2px;">
+            <span>Entry <span style="color:#C8D8F0;">{sig['entry']}</span></span>
+            <span>TP1 <span style="color:#00FF9D;">{sig['tp1']}</span></span>
+            <span>Conf <span style="color:#00EEFF;">{sig['conf']}%</span></span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
+
+# Watchlist (TradingView)
+st.markdown("""
+<div style="font-family:'Share Tech Mono',monospace; font-size:7px; color:#4B6A8A; margin:4px 0 2px 4px;">
+    [WATCHLIST PRICES]
+</div>
 """, unsafe_allow_html=True)
 
 watchlist_html = """
@@ -369,7 +530,8 @@ watchlist_html = """
 """
 components.html(watchlist_html, height=170)
 
-st.markdown('</div></div></div>', unsafe_allow_html=True)
+st.markdown('</div></div>', unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)  # Tutup bottom-section
 
 # ==============================================================================
 # FOOTER
@@ -377,7 +539,7 @@ st.markdown('</div></div></div>', unsafe_allow_html=True)
 st.markdown("""
 <div style="text-align: center; padding: 4px; opacity: 0.5; width:100%;">
     <p style="font-family: 'Share Tech Mono', monospace; font-size: 8px; color: #4B6A8A; margin: 0;">
-        AEROVULPIS | DYNAMIHATCH IDENTITY
+        [PROTOTYPE] AEROVULPIS | DYNAMIHATCH IDENTITY
     </p>
 </div>
 """, unsafe_allow_html=True)
