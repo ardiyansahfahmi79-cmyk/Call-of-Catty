@@ -242,6 +242,26 @@ st.markdown("""
     color: #8B5CF6;
     border: 1px solid rgba(139,92,246,0.25);
 }
+/* TOMBOL MT5 */
+.mt5-fallback {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    z-index: 100;
+    background: rgba(0,0,0,0.7);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 8px;
+    color: #4B6A8A;
+}
+.mt5-fallback a {
+    color: #00EEFF;
+    text-decoration: none;
+}
+.mt5-fallback a:hover {
+    text-decoration: underline;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -306,7 +326,9 @@ st.markdown("""
 # ==============================================================================
 st.markdown('<div class="main-row-scroll">', unsafe_allow_html=True)
 
-# --- KOLOM 1: ECONOMIC CALENDAR (Tradays) ---
+# ------------------------------------------------------------------------------
+# KOLOM 1: ECONOMIC CALENDAR (Tradays)
+# ------------------------------------------------------------------------------
 with st.container():
     st.markdown('<div class="scroll-col">', unsafe_allow_html=True)
     st.markdown("""
@@ -337,7 +359,9 @@ with st.container():
     """, unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- KOLOM 2: DXY CHART (TradingView) + MT5 TERMINAL ---
+# ------------------------------------------------------------------------------
+# KOLOM 2: DXY CHART + MT5 TERMINAL
+# ------------------------------------------------------------------------------
 with st.container():
     st.markdown('<div class="scroll-col">', unsafe_allow_html=True)
     
@@ -391,7 +415,7 @@ with st.container():
             <span class="cyber-title">MT5 Execution Terminal</span>
             <span class="cyber-badge">Web Terminal</span>
         </div>
-        <div class="cyber-body" style="padding: 0; height: 650px; overflow: hidden; border-radius: 0 0 10px 10px;">
+        <div class="cyber-body" style="padding: 0; height: 650px; overflow: hidden; border-radius: 0 0 10px 10px; position: relative;">
     """, unsafe_allow_html=True)
     
     mt5_html = """
@@ -403,6 +427,9 @@ with st.container():
             scrolling="no"
             style="border: none; background: #0C1425;">
     </iframe>
+    <div class="mt5-fallback">
+        [MT5 Web Terminal] Jika tidak muncul, <a href="https://metatraderweb.app/trade" target="_blank">buka di tab baru</a>
+    </div>
     """
     components.html(mt5_html, height=650)
     
@@ -413,7 +440,9 @@ with st.container():
     """, unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- KOLOM 3: AI SIGNAL FEED ---
+# ------------------------------------------------------------------------------
+# KOLOM 3: AI SIGNAL FEED
+# ------------------------------------------------------------------------------
 with st.container():
     st.markdown('<div class="scroll-col">', unsafe_allow_html=True)
     st.markdown("""
@@ -426,11 +455,12 @@ with st.container():
     """, unsafe_allow_html=True)
     
     # Sentimen
-    for item in [
+    sentiments = [
         {"label": "USD Sentiment", "val": "BULLISH", "cls": "bullish", "conf": 78},
         {"label": "EUR Sentiment", "val": "BEARISH", "cls": "bearish", "conf": 64},
         {"label": "XAU Sentiment", "val": "NEUTRAL-BEAR", "cls": "neutral", "conf": 51}
-    ]:
+    ]
+    for item in sentiments:
         st.markdown(f"""
         <div class="cyber-metric">
             <div class="cyber-metric-label">{item['label']}</div>
@@ -449,12 +479,13 @@ with st.container():
         {"title": "DXY Momentum Breakout", "text": "Breakout dari descending channel mingguan telah terkonfirmasi. Target resistance berikutnya di 107.20. RSI H4 belum overbought.", "tags": [("MOMENTUM BULL", "buy"), ("TARGET 107.20", "watch")]}
     ]
     for a in analyses:
+        tags_html = ''.join([f'<span class="cyber-tag {cls}">{label}</span>' for label, cls in a['tags']])
         st.markdown(f"""
         <div class="analysis-card">
             <div class="analysis-title">{a['title']}</div>
             <div class="analysis-text">{a['text']}</div>
             <div style="margin-top: 8px; display: flex; gap: 5px; flex-wrap: wrap;">
-                {''.join([f'<span class="cyber-tag {cls}">{label}</span>' for label, cls in a['tags']])}
+                {tags_html}
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -472,7 +503,9 @@ st.markdown('</div>', unsafe_allow_html=True)  # Tutup main-row-scroll
 # BAGIAN BAWAH (TIDAK IKUT SCROLL)
 # ==============================================================================
 
-# --- Trade Setups (4 kolom) ---
+# ------------------------------------------------------------------------------
+# Active Trade Setups (4 kolom)
+# ------------------------------------------------------------------------------
 st.markdown("""
 <div class="cyber-panel" style="margin-top: 10px;">
     <div class="cyber-header">
@@ -527,7 +560,9 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# --- Signal Matrix + Watchlist (TradingView) ---
+# ------------------------------------------------------------------------------
+# Signal Matrix + Watchlist (TradingView)
+# ------------------------------------------------------------------------------
 st.markdown("""
 <div class="cyber-panel" style="margin-top: 10px;">
     <div class="cyber-header">
@@ -587,7 +622,7 @@ for sig in signal_data:
 
 st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Watchlist (TradingView Widget dengan Tab) ---
+# Watchlist (TradingView Widget dengan Tab)
 st.markdown("""
 <div style="margin-top: 12px; border-top: 1px solid #162035; padding-top: 12px;">
     <div style="font-family: 'Share Tech Mono', monospace; font-size: 9px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px;">
@@ -596,7 +631,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 watchlist_html = """
-<!-- TradingView Widget BEGIN -->
 <div class="tradingview-widget-container" style="width:100%;">
     <div class="tradingview-widget-container__widget" style="width:100%;"></div>
     <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-symbols.js" async>
@@ -637,7 +671,6 @@ watchlist_html = """
     }
     </script>
 </div>
-<!-- TradingView Widget END -->
 """
 components.html(watchlist_html, height=380)
 
