@@ -5,6 +5,7 @@ import numpy as np
 import plotly.graph_objects as go
 from datetime import datetime
 import pytz
+import random
 
 # ==============================================================================
 # PAGE CONFIG
@@ -232,35 +233,6 @@ st.markdown("""
     color: #8B5CF6;
     border: 1px solid rgba(139,92,246,0.25);
 }
-.signal-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr;
-    gap: 5px;
-    margin-top: 8px;
-}
-.signal-item {
-    background: rgba(0,0,0,0.2);
-    border: 1px solid #162035;
-    border-radius: 4px;
-    padding: 4px 6px;
-    text-align: center;
-}
-.signal-label {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 7px;
-    color: #4B6A8A;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-}
-.signal-value {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    font-weight: 700;
-    color: #C8D8F0;
-}
-.signal-value.green { color: #00FF9D; }
-.signal-value.red { color: #FF3D71; }
-.signal-value.cyan { color: #00EEFF; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -321,26 +293,30 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# FUNGSI CHART DXY (Plotly) - DIPERBAIKI
+# FUNGSI CHART DXY (Plotly) - DIPERBAIKI TANPA PD.DATE_RANGE
 # ==============================================================================
 def create_dxy_chart():
     try:
-        # Gunakan frekuensi '60min' agar kompatibel
-        dates = pd.date_range(end=datetime.now(pytz.UTC), periods=100, freq='60min')
-        base = 105.5
+        # Generate data manual tanpa pandas date_range
+        random.seed(42)
+        n = 100
         values = []
-        for i in range(100):
+        base = 105.5
+        for i in range(n):
             trend = i * 0.005
-            noise = np.random.normal(0, 0.15)
+            noise = random.uniform(-0.3, 0.3)
             values.append(base + trend + noise)
-        rsi_values = [50 + (v - values[0]) * 2 for v in values]
+        rsi_values = [50 + (v - values[0]) * 1.8 for v in values]
         rsi_values = [max(20, min(80, v)) for v in rsi_values]
         
+        # Buat index sebagai integer
+        x_axis = list(range(n))
+        
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=dates, y=values, mode='lines', name='DXY',
+        fig.add_trace(go.Scatter(x=x_axis, y=values, mode='lines', name='DXY',
                                  line=dict(color='#00EEFF', width=2),
                                  fill='tozeroy', fillcolor='rgba(0,238,255,0.05)'))
-        fig.add_trace(go.Scatter(x=dates, y=rsi_values, mode='lines', name='RSI',
+        fig.add_trace(go.Scatter(x=x_axis, y=rsi_values, mode='lines', name='RSI',
                                  line=dict(color='#8B5CF6', width=1.5, dash='dot'),
                                  yaxis='y2'))
         fig.add_hline(y=70, line_dash="dash", line_color="#FF3D71", opacity=0.3, yref="y2")
@@ -353,7 +329,7 @@ def create_dxy_chart():
             margin=dict(l=0, r=0, t=0, b=0),
             height=280,
             xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.03)',
-                       showticklabels=True, tickfont=dict(color='#4B6A8A', size=9)),
+                       showticklabels=False, showline=False),
             yaxis=dict(title='DXY', titlefont=dict(color='#00EEFF', size=9),
                        showgrid=True, gridcolor='rgba(255,255,255,0.03)',
                        tickfont=dict(color='#4B6A8A', size=9)),
@@ -366,7 +342,6 @@ def create_dxy_chart():
         )
         return fig
     except Exception as e:
-        # Jika error, buat figure kosong dengan pesan
         fig = go.Figure()
         fig.add_annotation(text="Chart tidak dapat dimuat", x=0.5, y=0.5, showarrow=False,
                            font=dict(color="#FF3D71", size=16))
@@ -375,8 +350,9 @@ def create_dxy_chart():
         return fig
 
 # ==============================================================================
-# DATA SINYAL CONTOH (XAUUSD, BTCUSD, EURUSD, GBPUSD)
+# DATA SINYAL CONTOH (DENGAN STATUS TP)
 # ==============================================================================
+random.seed(42)
 signal_data = [
     {
         "symbol": "XAUUSD",
@@ -386,7 +362,10 @@ signal_data = [
         "tp1": "2,025.00",
         "tp2": "2,035.00",
         "tp3": "2,050.00",
-        "conf": 78
+        "conf": 78,
+        "tp1_status": "✓" if random.random() > 0.5 else "✗",
+        "tp2_status": "✓" if random.random() > 0.5 else "✗",
+        "tp3_status": "~"
     },
     {
         "symbol": "BTCUSD",
@@ -396,7 +375,10 @@ signal_data = [
         "tp1": "66,800.00",
         "tp2": "67,500.00",
         "tp3": "68,900.00",
-        "conf": 72
+        "conf": 72,
+        "tp1_status": "✓",
+        "tp2_status": "~",
+        "tp3_status": "~"
     },
     {
         "symbol": "EURUSD",
@@ -406,7 +388,10 @@ signal_data = [
         "tp1": "1.07950",
         "tp2": "1.07500",
         "tp3": "1.06800",
-        "conf": 65
+        "conf": 65,
+        "tp1_status": "✗",
+        "tp2_status": "~",
+        "tp3_status": "~"
     },
     {
         "symbol": "GBPUSD",
@@ -416,8 +401,29 @@ signal_data = [
         "tp1": "1.3370",
         "tp2": "1.3310",
         "tp3": "1.3220",
-        "conf": 60
+        "conf": 60,
+        "tp1_status": "~",
+        "tp2_status": "~",
+        "tp3_status": "~"
     }
+]
+
+# ==============================================================================
+# DATA SETUP TRADE (DENGAN STATUS TP)
+# ==============================================================================
+setup_data = [
+    {"pair": "EURUSD", "dir": "SELL", "dir_cls": "sell", "entry": "1.08420", 
+     "tp1": "1.07950", "tp1_st": "✓", "tp2": "1.07500", "tp2_st": "✗", "tp3": "1.06800", "tp3_st": "~", 
+     "sl": "1.08900", "gradient": "linear-gradient(90deg, #8B5CF6, #FF3D71)"},
+    {"pair": "USDJPY", "dir": "BUY", "dir_cls": "buy", "entry": "149.820", 
+     "tp1": "150.500", "tp1_st": "✓", "tp2": "151.200", "tp2_st": "✓", "tp3": "152.000", "tp3_st": "~", 
+     "sl": "149.200", "gradient": "linear-gradient(90deg, #00EEFF, #00FF9D)"},
+    {"pair": "XAUUSD", "dir": "SELL", "dir_cls": "sell", "entry": "2,014.50", 
+     "tp1": "2,000.00", "tp1_st": "✗", "tp2": "1,990.00", "tp2_st": "~", "tp3": "1,975.00", "tp3_st": "~", 
+     "sl": "2,025.00", "gradient": "linear-gradient(90deg, #8B5CF6, #FF3D71)"},
+    {"pair": "DXY", "dir": "LONG BIAS", "dir_cls": "buy", "entry": "105.840", 
+     "tp1": "106.500", "tp1_st": "~", "tp2": "107.200", "tp2_st": "~", "tp3": "108.000", "tp3_st": "~", 
+     "sl": "104.900", "gradient": "linear-gradient(90deg, #00EEFF, #00FF9D)"}
 ]
 
 # ==============================================================================
@@ -435,7 +441,7 @@ with col_kiri:
         </div>
         <div class="cyber-body" style="padding: 12px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #C8D8F0; max-height: 600px; overflow-y: auto;">
     """, unsafe_allow_html=True)
-    # Kalender teks
+    
     st.markdown("""
     <div style="border-bottom: 1px solid #162035; padding: 8px 0;">
         <span style="color: #00FF9D;">[HIGH]</span>
@@ -473,6 +479,7 @@ with col_kiri:
         </a>
     </div>
     """, unsafe_allow_html=True)
+    
     st.markdown("""
         </div>
         <div class="scan-wrap"><div class="scan-line" style="animation-delay: 0s;"></div></div>
@@ -498,16 +505,16 @@ with col_tengah:
     </div>
     """, unsafe_allow_html=True)
     
-    # MT5 Web Terminal
+    # MT5 Web Terminal (asli, bukan MT4)
     st.markdown("""
     <div class="cyber-panel" style="margin-top: 10px;">
         <div class="cyber-header">
             <span class="cyber-title">MT5 Execution Terminal</span>
-            <span class="cyber-badge">Prototype</span>
+            <span class="cyber-badge">Web Terminal</span>
         </div>
-        <div class="cyber-body" style="padding: 0; height: 320px; overflow: hidden;">
+        <div class="cyber-body" style="padding: 0; height: 380px; overflow: hidden; border-radius: 0 0 10px 10px;">
             <iframe src="https://metatraderweb.app/trade" 
-                    style="width: 100%; height: 100%; border: none;" 
+                    style="width: 100%; height: 100%; border: none; background: #0C1425;" 
                     allow="fullscreen; autoplay">
             </iframe>
         </div>
@@ -526,7 +533,6 @@ with col_kanan:
         <div class="cyber-body" style="max-height: 600px; overflow-y: auto; padding: 12px;">
     """, unsafe_allow_html=True)
     
-    # Sentimen
     for item in [
         {"label": "USD Sentiment", "val": "BULLISH", "cls": "bullish", "conf": 78},
         {"label": "EUR Sentiment", "val": "BEARISH", "cls": "bearish", "conf": 64},
@@ -543,7 +549,6 @@ with col_kanan:
     
     st.markdown('<div class="cyber-divider"></div>', unsafe_allow_html=True)
     
-    # Analisis berita
     analyses = [
         {"title": "US CPI Data Release", "text": "Inflasi AS tercatat lebih tinggi dari konsensus. Penguatan USD terjadi secara instan. RSI DXY di zona 58, momentum bullish masih solid.", "tags": [("SELL EURUSD", "sell"), ("BUY USDJPY", "buy")]},
         {"title": "XAUUSD Technical Read", "text": "Tekanan jual XAU dipicu penguatan yield obligasi AS. Level 1985-1990 zona support kritis. Pantau data ADP untuk konfirmasi arah selanjutnya.", "tags": [("WATCH 1985", "watch"), ("BIAS SELL", "sell")]},
@@ -567,10 +572,8 @@ with col_kanan:
     """, unsafe_allow_html=True)
 
 # ==============================================================================
-# BAGIAN BAWAH: TRADE SETUPS + WATCHLIST + SINYAL
+# BAGIAN BAWAH: TRADE SETUPS
 # ==============================================================================
-
-# --- Trade Setups (4 kolom) ---
 st.markdown("""
 <div class="cyber-panel" style="margin-top: 10px;">
     <div class="cyber-header">
@@ -581,13 +584,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 col_s1, col_s2, col_s3, col_s4 = st.columns(4)
-
-setup_data = [
-    {"pair": "EURUSD", "dir": "SELL", "dir_cls": "sell", "entry": "1.08420", "tp1": "1.07950", "tp2": "1.07500", "tp3": "1.06800", "sl": "1.08900", "gradient": "linear-gradient(90deg, #8B5CF6, #FF3D71)"},
-    {"pair": "USDJPY", "dir": "BUY", "dir_cls": "buy", "entry": "149.820", "tp1": "150.500", "tp2": "151.200", "tp3": "152.000", "sl": "149.200", "gradient": "linear-gradient(90deg, #00EEFF, #00FF9D)"},
-    {"pair": "XAUUSD", "dir": "SELL", "dir_cls": "sell", "entry": "2,014.50", "tp1": "2,000.00", "tp2": "1,990.00", "tp3": "1,975.00", "sl": "2,025.00", "gradient": "linear-gradient(90deg, #8B5CF6, #FF3D71)"},
-    {"pair": "DXY", "dir": "LONG BIAS", "dir_cls": "buy", "entry": "105.840", "tp1": "106.500", "tp2": "107.200", "tp3": "108.000", "sl": "104.900", "gradient": "linear-gradient(90deg, #00EEFF, #00FF9D)"}
-]
 
 for idx, setup in enumerate(setup_data):
     with [col_s1, col_s2, col_s3, col_s4][idx]:
@@ -605,11 +601,15 @@ for idx, setup in enumerate(setup_data):
                 </div>
                 <div style="background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
                     <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">TP 1</div>
-                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #00FF9D;">{setup['tp1']}</div>
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #00FF9D;">{setup['tp1']} <span style="font-size: 9px; color: {'#00FF9D' if setup['tp1_st']=='✓' else '#FF3D71' if setup['tp1_st']=='✗' else '#4B6A8A'};">[{setup['tp1_st']}]</span></div>
                 </div>
                 <div style="background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
                     <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">TP 2</div>
-                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #00FF9D;">{setup['tp2']}</div>
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #00FF9D;">{setup['tp2']} <span style="font-size: 9px; color: {'#00FF9D' if setup['tp2_st']=='✓' else '#FF3D71' if setup['tp2_st']=='✗' else '#4B6A8A'};">[{setup['tp2_st']}]</span></div>
+                </div>
+                <div style="grid-column: 1 / -1; background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
+                    <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">TP 3</div>
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #00FF9D;">{setup['tp3']} <span style="font-size: 9px; color: {'#00FF9D' if setup['tp3_st']=='✓' else '#FF3D71' if setup['tp3_st']=='✗' else '#4B6A8A'};">[{setup['tp3_st']}]</span></div>
                 </div>
                 <div style="grid-column: 1 / -1; background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
                     <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">Stop Loss</div>
@@ -625,7 +625,9 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# --- WATCHLIST + SINYAL (tabel sinyal XAUUSD, BTCUSD, dll) ---
+# ==============================================================================
+# BAGIAN BAWAH: SIGNAL MATRIX + WATCHLIST
+# ==============================================================================
 st.markdown("""
 <div class="cyber-panel" style="margin-top: 10px;">
     <div class="cyber-header">
@@ -644,6 +646,11 @@ for sig in signal_data:
     dir_color = "#00FF9D" if sig['direction'] == "BUY" else "#FF3D71"
     dir_bg = "rgba(0,255,157,0.12)" if sig['direction'] == "BUY" else "rgba(255,61,113,0.12)"
     dir_border = "rgba(0,255,157,0.25)" if sig['direction'] == "BUY" else "rgba(255,61,113,0.25)"
+    
+    tp1_color = "#00FF9D" if sig['tp1_status'] == "✓" else "#FF3D71" if sig['tp1_status'] == "✗" else "#4B6A8A"
+    tp2_color = "#00FF9D" if sig['tp2_status'] == "✓" else "#FF3D71" if sig['tp2_status'] == "✗" else "#4B6A8A"
+    tp3_color = "#00FF9D" if sig['tp3_status'] == "✓" else "#FF3D71" if sig['tp3_status'] == "✗" else "#4B6A8A"
+    
     st.markdown(f"""
     <div style="background: #111D35; border: 1px solid #162035; border-radius: 8px; padding: 12px; position: relative; overflow: hidden;">
         <div style="position: absolute; top: 0; left: 0; right: 0; height: 2px; background: {dir_color};"></div>
@@ -662,32 +669,47 @@ for sig in signal_data:
             </div>
             <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 4px; text-align: center;">
                 <div style="font-family: 'Share Tech Mono', monospace; font-size: 6px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase;">TP1</div>
-                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #00FF9D;">{sig['tp1']}</div>
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: {tp1_color};">{sig['tp1']} <span style="font-size: 9px;">[{sig['tp1_status']}]</span></div>
             </div>
             <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 4px; text-align: center;">
                 <div style="font-family: 'Share Tech Mono', monospace; font-size: 6px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase;">Conf</div>
                 <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #00EEFF;">{sig['conf']}%</div>
             </div>
         </div>
-        <div style="margin-top: 6px; display: flex; gap: 3px; flex-wrap: wrap;">
-            <span style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #4B6A8A;">TP2: {sig['tp2']}</span>
-            <span style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #4B6A8A;">| TP3: {sig['tp3']}</span>
+        <div style="margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; font-family: 'JetBrains Mono', monospace; font-size: 10px;">
+            <span style="color: #4B6A8A;">TP2: <span style="color: {tp2_color};">{sig['tp2']} [{sig['tp2_status']}]</span></span>
+            <span style="color: #4B6A8A;">TP3: <span style="color: {tp3_color};">{sig['tp3']} [{sig['tp3_status']}]</span></span>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Tambahkan iframe watchlist di bawah (opsional)
+# --- WATCHLIST (TABEL DUMMY) ---
 st.markdown("""
 <div style="margin-top: 12px; border-top: 1px solid #162035; padding-top: 12px;">
-    <div style="font-family: 'Share Tech Mono', monospace; font-size: 9px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px;">
+    <div style="font-family: 'Share Tech Mono', monospace; font-size: 9px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px;">
         [WATCHLIST PRICES]
     </div>
-    <iframe src="https://metatraderweb.app/watchlist" 
-            style="width: 100%; height: 250px; border: 1px solid #162035; border-radius: 6px;" 
-            allow="fullscreen; autoplay">
-    </iframe>
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; font-family: 'JetBrains Mono', monospace; font-size: 11px;">
+        <div style="background: #111D35; border: 1px solid #162035; border-radius: 6px; padding: 8px 10px;">
+            <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px;">Forex</div>
+            <div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #C8D8F0;">EURUSD</span><span style="color: #00FF9D;">1.1613</span><span style="color: #00FF9D;">+0.04%</span></div>
+            <div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #C8D8F0;">GBPUSD</span><span style="color: #00FF9D;">1.3430</span><span style="color: #00FF9D;">+0.03%</span></div>
+            <div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #C8D8F0;">USDJPY</span><span style="color: #FF3D71;">160.29</span><span style="color: #FF3D71;">-0.05%</span></div>
+        </div>
+        <div style="background: #111D35; border: 1px solid #162035; border-radius: 6px; padding: 8px 10px;">
+            <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px;">Futures</div>
+            <div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #C8D8F0;">USOIL</span><span style="color: #FF3D71;">75.13</span><span style="color: #FF3D71;">-1.93%</span></div>
+            <div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #C8D8F0;">UKOIL</span><span style="color: #FF3D71;">78.66</span><span style="color: #FF3D71;">-0.84%</span></div>
+            <div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #C8D8F0;">GOLD</span><span style="color: #FF3D71;">4,331.75</span><span style="color: #FF3D71;">-0.03%</span></div>
+        </div>
+        <div style="background: #111D35; border: 1px solid #162035; border-radius: 6px; padding: 8px 10px;">
+            <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px;">Crypto</div>
+            <div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #C8D8F0;">BTCUSDT</span><span style="color: #00FF9D;">65,790.00</span><span style="color: #00FF9D;">+0.18%</span></div>
+            <div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #C8D8F0;">ETHUSD</span><span style="color: #00FF9D;">1,791.6</span><span style="color: #00FF9D;">+0.02%</span></div>
+        </div>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
