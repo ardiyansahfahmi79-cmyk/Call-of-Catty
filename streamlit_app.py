@@ -41,7 +41,7 @@ st.markdown("""
     background-size: auto, auto, 48px 48px, 48px 48px;
     color: #C8D8F0 !important;
 }
-/* --- SCROLL HORIZONTAL HANYA UNTUK 3 KOLOM UTAMA --- */
+/* HANYA 3 KOLOM UTAMA YANG BISA DIGESER */
 .main-row-scroll {
     display: flex !important;
     flex-direction: row !important;
@@ -66,11 +66,11 @@ st.markdown("""
     min-width: 280px !important;
     flex-shrink: 0 !important;
 }
-.main-row-scroll .scroll-col:nth-of-type(1) { min-width: 260px; }
-.main-row-scroll .scroll-col:nth-of-type(2) { min-width: 380px; }
+.main-row-scroll .scroll-col:nth-of-type(1) { min-width: 280px; }
+.main-row-scroll .scroll-col:nth-of-type(2) { min-width: 420px; }
 .main-row-scroll .scroll-col:nth-of-type(3) { min-width: 280px; }
 
-/* --- PANEL --- */
+/* PANEL */
 .cyber-panel {
     background: #0C1425;
     border: 1px solid #162035;
@@ -302,7 +302,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 3 KOLOM UTAMA (BISA DIGESER KANAN-KIRI)
+# 3 KOLOM UTAMA (BISA DIGESER)
 # ==============================================================================
 st.markdown('<div class="main-row-scroll">', unsafe_allow_html=True)
 
@@ -318,7 +318,7 @@ with st.container():
         <div class="cyber-body" style="padding: 0; height: 700px; overflow: hidden; border-radius: 0 0 10px 10px;">
     """, unsafe_allow_html=True)
     
-    # Kalender Tradays (resmi dari MetaQuotes)
+    # Tradays iframe (resmi dari MetaQuotes)
     calendar_html = """
     <iframe src="https://tradays.com" 
             width="100%" 
@@ -337,11 +337,11 @@ with st.container():
     """, unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- KOLOM 2: DXY CHART + MT5 TERMINAL ---
+# --- KOLOM 2: DXY CHART (TradingView) + MT5 TERMINAL ---
 with st.container():
     st.markdown('<div class="scroll-col">', unsafe_allow_html=True)
     
-    # DXY Chart (TradingView)
+    # DXY & RSI Chart (TradingView Widget)
     st.markdown("""
     <div class="cyber-panel">
         <div class="cyber-header">
