@@ -71,6 +71,11 @@ div[data-testid="column"]:nth-of-type(1) { width: 330px !important; min-width: 3
 div[data-testid="column"]:nth-of-type(2) { width: 620px !important; min-width: 620px !important; }
 div[data-testid="column"]:nth-of-type(3) { width: 350px !important; min-width: 350px !important; }
 
+/* FIX GAP HEATMAP KOLOM 3: Menarik elemen iframe terakhir ke atas */
+div[data-testid="column"]:nth-of-type(3) div.element-container:last-of-type {
+    margin-top: -18px !important; 
+}
+
 /* Desain Kustom Scrollbar Kanan-Kiri */
 div[data-testid="stHorizontalBlock"]::-webkit-scrollbar { height: 8px !important; }
 div[data-testid="stHorizontalBlock"]::-webkit-scrollbar-thumb { background: #00EEFF !important; border-radius: 4px !important; }
@@ -151,7 +156,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# TICKER TAPE (Tinggi dinaikkan ke 55 agar harga tidak terpotong)
+# TICKER TAPE
 # ==============================================================================
 ticker_html = """
 <div class="tradingview-widget-container" style="height: 55px; overflow: hidden;">
@@ -218,16 +223,16 @@ with col2:
 # --- KOLOM 3: AI SIGNAL FEED + HEATMAP ---
 with col3:
     st.markdown("""
-    <div style="background: rgba(0,0,0,0.28); border: 1px solid #162035; border-radius: 8px 8px 0 0; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+    <div style="background: rgba(0,0,0,0.28); border: 1px solid #162035; border-radius: 8px 8px 0 0; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 0px;">
         <span style="font-family: 'Share Tech Mono', monospace; font-size: 11px; color: #00EEFF; letter-spacing: 2px; text-transform: uppercase;">AI Signal Feed</span>
         <span style="font-family: monospace; font-size: 9px; color: #4B6A8A; letter-spacing: 1px;">CORE ENGINE</span>
     </div>
-    <div style="font-family:'Share Tech Mono',monospace; font-size:9px; color:#4B6A8A; background:rgba(0,238,255,0.05); border-left:2px solid #00EEFF; padding:6px; border-radius:3px; margin-bottom: 8px;">
+    <div style="font-family:'Share Tech Mono',monospace; font-size:9px; color:#4B6A8A; background:rgba(0,238,255,0.05); border-left:2px solid #00EEFF; padding:6px; border-radius:3px; margin-bottom: 4px;">
         [INFO] Masukkan pair/berita untuk analisis AI (contoh: EURUSD)
     </div>
     """, unsafe_allow_html=True)
 
-    col_input, col_btn = st.columns([3, 1])
+    col_input, col_btn = st.columns([3, 1], gap="small")
     with col_input:
         user_input = st.text_input("", placeholder="Ketik di sini...", key="ai_input", label_visibility="collapsed")
     with col_btn:
@@ -236,8 +241,9 @@ with col3:
     if send_clicked and user_input:
         st.info(f"Analisis untuk: {user_input}")
 
+    # Margin-top dihapus dari inline style agar lebih rapat
     heatmap_html = IFRAME_PANEL_CSS + """
-    <div class="cyber-panel-native" style="margin-top: 4px; border-radius: 0 0 8px 8px;">
+    <div class="cyber-panel-native" style="border-radius: 0 0 8px 8px; border-top: 1px solid rgba(0,238,255,0.1);">
         <div class="panel-header">
             <span class="panel-title">Currency Heatmap</span>
             <span class="panel-badge">Live</span>
@@ -259,14 +265,13 @@ with col3:
     components.html(heatmap_html, height=424)
 
 # ==============================================================================
-# BAGIAN BAWAH: FIX RAW TEXT HTML DI ACTIVE TRADE SETUP (TANPA INDENTASI STR)
+# BAGIAN BAWAH: FIX RAW TEXT HTML DI ACTIVE TRADE SETUP
 # ==============================================================================
 setup_data = [
     {"pair": "EURUSD", "dir": "SELL", "dir_cls": "sell", "entry": "1.08420", "tp1": "1.0795", "tp2": "1.0750", "gradient": "#FF3D71"},
     {"pair": "USDJPY", "dir": "BUY", "dir_cls": "buy", "entry": "149.820", "tp1": "150.50", "tp2": "151.20", "gradient": "#00FF9D"}
 ]
 
-# Sengaja ditulis mepet kiri string agar parser Markdown tidak mengiranya sebuah blok kode mentah
 bottom_html = """<style>
 .cyber-tag { font-family: 'Share Tech Mono', monospace; font-size: 8px; letter-spacing: 1px; padding: 2px 6px; border-radius: 3px; display: inline-block; }
 .cyber-tag.buy { background: rgba(0,255,157,0.12); color: #00FF9D; border: 1px solid rgba(0,255,157,0.25); }
