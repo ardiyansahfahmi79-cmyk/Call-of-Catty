@@ -319,16 +319,16 @@ with col1:
     </div>
     """, unsafe_allow_html=True)
 
-# --- KOLOM 2: DXY & RSI + MT5 ---
+# --- KOLOM 2: DXY & RSI + MT4 ---
 with col2:
     # DXY Chart (TradingView)
     st.markdown("""
-    <div class="cyber-panel" style="flex: 0.8;">
+    <div class="cyber-panel" style="flex: 1.4;">
         <div class="cyber-header">
             <span class="cyber-title">DXY & RSI Analysis</span>
             <span class="cyber-badge">TradingView</span>
         </div>
-        <div class="cyber-body-iframe" style="flex:1;">
+        <div class="cyber-body-iframe" style="flex:1; position:relative;">
             <div class="tradingview-widget-container" style="height:100%;width:100%;">
                 <div id="tradingview_dxy" style="height:100%;width:100%;"></div>
                 <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
@@ -356,20 +356,20 @@ with col2:
     </div>
     """, unsafe_allow_html=True)
 
-    # MT5 Terminal
+    # MT4 Terminal
     st.markdown("""
-    <div class="cyber-panel" style="flex: 1.2; margin-top: 4px;">
+    <div class="cyber-panel" style="flex: 0.6; margin-top: 4px;">
         <div class="cyber-header">
-            <span class="cyber-title">MT5 Execution Terminal</span>
+            <span class="cyber-title">MT4 Execution Terminal</span>
             <span class="cyber-badge">Web Terminal</span>
         </div>
         <div class="cyber-body-iframe">
-            <iframe src="https://metatraderweb.app/trade" 
+            <iframe src="https://trade.metatrader4.com" 
                     style="width:100%; height:100%; border:none; background:#0C1425;" 
                     frameborder="0" allowfullscreen="true" scrolling="no">
             </iframe>
             <div class="mt5-fallback">
-                [MT5] <a href="https://metatraderweb.app/trade" target="_blank">Full Screen</a>
+                [MT4] <a href="https://trade.metatrader4.com" target="_blank">Full Screen</a>
             </div>
         </div>
     </div>
