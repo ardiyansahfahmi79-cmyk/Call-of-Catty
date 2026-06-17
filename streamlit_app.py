@@ -11,7 +11,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# CSS - TANPA GAP & TANPA SCROLL VERTIKAL BERLEBIHAN
+# CSS - PASTIKAN 3 KOLOM HORIZONTAL, TIDAK BERTUMPUK
 # ==============================================================================
 st.markdown("""
 <style>
@@ -21,22 +21,30 @@ st.markdown("""
     --card: #111D35;
     --cyan: #00EEFF;
     --cyan-dim: rgba(0,238,255,0.10);
+    --cyan-border: rgba(0,238,255,0.22);
+    --purple: #8B5CF6;
+    --purple-dim: rgba(139,92,246,0.10);
     --green: #00FF9D;
     --red: #FF3D71;
     --text: #C8D8F0;
     --text-muted: #4B6A8A;
+    --text-dim: #243450;
     --border: #162035;
 }
 .stApp {
     background: #070C18 !important;
     background-image: 
         radial-gradient(ellipse at 10% 70%, rgba(139,92,246,0.07) 0%, transparent 45%),
-        radial-gradient(ellipse at 90% 15%, rgba(0,238,255,0.07) 0%, transparent 45%);
+        radial-gradient(ellipse at 90% 15%, rgba(0,238,255,0.07) 0%, transparent 45%),
+        linear-gradient(rgba(0,238,255,0.022) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,238,255,0.022) 1px, transparent 1px);
+    background-size: auto, auto, 48px 48px, 48px 48px;
     color: #C8D8F0 !important;
 }
 html, body, .stApp {
     height: 100% !important;
     overflow-x: hidden !important;
+    overflow-y: auto !important;
 }
 .block-container {
     padding-top: 0 !important;
@@ -46,28 +54,27 @@ html, body, .stApp {
     padding-right: 0.3rem !important;
 }
 
-/* --- 3 KOLOM UTAMA - TANPA VERTICAL SCROLL --- */
+/* --- 3 KOLOM UTAMA - HORIZONTAL, TIDAK PECAH KE BAWAH --- */
 .block-container > [data-testid="stHorizontalBlock"] {
     display: flex !important;
     flex-direction: row !important;
     flex-wrap: nowrap !important;
     gap: 8px !important;
     padding: 5px 0 0 0 !important;
-    height: auto !important;
-    min-height: unset !important;
+    min-height: 620px !important;
     align-items: stretch !important;
     overflow-x: auto !important;
     overflow-y: visible !important;
 }
 
-/* --- RESET KOLOM BERSARANG --- */
+/* --- RESET KOLOM BERSARANG (nested) --- */
 [data-testid="column"] [data-testid="stHorizontalBlock"] {
     min-height: unset !important;
     height: auto !important;
     gap: 4px !important;
     padding: 0 !important;
     margin-bottom: 4px !important;
-    overflow: visible !important;
+    flex-wrap: nowrap !important;
 }
 
 [data-testid="column"] {
@@ -80,7 +87,6 @@ html, body, .stApp {
 [data-testid="column"]:nth-of-type(2) { min-width: 420px !important; width: 420px !important; }
 [data-testid="column"]:nth-of-type(3) { min-width: 300px !important; width: 300px !important; }
 
-/* Scrollbar Horizontal */
 [data-testid="stHorizontalBlock"]::-webkit-scrollbar { height: 4px; }
 [data-testid="stHorizontalBlock"]::-webkit-scrollbar-thumb { background: #00EEFF; border-radius: 2px; }
 [data-testid="stHorizontalBlock"]::-webkit-scrollbar-track { background: transparent; }
@@ -132,7 +138,7 @@ html, body, .stApp {
     padding: 0;
 }
 
-/* --- BUTTON CYBER --- */
+/* --- CYBER BUTTON --- */
 div.stButton > button {
     background: linear-gradient(135deg, rgba(0,238,255,0.15), rgba(139,92,246,0.15)) !important;
     border: 1px solid #00EEFF !important;
@@ -154,7 +160,7 @@ div.stButton > button:hover {
     transform: scale(1.02) !important;
 }
 
-/* --- GRID --- */
+/* --- GRIDS --- */
 .trade-grid {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr 1fr;
@@ -187,6 +193,26 @@ div.stButton > button:hover {
     color: #FF3D71;
     border: 1px solid rgba(255,61,113,0.25);
 }
+
+/* --- SELECTOR --- */
+div[data-testid="stSelectbox"] {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+div[data-testid="stSelectbox"] label {
+    display: none !important;
+}
+div[data-testid="stSelectbox"] div[data-baseweb="select"] {
+    min-height: 28px !important;
+}
+div[data-testid="stSelectbox"] div[data-baseweb="select"] div {
+    font-size: 10px !important;
+    font-family: 'Share Tech Mono', monospace !important;
+    color: #00EEFF !important;
+    background: rgba(0,0,0,0.3) !important;
+    border: 1px solid rgba(0,238,255,0.2) !important;
+    border-radius: 4px !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -212,7 +238,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# TICKER TAPE - DIPERBESAR AGAR TIDAK KEPOTONG
+# JUDUL SENTINEL
+# ==============================================================================
+st.markdown("""
+<div style="text-align: center; padding: 6px 0; border-bottom: 1px solid rgba(0,238,255,0.15); margin-bottom: 4px;">
+    <span style="font-family: 'Share Tech Mono', monospace; font-size: 14px; color: #00EEFF; letter-spacing: 4px; text-shadow: 0 0 20px rgba(0,238,255,0.3);">
+        [ AEROVULPIS SENTINEL NEXUS ]
+    </span>
+    <span style="font-family: 'Share Tech Mono', monospace; font-size: 8px; color: #4B6A8A; margin-left: 12px; letter-spacing: 2px;">
+        QUANTUM INTELLIGENCE CORE
+    </span>
+</div>
+""", unsafe_allow_html=True)
+
+# ==============================================================================
+# TICKER TAPE
 # ==============================================================================
 ticker_html = """
 <div class="tradingview-widget-container" style="margin-bottom: 4px; height: 44px; overflow: hidden;">
@@ -242,14 +282,14 @@ ticker_html = """
 components.html(ticker_html, height=50)
 
 # ==============================================================================
-# 3 KOLOM UTAMA
+# 3 KOLOM UTAMA (HORIZONTAL, SCROLL)
 # ==============================================================================
 col1, col2, col3 = st.columns(3)
 
 # --- KOLOM 1: ECONOMIC CALENDAR ---
 with col1:
     st.markdown("""
-    <div class="cyber-panel-native" style="height:600px;">
+    <div class="cyber-panel-native" style="height:620px;">
         <div class="panel-header">
             <span class="panel-title">Economic Calendar</span>
             <span class="panel-badge">Tradays</span>
@@ -263,90 +303,66 @@ with col1:
     </div>
     """, unsafe_allow_html=True)
 
-# --- KOLOM 2: DXY MINI CHART + CHART RSI ---
+# --- KOLOM 2: TRADINGVIEW CHART + RSI (dengan pair selector) ---
 with col2:
-    # DXY Mini Chart (pakai Symbol Overview yang lebih ringkas)
-    dxy_html = """
-    <div class="tradingview-widget-container" style="height:160px;">
-        <div class="tradingview-widget-container__widget" style="height:100%;"></div>
-        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-symbol-overview.js" async>
-        {
-        "symbols": [["INDEX:DXY|1D"]],
-        "chartOnly": false,
-        "width": "100%",
-        "height": "100%",
-        "locale": "id",
-        "colorTheme": "dark",
-        "autosize": true,
-        "showVolume": false,
-        "hideDateRanges": true,
-        "hideMarketStatus": false,
-        "hideSymbolLogo": true,
-        "scalePosition": "right",
-        "scaleMode": "Normal",
-        "fontSize": "10",
-        "valuesTracking": "1",
-        "changeMode": "price-and-percent",
-        "chartType": "area",
-        "backgroundColor": "rgba(7, 12, 24, 1)",
-        "lineWidth": 2,
-        "gridLineColor": "rgba(242, 242, 242, 0.06)",
-        "upColor": "#22ab94",
-        "downColor": "#f7525f"
-        }
-        </script>
-    </div>
-    """
+    # Pair selector
+    pair_options = ["XAUUSD", "BTCUSD", "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USOIL"]
+    selected_pair = st.selectbox("", pair_options, index=0, key="chart_pair", label_visibility="collapsed")
     
-    # Chart dengan RSI (lebih tinggi)
-    chart_rsi_html = """
-    <div class="tradingview-widget-container" style="height:430px; margin-top:4px;">
-        <div id="tv_chart_rsi" style="height:100%;width:100%;"></div>
-        <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-        <script type="text/javascript">
-        new TradingView.widget({
-            "autosize": true,
-            "symbol": "TVC:DXY",
-            "interval": "60",
-            "timezone": "Asia/Jakarta",
-            "theme": "dark",
-            "style": "2",
-            "locale": "id",
-            "enable_publishing": false,
-            "hide_top_toolbar": true,
-            "hide_legend": false,
-            "save_image": false,
-            "container_id": "tv_chart_rsi",
-            "studies": ["RSI@tv-basicstudies"],
-            "backgroundColor": "rgba(7,12,24,1)",
-            "gridColor": "rgba(0,238,255,0.04)"
-        });
-        </script>
-    </div>
-    """
-    col2_content = f"""
-    <div class="cyber-panel-native" style="height:600px;">
+    # Mapping pair ke simbol TradingView
+    symbol_map = {
+        "XAUUSD": "OANDA:XAUUSD",
+        "BTCUSD": "BITSTAMP:BTCUSD",
+        "EURUSD": "FX_IDC:EURUSD",
+        "GBPUSD": "FX_IDC:GBPUSD",
+        "USDJPY": "FX_IDC:USDJPY",
+        "AUDUSD": "FX_IDC:AUDUSD",
+        "USOIL": "TVC:USOIL"
+    }
+    tv_symbol = symbol_map.get(selected_pair, "OANDA:XAUUSD")
+    
+    chart_html = f"""
+    <div class="cyber-panel-native" style="height:620px;">
         <div class="panel-header">
-            <span class="panel-title">DXY</span>
+            <span class="panel-title">{selected_pair} Chart & RSI</span>
             <span class="panel-badge">TradingView</span>
         </div>
-        <div style="flex:1; display:flex; flex-direction:column; min-height:0;">
-            <div style="flex:0 0 160px;">{dxy_html}</div>
-            <div style="flex:1; min-height:0;">{chart_rsi_html}</div>
+        <div class="panel-iframe" style="flex:1; min-height:0;">
+            <div id="tv_chart_main" style="height:100%;width:100%;"></div>
+            <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+            <script type="text/javascript">
+            new TradingView.widget({{
+                "autosize": true,
+                "symbol": "{tv_symbol}",
+                "interval": "60",
+                "timezone": "Asia/Jakarta",
+                "theme": "dark",
+                "style": "2",
+                "locale": "id",
+                "enable_publishing": false,
+                "hide_top_toolbar": false,
+                "hide_legend": false,
+                "save_image": false,
+                "container_id": "tv_chart_main",
+                "studies": ["RSI@tv-basicstudies"],
+                "backgroundColor": "rgba(7,12,24,1)",
+                "gridColor": "rgba(0,238,255,0.04)"
+            }});
+            </script>
         </div>
     </div>
     """
-    components.html(col2_content, height=600)
+    components.html(chart_html, height=620)
 
 # --- KOLOM 3: AI SIGNAL FEED + HEATMAP ---
 with col3:
     st.markdown("""
-    <div class="cyber-panel-native" style="height:600px;">
+    <div class="cyber-panel-native" style="height:620px;">
         <div class="panel-header">
             <span class="panel-title">AI Signal Feed</span>
             <span class="panel-badge">Core Engine</span>
         </div>
-        <div class="panel-body" style="display:flex; flex-direction:column; gap:4px; overflow-y:auto;">
+        <div class="panel-body" style="display:flex; flex-direction:column; gap:4px;">
     """, unsafe_allow_html=True)
 
     # Pemberitahuan
@@ -356,18 +372,18 @@ with col3:
     </div>
     """, unsafe_allow_html=True)
 
-    # Input & Tombol Kirim - TANPA NESTED COLUMNS (pakai st.columns langsung di dalam panel)
+    # Input & Tombol Kirim
     col_input, col_btn = st.columns([3, 1])
     with col_input:
         user_input = st.text_input("", placeholder="EURUSD, CPI, FOMC...", key="ai_input", label_visibility="collapsed")
     with col_btn:
         send_clicked = st.button("▶ SEND", key="ai_send", use_container_width=True)
 
-    # Hasil AI (contoh statis)
+    # Hasil AI
     if send_clicked and user_input:
         st.info(f"Analisis untuk: {user_input} (contoh AI)")
     else:
-        st.caption("Contoh hasil AI:")
+        st.caption(" ")
 
     # HEATMAP
     heatmap_html = """
@@ -380,20 +396,20 @@ with col3:
         "locale": "id",
         "currencies": ["EUR","USD","JPY","GBP","CHF","AUD","CAD","NZD","CNY"],
         "width": "100%",
-        "height": 280
+        "height": 300
         }
         </script>
     </div>
     """
-    components.html(heatmap_html, height=290)
+    components.html(heatmap_html, height=310)
 
     st.markdown("</div></div>", unsafe_allow_html=True)
 
 # ==============================================================================
-# BAGIAN BAWAH - ACTIVE TRADE SETUPS & SIGNAL MATRIX
+# BAGIAN BAWAH
 # ==============================================================================
 
-# --- ACTIVE TRADE SETUPS ---
+# --- ACTIVE TRADE SETUPS (dengan TP1, TP2, TP3 status) ---
 st.markdown("""
 <div class="cyber-panel-native">
     <div class="panel-header">
@@ -404,14 +420,26 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 setup_data = [
-    {"pair": "EURUSD", "dir": "SELL", "dir_cls": "sell", "entry": "1.08420", "tp1": "1.07950", "sl": "1.08900", "gradient": "#FF3D71"},
-    {"pair": "USDJPY", "dir": "BUY", "dir_cls": "buy", "entry": "149.820", "tp1": "150.500", "sl": "149.200", "gradient": "#00FF9D"},
-    {"pair": "XAUUSD", "dir": "SELL", "dir_cls": "sell", "entry": "2,014.50", "tp1": "2,000.00", "sl": "2,025.00", "gradient": "#FF3D71"},
-    {"pair": "DXY", "dir": "LONG BIAS", "dir_cls": "buy", "entry": "105.840", "tp1": "106.500", "sl": "104.900", "gradient": "#00FF9D"}
+    {"pair": "EURUSD", "dir": "SELL", "dir_cls": "sell", "entry": "1.08420", 
+     "tp1": "1.07950", "tp1_st": "✓", "tp2": "1.07500", "tp2_st": "✗", "tp3": "1.06800", "tp3_st": "~", 
+     "sl": "1.08900", "gradient": "#FF3D71"},
+    {"pair": "USDJPY", "dir": "BUY", "dir_cls": "buy", "entry": "149.820", 
+     "tp1": "150.500", "tp1_st": "✓", "tp2": "151.200", "tp2_st": "✓", "tp3": "152.000", "tp3_st": "~", 
+     "sl": "149.200", "gradient": "#00FF9D"},
+    {"pair": "XAUUSD", "dir": "SELL", "dir_cls": "sell", "entry": "2,014.50", 
+     "tp1": "2,000.00", "tp1_st": "✗", "tp2": "1,990.00", "tp2_st": "~", "tp3": "1,975.00", "tp3_st": "~", 
+     "sl": "2,025.00", "gradient": "#FF3D71"},
+    {"pair": "DXY", "dir": "LONG BIAS", "dir_cls": "buy", "entry": "105.840", 
+     "tp1": "106.500", "tp1_st": "~", "tp2": "107.200", "tp2_st": "~", "tp3": "108.000", "tp3_st": "~", 
+     "sl": "104.900", "gradient": "#00FF9D"}
 ]
 
 st.markdown('<div class="trade-grid">', unsafe_allow_html=True)
 for setup in setup_data:
+    tp1_color = "#00FF9D" if setup['tp1_st'] == "✓" else "#FF3D71" if setup['tp1_st'] == "✗" else "#4B6A8A"
+    tp2_color = "#00FF9D" if setup['tp2_st'] == "✓" else "#FF3D71" if setup['tp2_st'] == "✗" else "#4B6A8A"
+    tp3_color = "#00FF9D" if setup['tp3_st'] == "✓" else "#FF3D71" if setup['tp3_st'] == "✗" else "#4B6A8A"
+    
     st.markdown(f"""
     <div style="background:#111D35; border:1px solid #162035; border-radius:6px; padding:6px; position:relative; padding-top:8px;">
         <div style="position:absolute; top:0; left:0; right:0; height:2px; background:{setup['gradient']};"></div>
@@ -419,16 +447,20 @@ for setup in setup_data:
             <span style="font-family:'Share Tech Mono',monospace; font-size:11px; font-weight:bold; color:#C8D8F0;">{setup['pair']}</span>
             <span class="cyber-tag {setup['dir_cls']}">{setup['dir']}</span>
         </div>
-        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:2px; font-size:9px;">
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:2px; font-size:9px;">
             <div><span style="color:#4B6A8A;">Entry</span> <br><span style="color:#C8D8F0;">{setup['entry']}</span></div>
-            <div><span style="color:#4B6A8A;">TP1</span> <br><span style="color:#00FF9D;">{setup['tp1']}</span></div>
-            <div><span style="color:#4B6A8A;">SL</span> <br><span style="color:#FF3D71;">{setup['sl']}</span></div>
+            <div><span style="color:#4B6A8A;">TP1</span> <br><span style="color:{tp1_color};">{setup['tp1']} [{setup['tp1_st']}]</span></div>
+            <div><span style="color:#4B6A8A;">TP2</span> <br><span style="color:{tp2_color};">{setup['tp2']} [{setup['tp2_st']}]</span></div>
+            <div><span style="color:#4B6A8A;">TP3</span> <br><span style="color:{tp3_color};">{setup['tp3']} [{setup['tp3_st']}]</span></div>
+        </div>
+        <div style="margin-top:2px; font-size:8px; color:#4B6A8A;">
+            SL: <span style="color:#FF3D71;">{setup['sl']}</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
 st.markdown('</div></div></div>', unsafe_allow_html=True)
 
-# --- SIGNAL MATRIX ---
+# --- SIGNAL MATRIX (dengan TP1, TP2, TP3 status) ---
 st.markdown("""
 <div class="cyber-panel-native">
     <div class="panel-header">
@@ -439,16 +471,29 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 signal_data = [
-    {"symbol": "XAUUSD", "dir": "BUY", "entry": "2,014.50", "tp1": "2,025.00", "conf": 78},
-    {"symbol": "BTCUSD", "dir": "BUY", "entry": "65,790.00", "tp1": "66,800.00", "conf": 72},
-    {"symbol": "EURUSD", "dir": "SELL", "entry": "1.08420", "tp1": "1.07950", "conf": 65},
-    {"symbol": "GBPUSD", "dir": "SELL", "entry": "1.3430", "tp1": "1.3370", "conf": 60}
+    {"symbol": "XAUUSD", "dir": "BUY", "entry": "2,014.50", 
+     "tp1": "2,025.00", "tp1_st": "✓", "tp2": "2,035.00", "tp2_st": "✗", "tp3": "2,050.00", "tp3_st": "~", 
+     "conf": 78},
+    {"symbol": "BTCUSD", "dir": "BUY", "entry": "65,790.00", 
+     "tp1": "66,800.00", "tp1_st": "✓", "tp2": "67,500.00", "tp2_st": "~", "tp3": "68,900.00", "tp3_st": "~", 
+     "conf": 72},
+    {"symbol": "EURUSD", "dir": "SELL", "entry": "1.08420", 
+     "tp1": "1.07950", "tp1_st": "✗", "tp2": "1.07500", "tp2_st": "~", "tp3": "1.06800", "tp3_st": "~", 
+     "conf": 65},
+    {"symbol": "GBPUSD", "dir": "SELL", "entry": "1.3430", 
+     "tp1": "1.3370", "tp1_st": "~", "tp2": "1.3310", "tp2_st": "~", "tp3": "1.3220", "tp3_st": "~", 
+     "conf": 60}
 ]
 
 st.markdown('<div class="signal-grid">', unsafe_allow_html=True)
 for sig in signal_data:
     cls = "buy" if sig['dir'] == "BUY" else "sell"
     color = "#00FF9D" if sig['dir'] == "BUY" else "#FF3D71"
+    
+    tp1_color = "#00FF9D" if sig['tp1_st'] == "✓" else "#FF3D71" if sig['tp1_st'] == "✗" else "#4B6A8A"
+    tp2_color = "#00FF9D" if sig['tp2_st'] == "✓" else "#FF3D71" if sig['tp2_st'] == "✗" else "#4B6A8A"
+    tp3_color = "#00FF9D" if sig['tp3_st'] == "✓" else "#FF3D71" if sig['tp3_st'] == "✗" else "#4B6A8A"
+    
     st.markdown(f"""
     <div style="background:#111D35; border:1px solid #162035; border-radius:4px; padding:6px; position:relative; padding-top:8px;">
         <div style="position:absolute; top:0; left:0; right:0; height:2px; background:{color};"></div>
@@ -456,14 +501,54 @@ for sig in signal_data:
             <span style="color:#00EEFF;">{sig['symbol']}</span>
             <span class="cyber-tag {cls}">{sig['dir']}</span>
         </div>
-        <div style="display:flex; justify-content:space-between; font-size:9px; color:#4B6A8A;">
-            <span>Entry: <b style="color:#C8D8F0;">{sig['entry']}</b></span>
-            <span>TP1: <b style="color:#00FF9D;">{sig['tp1']}</b></span>
-            <span>Conf: <b style="color:#00EEFF;">{sig['conf']}%</b></span>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:2px; font-size:8px; color:#4B6A8A;">
+            <div>Entry: <b style="color:#C8D8F0;">{sig['entry']}</b></div>
+            <div>TP1: <b style="color:{tp1_color};">{sig['tp1']} [{sig['tp1_st']}]</b></div>
+            <div>TP2: <b style="color:{tp2_color};">{sig['tp2']} [{sig['tp2_st']}]</b></div>
+            <div>TP3: <b style="color:{tp3_color};">{sig['tp3']} [{sig['tp3_st']}]</b></div>
+        </div>
+        <div style="margin-top:2px; font-size:8px; color:#4B6A8A;">
+            Conf: <b style="color:#00EEFF;">{sig['conf']}%</b>
         </div>
     </div>
     """, unsafe_allow_html=True)
 st.markdown('</div></div></div>', unsafe_allow_html=True)
+
+# ==============================================================================
+# TOP STORIES
+# ==============================================================================
+st.markdown("""
+<div class="cyber-panel-native">
+    <div class="panel-header">
+        <span class="panel-title">Top Stories</span>
+        <span class="panel-badge">TradingView</span>
+    </div>
+    <div style="padding: 4px; height: 500px; overflow: hidden;">
+""", unsafe_allow_html=True)
+
+news_html = """
+<div class="tradingview-widget-container" style="width:100%; height:100%;">
+    <div class="tradingview-widget-container__widget" style="height:100%;"></div>
+    <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-timeline.js" async>
+    {
+    "feedMode": "all_symbols",
+    "colorTheme": "dark",
+    "isTransparent": true,
+    "displayMode": "regular",
+    "width": "100%",
+    "height": "100%",
+    "locale": "id",
+    "showHeader": true
+    }
+    </script>
+</div>
+"""
+components.html(news_html, height=500)
+
+st.markdown("""
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # ==============================================================================
 # FOOTER
