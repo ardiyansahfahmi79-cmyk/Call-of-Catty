@@ -48,7 +48,7 @@ st.markdown("""
     overflow-x: hidden;
 }
 
-/* --- PAKSA 3 KOLOM UTAMA AGAR TETAP SEJAJAR HORIZONTAL & BISA SCROLL --- */
+/* --- PAKSA 3 KOLOM UTAMA AGAR TETAP SEJAJAR HORIZONTAL --- */
 div[data-testid="stHorizontalBlock"] {
     display: flex !important;
     flex-direction: row !important;
@@ -61,32 +61,26 @@ div[data-testid="stHorizontalBlock"] {
 }
 
 div[data-testid="column"] {
-    flex: 0 0 auto !important; /* Mencegah kolom menyusut atau patah ke bawah */
+    flex: 0 0 auto !important;
     display: flex !important;
     flex-direction: column !important;
 }
 
-/* Penataan Lebar Layout 3 Kolom */
-div[data-testid="column"]:nth-of-type(1) { width: 330px !important; min-width: 330px !important; }
-div[data-testid="column"]:nth-of-type(2) { width: 620px !important; min-width: 620px !important; }
-div[data-testid="column"]:nth-of-type(3) { width: 350px !important; min-width: 350px !important; }
+/* Penataan Lebar Layout 3 Kolom Utama */
+div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-of-type(1) { width: 330px !important; min-width: 330px !important; }
+div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-of-type(2) { width: 620px !important; min-width: 620px !important; }
+div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-of-type(3) { width: 350px !important; min-width: 350px !important; }
 
-/* FIX GAP HEATMAP KOLOM 3: Menarik elemen iframe terakhir ke atas */
-div[data-testid="column"]:nth-of-type(3) div.element-container:last-of-type {
-    margin-top: -18px !important; 
-}
-
-/* Desain Kustom Scrollbar Kanan-Kiri */
+/* Desain Kustom Scrollbar */
 div[data-testid="stHorizontalBlock"]::-webkit-scrollbar { height: 8px !important; }
 div[data-testid="stHorizontalBlock"]::-webkit-scrollbar-thumb { background: #00EEFF !important; border-radius: 4px !important; }
 div[data-testid="stHorizontalBlock"]::-webkit-scrollbar-track { background: rgba(16,32,53,0.3) !important; }
 
-/* Reset Form Bersarang Kolom 3 */
-[data-testid="column"] [data-testid="stHorizontalBlock"] {
-    flex-wrap: nowrap !important;
+/* Reset Form Input agar Responsif di Baris Baru */
+.ai-input-container [data-testid="stHorizontalBlock"] {
+    width: 100% !important;
     overflow: visible !important;
     padding: 0 !important;
-    gap: 4px !important;
 }
 
 /* --- CYBER BUTTON --- */
@@ -172,7 +166,7 @@ ticker_html = """
 components.html(ticker_html, height=55)
 
 # ==============================================================================
-# 3 KOLOM UTAMA RESPONSIVE HORIZONTAL
+# 3 KOLOM UTAMA (MATRIX LAYOUT)
 # ==============================================================================
 col1, col2, col3 = st.columns(3)
 
@@ -220,30 +214,10 @@ with col2:
     """
     components.html(chart_html, height=584)
 
-# --- KOLOM 3: AI SIGNAL FEED + HEATMAP ---
+# --- KOLOM 3: CURRENCY HEATMAP ONLY (Dinaikkan agar sejajar sempurna) ---
 with col3:
-    st.markdown("""
-    <div style="background: rgba(0,0,0,0.28); border: 1px solid #162035; border-radius: 8px 8px 0 0; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 0px;">
-        <span style="font-family: 'Share Tech Mono', monospace; font-size: 11px; color: #00EEFF; letter-spacing: 2px; text-transform: uppercase;">AI Signal Feed</span>
-        <span style="font-family: monospace; font-size: 9px; color: #4B6A8A; letter-spacing: 1px;">CORE ENGINE</span>
-    </div>
-    <div style="font-family:'Share Tech Mono',monospace; font-size:9px; color:#4B6A8A; background:rgba(0,238,255,0.05); border-left:2px solid #00EEFF; padding:6px; border-radius:3px; margin-bottom: 4px;">
-        [INFO] Masukkan pair/berita untuk analisis AI (contoh: EURUSD)
-    </div>
-    """, unsafe_allow_html=True)
-
-    col_input, col_btn = st.columns([3, 1], gap="small")
-    with col_input:
-        user_input = st.text_input("", placeholder="Ketik di sini...", key="ai_input", label_visibility="collapsed")
-    with col_btn:
-        send_clicked = st.button("▶ SEND", key="ai_send", use_container_width=True)
-
-    if send_clicked and user_input:
-        st.info(f"Analisis untuk: {user_input}")
-
-    # Margin-top dihapus dari inline style agar lebih rapat
     heatmap_html = IFRAME_PANEL_CSS + """
-    <div class="cyber-panel-native" style="border-radius: 0 0 8px 8px; border-top: 1px solid rgba(0,238,255,0.1);">
+    <div class="cyber-panel-native">
         <div class="panel-header">
             <span class="panel-title">Currency Heatmap</span>
             <span class="panel-badge">Live</span>
@@ -262,10 +236,52 @@ with col3:
         </div>
     </div>
     """
-    components.html(heatmap_html, height=424)
+    components.html(heatmap_html, height=620)
+
 
 # ==============================================================================
-# BAGIAN BAWAH: FIX RAW TEXT HTML DI ACTIVE TRADE SETUP
+# SEKSYEN BAWAH 1: AI SIGNAL FEED & MARKET ANALYSIS (FULL-WIDTH SEKARANG)
+# ==============================================================================
+st.markdown("""
+<div style="background: #0C1425; border: 1px solid #162035; border-radius: 8px; margin-top: 20px; padding: 0 0 10px 0;">
+    <div style="background: rgba(0,0,0,0.28); border-bottom: 1px solid #162035; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; border-radius: 8px 8px 0 0;">
+        <span style="font-family: 'Share Tech Mono', monospace; font-size: 12px; color: #00EEFF; letter-spacing: 2px; text-transform: uppercase;">AI Signal Feed & Analysis Terminal</span>
+        <span style="font-family: monospace; font-size: 9px; color: #4B6A8A; letter-spacing: 1px;">CORE ENGINE V3.5</span>
+    </div>
+    <div style="padding: 12px 12px 2px 12px;">
+        <div style="font-family:'Share Tech Mono',monospace; font-size:10px; color:#4B6A8A; background:rgba(0,238,255,0.05); border-left:2px solid #00EEFF; padding:8px; border-radius:3px;">
+            [SYSTEM GENUINE] Masukkan market pair atau topik fundamental untuk mengekstrak analisis kecerdasan buatan secara penuh.
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# Bungkus input ke container dengan kelas custom untuk kontrol horizontal block
+st.markdown('<div class="ai-input-container">', unsafe_allow_html=True)
+col_input, col_btn = st.columns([5, 1], gap="small")
+with col_input:
+    user_input = st.text_input("", placeholder="Ketik di sini (contoh: XAUUSD SMC Analisis atau Hubungan Data NFP)...", key="ai_input", label_visibility="collapsed")
+with col_btn:
+    send_clicked = st.button("▶ RUN ANALYSIS", key="ai_send", use_container_width=True)
+st.markdown('</div>', unsafe_allow_html=True)
+
+if send_clicked and user_input:
+    # Desain tampilan response AI yang luas, sangat rapi untuk dibaca
+    st.markdown(f"""
+    <div style="margin-top: 10px; padding: 15px; background: rgba(0, 238, 255, 0.02); border: 1px dashed rgba(0, 238, 255, 0.2); border-radius: 6px; font-family: 'Share Tech Mono', monospace; color: #C8D8F0; line-height: 1.6;">
+        <span style="color: #00EEFF; font-weight: bold;">[AEROVULPIS AI REPORT ENGINE] Target: {user_input.upper()}</span><br>
+        <hr style="border-color: rgba(22,32,53,0.5); margin: 8px 0;">
+        <span style="color: #00FF9D;">● SMART MONEY CONCEPT ANALYSIS:</span><br>
+        • Market Structure Shift / CHoCH terdeteksi pada TF Utama.<br>
+        • Area Order Block valid terkonfirmasi, bersiap memantau area imbalance / Fair Value Gap (FVG).<br>
+        • Sentimen jangka pendek menunjukkan pola akumulasi volume tinggi.<br>
+        <span style="color: #4B6A8A; font-size: 9px; display: block; margin-top: 10px;">*Ini adalah simulasi container output analisis luas. Integrasi script auto-trade atau prompt AI-mu akan tercetak di sini dengan sangat leluasa.</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# ==============================================================================
+# SEKSYEN BAWAH 2: ACTIVE TRADE SETUP
 # ==============================================================================
 setup_data = [
     {"pair": "EURUSD", "dir": "SELL", "dir_cls": "sell", "entry": "1.08420", "tp1": "1.0795", "tp2": "1.0750", "gradient": "#FF3D71"},
@@ -303,7 +319,7 @@ bottom_html += "</div></div>"
 st.markdown(bottom_html, unsafe_allow_html=True)
 
 # ==============================================================================
-# TOP STORIES
+# SEKSYEN BAWAH 3: TOP STORIES
 # ==============================================================================
 news_html = IFRAME_PANEL_CSS + """
 <div class="cyber-panel-native">
