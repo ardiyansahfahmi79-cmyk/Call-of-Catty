@@ -321,48 +321,58 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# FUNGSI CHART DXY (PLOTLY)
+# FUNGSI CHART DXY (Plotly) - DIPERBAIKI
 # ==============================================================================
 def create_dxy_chart():
-    dates = pd.date_range(end=datetime.now(pytz.UTC), periods=100, freq='H')
-    base = 105.5
-    values = []
-    for i in range(100):
-        trend = i * 0.005
-        noise = np.random.normal(0, 0.15)
-        values.append(base + trend + noise)
-    rsi_values = [50 + (v - values[0]) * 2 for v in values]
-    rsi_values = [max(20, min(80, v)) for v in rsi_values]
-    
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=dates, y=values, mode='lines', name='DXY',
-                             line=dict(color='#00EEFF', width=2),
-                             fill='tozeroy', fillcolor='rgba(0,238,255,0.05)'))
-    fig.add_trace(go.Scatter(x=dates, y=rsi_values, mode='lines', name='RSI',
-                             line=dict(color='#8B5CF6', width=1.5, dash='dot'),
-                             yaxis='y2'))
-    fig.add_hline(y=70, line_dash="dash", line_color="#FF3D71", opacity=0.3, yref="y2")
-    fig.add_hline(y=30, line_dash="dash", line_color="#00FF9D", opacity=0.3, yref="y2")
-    fig.add_hline(y=50, line_dash="dot", line_color="#4B6A8A", opacity=0.2, yref="y2")
-    fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=0, r=0, t=0, b=0),
-        height=280,
-        xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.03)',
-                   showticklabels=True, tickfont=dict(color='#4B6A8A', size=9)),
-        yaxis=dict(title='DXY', titlefont=dict(color='#00EEFF', size=9),
-                   showgrid=True, gridcolor='rgba(255,255,255,0.03)',
-                   tickfont=dict(color='#4B6A8A', size=9)),
-        yaxis2=dict(title='RSI', titlefont=dict(color='#8B5CF6', size=9),
-                    overlaying='y', side='right', range=[0, 100],
-                    showgrid=False, tickfont=dict(color='#4B6A8A', size=9)),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02,
-                    xanchor="right", x=1, font=dict(color='#4B6A8A', size=9)),
-        hovermode='x unified'
-    )
-    return fig
+    try:
+        # Gunakan frekuensi '60min' agar kompatibel
+        dates = pd.date_range(end=datetime.now(pytz.UTC), periods=100, freq='60min')
+        base = 105.5
+        values = []
+        for i in range(100):
+            trend = i * 0.005
+            noise = np.random.normal(0, 0.15)
+            values.append(base + trend + noise)
+        rsi_values = [50 + (v - values[0]) * 2 for v in values]
+        rsi_values = [max(20, min(80, v)) for v in rsi_values]
+        
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=dates, y=values, mode='lines', name='DXY',
+                                 line=dict(color='#00EEFF', width=2),
+                                 fill='tozeroy', fillcolor='rgba(0,238,255,0.05)'))
+        fig.add_trace(go.Scatter(x=dates, y=rsi_values, mode='lines', name='RSI',
+                                 line=dict(color='#8B5CF6', width=1.5, dash='dot'),
+                                 yaxis='y2'))
+        fig.add_hline(y=70, line_dash="dash", line_color="#FF3D71", opacity=0.3, yref="y2")
+        fig.add_hline(y=30, line_dash="dash", line_color="#00FF9D", opacity=0.3, yref="y2")
+        fig.add_hline(y=50, line_dash="dot", line_color="#4B6A8A", opacity=0.2, yref="y2")
+        fig.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            margin=dict(l=0, r=0, t=0, b=0),
+            height=280,
+            xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.03)',
+                       showticklabels=True, tickfont=dict(color='#4B6A8A', size=9)),
+            yaxis=dict(title='DXY', titlefont=dict(color='#00EEFF', size=9),
+                       showgrid=True, gridcolor='rgba(255,255,255,0.03)',
+                       tickfont=dict(color='#4B6A8A', size=9)),
+            yaxis2=dict(title='RSI', titlefont=dict(color='#8B5CF6', size=9),
+                        overlaying='y', side='right', range=[0, 100],
+                        showgrid=False, tickfont=dict(color='#4B6A8A', size=9)),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02,
+                        xanchor="right", x=1, font=dict(color='#4B6A8A', size=9)),
+            hovermode='x unified'
+        )
+        return fig
+    except Exception as e:
+        # Jika error, buat figure kosong dengan pesan
+        fig = go.Figure()
+        fig.add_annotation(text="Chart tidak dapat dimuat", x=0.5, y=0.5, showarrow=False,
+                           font=dict(color="#FF3D71", size=16))
+        fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                          height=280, margin=dict(l=0, r=0, t=0, b=0))
+        return fig
 
 # ==============================================================================
 # DATA SINYAL CONTOH (XAUUSD, BTCUSD, EURUSD, GBPUSD)
@@ -668,7 +678,7 @@ for sig in signal_data:
 
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Tambahkan iframe watchlist di bawah (jika ingin)
+# Tambahkan iframe watchlist di bawah (opsional)
 st.markdown("""
 <div style="margin-top: 12px; border-top: 1px solid #162035; padding-top: 12px;">
     <div style="font-family: 'Share Tech Mono', monospace; font-size: 9px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px;">
