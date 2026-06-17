@@ -11,7 +11,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# GLOBAL CSS
+# GLOBAL CSS - MEMAKSA HORIZONTAL SCROLL & FIX TAMPILAN
 # ==============================================================================
 st.markdown("""
 <style>
@@ -48,35 +48,35 @@ st.markdown("""
     overflow-x: hidden;
 }
 
-/* --- FIX: 3 KOLOM UTAMA AGAR SCROLL HORIZONTAL KE KANAN --- */
-[data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] {
+/* --- PAKSA 3 KOLOM UTAMA AGAR TETAP SEJAJAR HORIZONTAL & BISA SCROLL --- */
+div[data-testid="stHorizontalBlock"] {
     display: flex !important;
     flex-direction: row !important;
     flex-wrap: nowrap !important;
-    gap: 8px !important;
+    gap: 10px !important;
     padding: 5px 0 0 0 !important;
     overflow-x: auto !important;
     overflow-y: hidden !important;
-    align-items: stretch !important;
+    width: 100% !important;
 }
 
-[data-testid="column"] {
-    flex: 0 0 auto !important; /* Mencegah kolom menyusut */
+div[data-testid="column"] {
+    flex: 0 0 auto !important; /* Mencegah kolom menyusut atau patah ke bawah */
     display: flex !important;
     flex-direction: column !important;
 }
 
-/* Mengatur Lebar Spesifik Agar TradingView Lebih Lebar */
-[data-testid="column"]:nth-of-type(1) { width: 320px !important; min-width: 320px !important; }
-[data-testid="column"]:nth-of-type(2) { width: 600px !important; min-width: 600px !important; flex: 1 0 auto !important; }
-[data-testid="column"]:nth-of-type(3) { width: 340px !important; min-width: 340px !important; }
+/* Penataan Lebar Layout 3 Kolom */
+div[data-testid="column"]:nth-of-type(1) { width: 330px !important; min-width: 330px !important; }
+div[data-testid="column"]:nth-of-type(2) { width: 620px !important; min-width: 620px !important; }
+div[data-testid="column"]:nth-of-type(3) { width: 350px !important; min-width: 350px !important; }
 
-/* Scrollbar Kustom */
-::-webkit-scrollbar { height: 6px; width: 6px; }
-::-webkit-scrollbar-thumb { background: #00EEFF; border-radius: 3px; }
-::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+/* Desain Kustom Scrollbar Kanan-Kiri */
+div[data-testid="stHorizontalBlock"]::-webkit-scrollbar { height: 8px !important; }
+div[data-testid="stHorizontalBlock"]::-webkit-scrollbar-thumb { background: #00EEFF !important; border-radius: 4px !important; }
+div[data-testid="stHorizontalBlock"]::-webkit-scrollbar-track { background: rgba(16,32,53,0.3) !important; }
 
-/* --- RESET BERSARANG UNTUK AI SIGNAL FEED (Kolom 3) --- */
+/* Reset Form Bersarang Kolom 3 */
 [data-testid="column"] [data-testid="stHorizontalBlock"] {
     flex-wrap: nowrap !important;
     overflow: visible !important;
@@ -92,22 +92,15 @@ div.stButton > button {
     color: #00EEFF !important;
     font-family: 'Share Tech Mono', monospace !important;
     font-size: 10px !important;
-    padding: 6px !important;
     transition: all 0.3s ease !important;
     text-transform: uppercase !important;
-    letter-spacing: 1px !important;
     width: 100% !important;
     height: 38px !important;
 }
-div.stButton > button:hover {
-    box-shadow: 0 0 15px rgba(0,238,255,0.25) !important;
-    transform: scale(1.02) !important;
-}
 
-/* --- SELECTOR TRADINGVIEW --- */
+/* --- SELECTOR PAIR --- */
 div[data-testid="stSelectbox"] { padding: 0 !important; margin: 0 0 4px 0 !important; }
 div[data-testid="stSelectbox"] label { display: none !important; }
-div[data-testid="stSelectbox"] div[data-baseweb="select"] { min-height: 32px !important; }
 div[data-testid="stSelectbox"] div[data-baseweb="select"] div {
     font-size: 11px !important;
     font-family: 'Share Tech Mono', monospace !important;
@@ -119,8 +112,7 @@ div[data-testid="stSelectbox"] div[data-baseweb="select"] div {
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# HELPER CSS UNTUK IFRAME COMPONENTS
-# (Digunakan khusus untuk disuntikkan ke dalam components.html)
+# IFRAME GLOBAL PANEL INJECTION
 # ==============================================================================
 IFRAME_PANEL_CSS = """
 <style>
@@ -141,7 +133,7 @@ body { margin: 0; padding: 0; background: transparent; overflow: hidden; height:
 """
 
 # ==============================================================================
-# HEADER & SENTINEL TITLE
+# HEADER
 # ==============================================================================
 st.markdown("""
 <div style="height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; background: rgba(7,12,24,0.97); border-bottom: 1px solid #162035;">
@@ -159,23 +151,23 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# TICKER TAPE
+# TICKER TAPE (Tinggi dinaikkan ke 55 agar harga tidak terpotong)
 # ==============================================================================
 ticker_html = """
-<div class="tradingview-widget-container" style="height: 44px; overflow: hidden;">
+<div class="tradingview-widget-container" style="height: 55px; overflow: hidden;">
     <div class="tradingview-widget-container__widget"></div>
     <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
     {
     "symbols": [{"proName": "FOREXCOM:SPXUSD", "title": "S&P 500"}, {"proName": "FX_IDC:EURUSD", "title": "EUR/USD"}, {"proName": "BITSTAMP:BTCUSD", "title": "Bitcoin"}, {"proName": "OANDA:XAUUSD", "title": "XAUUSD"}],
-    "colorTheme": "dark", "isTransparent": true, "locale": "id", "width": "100%", "height": 44
+    "colorTheme": "dark", "isTransparent": true, "locale": "id", "width": "100%", "height": 55
     }
     </script>
 </div>
 """
-components.html(ticker_html, height=44)
+components.html(ticker_html, height=55)
 
 # ==============================================================================
-# 3 KOLOM UTAMA (HORIZONTAL, SCROLL)
+# 3 KOLOM UTAMA RESPONSIVE HORIZONTAL
 # ==============================================================================
 col1, col2, col3 = st.columns(3)
 
@@ -194,7 +186,7 @@ with col1:
     """
     components.html(eco_html, height=620)
 
-# --- KOLOM 2: TRADINGVIEW CHART + RSI ---
+# --- KOLOM 2: TRADINGVIEW CHART ---
 with col2:
     pair_options = ["XAUUSD", "BTCUSD", "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USOIL"]
     selected_pair = st.selectbox("", pair_options, index=0, key="chart_pair", label_visibility="collapsed")
@@ -202,11 +194,10 @@ with col2:
     symbol_map = {"XAUUSD": "OANDA:XAUUSD", "BTCUSD": "BITSTAMP:BTCUSD", "EURUSD": "FX_IDC:EURUSD", "GBPUSD": "FX_IDC:GBPUSD", "USDJPY": "FX_IDC:USDJPY", "AUDUSD": "FX_IDC:AUDUSD", "USOIL": "TVC:USOIL"}
     tv_symbol = symbol_map.get(selected_pair, "OANDA:XAUUSD")
     
-    # Ketinggian Chart diturunkan sedikit (584) agar pas dengan total tinggi div kolom 1 & 3 karena adanya combobox Streamlit di atasnya.
     chart_html = IFRAME_PANEL_CSS + f"""
     <div class="cyber-panel-native">
         <div class="panel-header">
-            <span class="panel-title">{selected_pair} Chart</span>
+            <span class="panel-title">{selected_pair} Premium Chart</span>
             <span class="panel-badge">Live</span>
         </div>
         <div class="panel-body" id="tv_chart_main"></div>
@@ -222,11 +213,10 @@ with col2:
         </script>
     </div>
     """
-    components.html(chart_html, height=580)
+    components.html(chart_html, height=584)
 
 # --- KOLOM 3: AI SIGNAL FEED + HEATMAP ---
 with col3:
-    # Header Native Panel menggunakan st.markdown
     st.markdown("""
     <div style="background: rgba(0,0,0,0.28); border: 1px solid #162035; border-radius: 8px 8px 0 0; padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
         <span style="font-family: 'Share Tech Mono', monospace; font-size: 11px; color: #00EEFF; letter-spacing: 2px; text-transform: uppercase;">AI Signal Feed</span>
@@ -246,7 +236,6 @@ with col3:
     if send_clicked and user_input:
         st.info(f"Analisis untuk: {user_input}")
 
-    # Heatmap dibungkus terpisah di dalam components.html (Ketinggiannya disesuaikan sisa ruang layar)
     heatmap_html = IFRAME_PANEL_CSS + """
     <div class="cyber-panel-native" style="margin-top: 4px; border-radius: 0 0 8px 8px;">
         <div class="panel-header">
@@ -255,7 +244,7 @@ with col3:
         </div>
         <div class="panel-body">
             <div class="tradingview-widget-container" style="height: 100%;">
-                <div class="tradingview-widget-container__widget" style="height: calc(100% - 32px);"></div>
+                <div class="tradingview-widget-container__widget" style="height: 100%;"></div>
                 <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-forex-heat-map.js" async>
                 {
                 "colorTheme": "dark", "isTransparent": true, "locale": "id",
@@ -267,56 +256,49 @@ with col3:
         </div>
     </div>
     """
-    components.html(heatmap_html, height=420)
-
+    components.html(heatmap_html, height=424)
 
 # ==============================================================================
-# BAGIAN BAWAH: MERGE HTML ACTIVE TRADES & SIGNAL MATRIX (Mencegah DOM Leak)
+# BAGIAN BAWAH: FIX RAW TEXT HTML DI ACTIVE TRADE SETUP (TANPA INDENTASI STR)
 # ==============================================================================
 setup_data = [
-    {"pair": "EURUSD", "dir": "SELL", "dir_cls": "sell", "entry": "1.08420", "tp1": "1.0795", "tp1_st": "✓", "tp2": "1.0750", "tp2_st": "✗", "tp3": "1.0680", "tp3_st": "~", "sl": "1.0890", "gradient": "#FF3D71"},
-    {"pair": "USDJPY", "dir": "BUY", "dir_cls": "buy", "entry": "149.820", "tp1": "150.50", "tp1_st": "✓", "tp2": "151.20", "tp2_st": "✓", "tp3": "152.00", "tp3_st": "~", "sl": "149.20", "gradient": "#00FF9D"}
+    {"pair": "EURUSD", "dir": "SELL", "dir_cls": "sell", "entry": "1.08420", "tp1": "1.0795", "tp2": "1.0750", "gradient": "#FF3D71"},
+    {"pair": "USDJPY", "dir": "BUY", "dir_cls": "buy", "entry": "149.820", "tp1": "150.50", "tp2": "151.20", "gradient": "#00FF9D"}
 ]
 
-# Bangun HTML secara menyeluruh sebelum di render oleh Streamlit
-bottom_html = """
-<style>
+# Sengaja ditulis mepet kiri string agar parser Markdown tidak mengiranya sebuah blok kode mentah
+bottom_html = """<style>
 .cyber-tag { font-family: 'Share Tech Mono', monospace; font-size: 8px; letter-spacing: 1px; padding: 2px 6px; border-radius: 3px; display: inline-block; }
 .cyber-tag.buy { background: rgba(0,255,157,0.12); color: #00FF9D; border: 1px solid rgba(0,255,157,0.25); }
 .cyber-tag.sell { background: rgba(255,61,113,0.12); color: #FF3D71; border: 1px solid rgba(255,61,113,0.25); }
-.grid-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 8px; padding: 8px; }
-.setup-card { background: #111D35; border: 1px solid #162035; border-radius: 6px; padding: 8px; position: relative; }
+.grid-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; padding: 10px; }
+.setup-card { background: #111D35; border: 1px solid #162035; border-radius: 6px; padding: 10px; position: relative; }
 </style>
-<div style="background: #0C1425; border: 1px solid #162035; border-radius: 8px; margin-top: 10px;">
-    <div style="background: rgba(0,0,0,0.28); border-bottom: 1px solid #162035; padding: 8px 12px; display: flex; justify-content: space-between;">
-        <span style="font-family: 'Share Tech Mono', monospace; font-size: 12px; color: #00EEFF; letter-spacing: 2px; text-transform: uppercase;">Active Trade Setups</span>
-    </div>
-    <div class="grid-container">
-"""
+<div style="background: #0C1425; border: 1px solid #162035; border-radius: 8px; margin-top: 15px;">
+<div style="background: rgba(0,0,0,0.28); border-bottom: 1px solid #162035; padding: 8px 12px;">
+<span style="font-family: 'Share Tech Mono', monospace; font-size: 12px; color: #00EEFF; letter-spacing: 2px; text-transform: uppercase;">Active Trade Setups</span>
+</div>
+<div class="grid-container">"""
 
 for setup in setup_data:
-    tp1_col = "#00FF9D" if setup['tp1_st'] == "✓" else "#FF3D71" if setup['tp1_st'] == "✗" else "#4B6A8A"
-    tp2_col = "#00FF9D" if setup['tp2_st'] == "✓" else "#FF3D71" if setup['tp2_st'] == "✗" else "#4B6A8A"
-    bottom_html += f"""
-        <div class="setup-card">
-            <div style="position:absolute; top:0; left:0; right:0; height:2px; background:{setup['gradient']}; border-radius: 6px 6px 0 0;"></div>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                <span style="font-family:'Share Tech Mono',monospace; font-size:12px; font-weight:bold; color:#C8D8F0;">{setup['pair']}</span>
-                <span class="cyber-tag {setup['dir_cls']}">{setup['dir']}</span>
-            </div>
-            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:4px; font-family:sans-serif; font-size:10px;">
-                <div><span style="color:#4B6A8A;">Entry</span><br><span style="color:#C8D8F0; font-weight:bold;">{setup['entry']}</span></div>
-                <div><span style="color:#4B6A8A;">TP1</span><br><span style="color:{tp1_col}; font-weight:bold;">{setup['tp1']}</span></div>
-                <div><span style="color:#4B6A8A;">TP2</span><br><span style="color:{tp2_col}; font-weight:bold;">{setup['tp2']}</span></div>
-            </div>
-        </div>
-    """
+    bottom_html += f"""<div class="setup-card">
+<div style="position:absolute; top:0; left:0; right:0; height:2px; background:{setup['gradient']}; border-radius: 6px 6px 0 0;"></div>
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+<span style="font-family:'Share Tech Mono',monospace; font-size:12px; font-weight:bold; color:#C8D8F0;">{setup['pair']}</span>
+<span class="cyber-tag {setup['dir_cls']}">{setup['dir']}</span>
+</div>
+<div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:4px; font-family:sans-serif; font-size:10px;">
+<div><span style="color:#4B6A8A;">Entry</span><br><span style="color:#C8D8F0; font-weight:bold;">{setup['entry']}</span></div>
+<div><span style="color:#4B6A8A;">TP1</span><br><span style="color:#00FF9D; font-weight:bold;">{setup['tp1']}</span></div>
+<div><span style="color:#4B6A8A;">TP2</span><br><span style="color:{'#FF3D71' if setup['dir_cls']=='sell' else '#00FF9D'}; font-weight:bold;">{setup['tp2']}</span></div>
+</div>
+</div>"""
+
 bottom_html += "</div></div>"
 st.markdown(bottom_html, unsafe_allow_html=True)
 
-
 # ==============================================================================
-# TOP STORIES (Memperbaiki Iframe yang terlempar keluar dari panel)
+# TOP STORIES
 # ==============================================================================
 news_html = IFRAME_PANEL_CSS + """
 <div class="cyber-panel-native">
@@ -326,7 +308,7 @@ news_html = IFRAME_PANEL_CSS + """
     </div>
     <div class="panel-body">
         <div class="tradingview-widget-container" style="width:100%; height:100%;">
-            <div class="tradingview-widget-container__widget" style="height:calc(100% - 32px);"></div>
+            <div class="tradingview-widget-container__widget" style="height:100%;"></div>
             <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-timeline.js" async>
             {
             "feedMode": "all_symbols", "colorTheme": "dark", "isTransparent": true,
@@ -337,8 +319,7 @@ news_html = IFRAME_PANEL_CSS + """
     </div>
 </div>
 """
-# Ketinggian ditambah agar berita bisa ter-load secara maksimal
-components.html(news_html, height=550)
+components.html(news_html, height=500)
 
 # ==============================================================================
 # FOOTER
