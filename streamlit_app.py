@@ -16,11 +16,10 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# CSS STYLING (Cybertech Theme)
+# CSS CYBERTECH (tanpa emoji)
 # ==============================================================================
 st.markdown("""
 <style>
-/* --- DESIGN TOKENS --- */
 :root {
     --bg: #070C18;
     --panel: #0C1425;
@@ -37,8 +36,6 @@ st.markdown("""
     --text-dim: #243450;
     --border: #162035;
 }
-
-/* --- BACKGROUND --- */
 .stApp {
     background: #070C18 !important;
     background-image: 
@@ -49,8 +46,6 @@ st.markdown("""
     background-size: auto, auto, 48px 48px, 48px 48px;
     color: #C8D8F0 !important;
 }
-
-/* --- FORCE HORIZONTAL SCROLL ON MOBILE --- */
 [data-testid="stHorizontalBlock"] {
     display: flex !important;
     flex-direction: row !important;
@@ -66,8 +61,6 @@ st.markdown("""
 [data-testid="column"]:nth-of-type(1) { min-width: 260px; }
 [data-testid="column"]:nth-of-type(2) { min-width: 380px; }
 [data-testid="column"]:nth-of-type(3) { min-width: 280px; }
-
-/* --- PANEL STYLING --- */
 .cyber-panel {
     background: #0C1425;
     border: 1px solid #162035;
@@ -128,8 +121,6 @@ st.markdown("""
 .cyber-body {
     padding: 12px;
 }
-
-/* --- SCAN LINE EFFECT --- */
 .scan-wrap {
     position: absolute;
     inset: 0;
@@ -143,22 +134,13 @@ st.markdown("""
     left: 0;
     right: 0;
     height: 55px;
-    background: linear-gradient(
-        to bottom,
-        transparent,
-        rgba(0,238,255,0.022),
-        rgba(0,238,255,0.048),
-        rgba(0,238,255,0.022),
-        transparent
-    );
+    background: linear-gradient(to bottom, transparent, rgba(0,238,255,0.022), rgba(0,238,255,0.048), rgba(0,238,255,0.022), transparent);
     animation: scanDown 9s linear infinite;
 }
 @keyframes scanDown {
     from { transform: translateY(-60px); }
     to { transform: translateY(100%); }
 }
-
-/* --- METRIC STYLING --- */
 .cyber-metric {
     background: #111D35;
     border: 1px solid #162035;
@@ -193,21 +175,14 @@ st.markdown("""
     border-radius: 1px;
     overflow: hidden;
 }
-.cyber-bar-fill {
-    height: 100%;
-    border-radius: 1px;
-}
 .cyber-bar-fill.bullish { background: linear-gradient(90deg, #00EEFF, #00FF9D); }
 .cyber-bar-fill.bearish { background: linear-gradient(90deg, #8B5CF6, #FF3D71); }
 .cyber-bar-fill.neutral { background: #00EEFF; }
-
 .cyber-divider {
     height: 1px;
     background: #162035;
     margin: 8px 0;
 }
-
-/* --- ANALYSIS CARD --- */
 .analysis-card {
     background: #111D35;
     border: 1px solid #162035;
@@ -257,15 +232,43 @@ st.markdown("""
     color: #8B5CF6;
     border: 1px solid rgba(139,92,246,0.25);
 }
+.signal-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 5px;
+    margin-top: 8px;
+}
+.signal-item {
+    background: rgba(0,0,0,0.2);
+    border: 1px solid #162035;
+    border-radius: 4px;
+    padding: 4px 6px;
+    text-align: center;
+}
+.signal-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 7px;
+    color: #4B6A8A;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+.signal-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: #C8D8F0;
+}
+.signal-value.green { color: #00FF9D; }
+.signal-value.red { color: #FF3D71; }
+.signal-value.cyan { color: #00EEFF; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# HEADER (Tanpa Emoji, Tanpa Jam)
+# HEADER
 # ==============================================================================
 st.markdown("""
 <div style="
-    flex-shrink: 0;
     height: 58px;
     display: flex;
     align-items: center;
@@ -273,8 +276,6 @@ st.markdown("""
     padding: 0 20px;
     background: rgba(7,12,24,0.97);
     border-bottom: 1px solid #162035;
-    position: relative;
-    z-index: 30;
     margin-bottom: 10px;
 ">
     <div style="display: flex; align-items: center; gap: 12px;">
@@ -320,120 +321,101 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# DATA DUMMY UNTUK CHART DXY
+# FUNGSI CHART DXY (PLOTLY)
 # ==============================================================================
 def create_dxy_chart():
-    # Generate dummy data untuk DXY
     dates = pd.date_range(end=datetime.now(pytz.UTC), periods=100, freq='H')
-    # Simulasi harga DXY dengan trend + noise
     base = 105.5
     values = []
     for i in range(100):
         trend = i * 0.005
         noise = np.random.normal(0, 0.15)
         values.append(base + trend + noise)
-    
-    # Hitung RSI sederhana (dummy)
     rsi_values = [50 + (v - values[0]) * 2 for v in values]
     rsi_values = [max(20, min(80, v)) for v in rsi_values]
     
     fig = go.Figure()
-    
-    # DXY Line Chart
-    fig.add_trace(go.Scatter(
-        x=dates,
-        y=values,
-        mode='lines',
-        name='DXY',
-        line=dict(color='#00EEFF', width=2),
-        fill='tozeroy',
-        fillcolor='rgba(0,238,255,0.05)'
-    ))
-    
-    # RSI Overlay (secondary y-axis)
-    fig.add_trace(go.Scatter(
-        x=dates,
-        y=rsi_values,
-        mode='lines',
-        name='RSI',
-        line=dict(color='#8B5CF6', width=1.5, dash='dot'),
-        yaxis='y2'
-    ))
-    
-    # Level 70 dan 30 untuk RSI
+    fig.add_trace(go.Scatter(x=dates, y=values, mode='lines', name='DXY',
+                             line=dict(color='#00EEFF', width=2),
+                             fill='tozeroy', fillcolor='rgba(0,238,255,0.05)'))
+    fig.add_trace(go.Scatter(x=dates, y=rsi_values, mode='lines', name='RSI',
+                             line=dict(color='#8B5CF6', width=1.5, dash='dot'),
+                             yaxis='y2'))
     fig.add_hline(y=70, line_dash="dash", line_color="#FF3D71", opacity=0.3, yref="y2")
     fig.add_hline(y=30, line_dash="dash", line_color="#00FF9D", opacity=0.3, yref="y2")
     fig.add_hline(y=50, line_dash="dot", line_color="#4B6A8A", opacity=0.2, yref="y2")
-    
     fig.update_layout(
         template="plotly_dark",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=0, r=0, t=0, b=0),
         height=280,
-        xaxis=dict(
-            showgrid=True,
-            gridcolor='rgba(255,255,255,0.03)',
-            showticklabels=True,
-            tickfont=dict(color='#4B6A8A', size=9)
-        ),
-        yaxis=dict(
-            title='DXY',
-            titlefont=dict(color='#00EEFF', size=9),
-            showgrid=True,
-            gridcolor='rgba(255,255,255,0.03)',
-            tickfont=dict(color='#4B6A8A', size=9)
-        ),
-        yaxis2=dict(
-            title='RSI',
-            titlefont=dict(color='#8B5CF6', size=9),
-            overlaying='y',
-            side='right',
-            range=[0, 100],
-            showgrid=False,
-            tickfont=dict(color='#4B6A8A', size=9)
-        ),
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-            font=dict(color='#4B6A8A', size=9)
-        ),
+        xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.03)',
+                   showticklabels=True, tickfont=dict(color='#4B6A8A', size=9)),
+        yaxis=dict(title='DXY', titlefont=dict(color='#00EEFF', size=9),
+                   showgrid=True, gridcolor='rgba(255,255,255,0.03)',
+                   tickfont=dict(color='#4B6A8A', size=9)),
+        yaxis2=dict(title='RSI', titlefont=dict(color='#8B5CF6', size=9),
+                    overlaying='y', side='right', range=[0, 100],
+                    showgrid=False, tickfont=dict(color='#4B6A8A', size=9)),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02,
+                    xanchor="right", x=1, font=dict(color='#4B6A8A', size=9)),
         hovermode='x unified'
     )
-    
     return fig
 
 # ==============================================================================
-# WATCHLIST DATA (DUMMY)
+# DATA SINYAL CONTOH (XAUUSD, BTCUSD, EURUSD, GBPUSD)
 # ==============================================================================
-watchlist_data = {
-    "Forex": [
-        {"pair": "EURUSD", "price": "1.1613", "change": "+0.04%", "direction": "bullish"},
-        {"pair": "GBPUSD", "price": "1.3430", "change": "+0.03%", "direction": "bullish"},
-        {"pair": "USDJPY", "price": "160.29", "change": "-0.05%", "direction": "bearish"},
-    ],
-    "Futures": [
-        {"pair": "USOIL", "price": "75.13", "change": "-1.93%", "direction": "bearish"},
-        {"pair": "UKOIL", "price": "78.66", "change": "-0.84%", "direction": "bearish"},
-        {"pair": "GOLD", "price": "4,331.75", "change": "-0.03%", "direction": "bearish"},
-    ],
-    "Crypto": [
-        {"pair": "BTCUSDT", "price": "65,790.00", "change": "+0.18%", "direction": "bullish"},
-        {"pair": "ETHUSD", "price": "1,791.6", "change": "+0.02%", "direction": "bullish"},
-    ]
-}
+signal_data = [
+    {
+        "symbol": "XAUUSD",
+        "direction": "BUY",
+        "entry": "2,014.50",
+        "sl": "2,000.00",
+        "tp1": "2,025.00",
+        "tp2": "2,035.00",
+        "tp3": "2,050.00",
+        "conf": 78
+    },
+    {
+        "symbol": "BTCUSD",
+        "direction": "BUY",
+        "entry": "65,790.00",
+        "sl": "64,500.00",
+        "tp1": "66,800.00",
+        "tp2": "67,500.00",
+        "tp3": "68,900.00",
+        "conf": 72
+    },
+    {
+        "symbol": "EURUSD",
+        "direction": "SELL",
+        "entry": "1.08420",
+        "sl": "1.08900",
+        "tp1": "1.07950",
+        "tp2": "1.07500",
+        "tp3": "1.06800",
+        "conf": 65
+    },
+    {
+        "symbol": "GBPUSD",
+        "direction": "SELL",
+        "entry": "1.3430",
+        "sl": "1.3490",
+        "tp1": "1.3370",
+        "tp2": "1.3310",
+        "tp3": "1.3220",
+        "conf": 60
+    }
+]
 
 # ==============================================================================
-# LAYOUT: 3 KOLOM UTAMA
+# LAYOUT 3 KOLOM
 # ==============================================================================
 col_kiri, col_tengah, col_kanan = st.columns([1.2, 2, 1])
 
-# ==============================================================================
-# KOLOM KIRI: KALENDER EKONOMI (TEKS STATIS)
-# ==============================================================================
+# --- KOLOM KIRI: KALENDER TEKS ---
 with col_kiri:
     st.markdown("""
     <div class="cyber-panel">
@@ -443,8 +425,7 @@ with col_kiri:
         </div>
         <div class="cyber-body" style="padding: 12px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #C8D8F0; max-height: 600px; overflow-y: auto;">
     """, unsafe_allow_html=True)
-    
-    # Kalender teks statis
+    # Kalender teks
     st.markdown("""
     <div style="border-bottom: 1px solid #162035; padding: 8px 0;">
         <span style="color: #00FF9D;">[HIGH]</span>
@@ -476,27 +457,21 @@ with col_kiri:
         <span style="color: #C8D8F0; font-weight: 600;">UK Retail Sales</span>
         <div style="color: #4B6A8A; font-size: 10px; margin-top: 2px;">Prev: +0.5% | Forecast: +0.3%</div>
     </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("""
     <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #162035;">
         <a href="https://www.fxstreet.com/economic-calendar" target="_blank" style="color: #00EEFF; font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: 1px; text-decoration: none;">
             [OPEN FULL CALENDAR]
         </a>
     </div>
     """, unsafe_allow_html=True)
-    
     st.markdown("""
         </div>
         <div class="scan-wrap"><div class="scan-line" style="animation-delay: 0s;"></div></div>
     </div>
     """, unsafe_allow_html=True)
 
-# ==============================================================================
-# KOLOM TENGAH: CHART DXY + MT5
-# ==============================================================================
+# --- KOLOM TENGAH: CHART + MT5 ---
 with col_tengah:
-    # --- DXY Chart dengan Plotly ---
+    # DXY Chart
     st.markdown("""
     <div class="cyber-panel">
         <div class="cyber-header">
@@ -505,17 +480,15 @@ with col_tengah:
         </div>
         <div class="cyber-body" style="padding: 5px;">
     """, unsafe_allow_html=True)
-    
     fig = create_dxy_chart()
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-    
     st.markdown("""
         </div>
         <div class="scan-wrap"><div class="scan-line" style="animation-delay: 3s;"></div></div>
     </div>
     """, unsafe_allow_html=True)
     
-    # --- MT5 Web Terminal (iframe) ---
+    # MT5 Web Terminal
     st.markdown("""
     <div class="cyber-panel" style="margin-top: 10px;">
         <div class="cyber-header">
@@ -532,9 +505,7 @@ with col_tengah:
     </div>
     """, unsafe_allow_html=True)
 
-# ==============================================================================
-# KOLOM KANAN: AI SIGNAL FEED
-# ==============================================================================
+# --- KOLOM KANAN: AI SIGNAL FEED ---
 with col_kanan:
     st.markdown("""
     <div class="cyber-panel">
@@ -545,71 +516,39 @@ with col_kanan:
         <div class="cyber-body" style="max-height: 600px; overflow-y: auto; padding: 12px;">
     """, unsafe_allow_html=True)
     
-    # USD Sentiment
-    st.markdown("""
-    <div class="cyber-metric">
-        <div class="cyber-metric-label">USD Sentiment</div>
-        <div class="cyber-metric-value bullish">BULLISH</div>
-        <div class="cyber-metric-conf">Confidence: 78%</div>
-        <div class="cyber-bar"><div class="cyber-bar-fill bullish" style="width:78%;"></div></div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # EUR Sentiment
-    st.markdown("""
-    <div class="cyber-metric">
-        <div class="cyber-metric-label">EUR Sentiment</div>
-        <div class="cyber-metric-value bearish">BEARISH</div>
-        <div class="cyber-metric-conf">Confidence: 64%</div>
-        <div class="cyber-bar"><div class="cyber-bar-fill bearish" style="width:64%;"></div></div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # XAU Sentiment
-    st.markdown("""
-    <div class="cyber-metric">
-        <div class="cyber-metric-label">XAU Sentiment</div>
-        <div class="cyber-metric-value neutral">NEUTRAL-BEAR</div>
-        <div class="cyber-metric-conf">Confidence: 51%</div>
-        <div class="cyber-bar"><div class="cyber-bar-fill neutral" style="width:51%;"></div></div>
-    </div>
-    """, unsafe_allow_html=True)
+    # Sentimen
+    for item in [
+        {"label": "USD Sentiment", "val": "BULLISH", "cls": "bullish", "conf": 78},
+        {"label": "EUR Sentiment", "val": "BEARISH", "cls": "bearish", "conf": 64},
+        {"label": "XAU Sentiment", "val": "NEUTRAL-BEAR", "cls": "neutral", "conf": 51}
+    ]:
+        st.markdown(f"""
+        <div class="cyber-metric">
+            <div class="cyber-metric-label">{item['label']}</div>
+            <div class="cyber-metric-value {item['cls']}">{item['val']}</div>
+            <div class="cyber-metric-conf">Confidence: {item['conf']}%</div>
+            <div class="cyber-bar"><div class="cyber-bar-fill {item['cls']}" style="width:{item['conf']}%;"></div></div>
+        </div>
+        """, unsafe_allow_html=True)
     
     st.markdown('<div class="cyber-divider"></div>', unsafe_allow_html=True)
     
-    # Analysis Cards
-    st.markdown("""
-    <div class="analysis-card">
-        <div class="analysis-title">US CPI Data Release</div>
-        <div class="analysis-text">Inflasi AS tercatat lebih tinggi dari konsensus. Penguatan USD terjadi secara instan. RSI DXY di zona 58, momentum bullish masih solid.</div>
-        <div style="margin-top: 8px; display: flex; gap: 5px; flex-wrap: wrap;">
-            <span class="cyber-tag sell">SELL EURUSD</span>
-            <span class="cyber-tag buy">BUY USDJPY</span>
+    # Analisis berita
+    analyses = [
+        {"title": "US CPI Data Release", "text": "Inflasi AS tercatat lebih tinggi dari konsensus. Penguatan USD terjadi secara instan. RSI DXY di zona 58, momentum bullish masih solid.", "tags": [("SELL EURUSD", "sell"), ("BUY USDJPY", "buy")]},
+        {"title": "XAUUSD Technical Read", "text": "Tekanan jual XAU dipicu penguatan yield obligasi AS. Level 1985-1990 zona support kritis. Pantau data ADP untuk konfirmasi arah selanjutnya.", "tags": [("WATCH 1985", "watch"), ("BIAS SELL", "sell")]},
+        {"title": "DXY Momentum Breakout", "text": "Breakout dari descending channel mingguan telah terkonfirmasi. Target resistance berikutnya di 107.20. RSI H4 belum overbought.", "tags": [("MOMENTUM BULL", "buy"), ("TARGET 107.20", "watch")]}
+    ]
+    for a in analyses:
+        st.markdown(f"""
+        <div class="analysis-card">
+            <div class="analysis-title">{a['title']}</div>
+            <div class="analysis-text">{a['text']}</div>
+            <div style="margin-top: 8px; display: flex; gap: 5px; flex-wrap: wrap;">
+                {''.join([f'<span class="cyber-tag {cls}">{label}</span>' for label, cls in a['tags']])}
+            </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class="analysis-card">
-        <div class="analysis-title">XAUUSD Technical Read</div>
-        <div class="analysis-text">Tekanan jual XAU dipicu penguatan yield obligasi AS. Level 1985-1990 zona support kritis. Pantau data ADP untuk konfirmasi arah selanjutnya.</div>
-        <div style="margin-top: 8px; display: flex; gap: 5px; flex-wrap: wrap;">
-            <span class="cyber-tag watch">WATCH 1985</span>
-            <span class="cyber-tag sell">BIAS SELL</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class="analysis-card">
-        <div class="analysis-title">DXY Momentum Breakout</div>
-        <div class="analysis-text">Breakout dari descending channel mingguan telah terkonfirmasi. Target resistance berikutnya di 107.20. RSI H4 belum overbought.</div>
-        <div style="margin-top: 8px; display: flex; gap: 5px; flex-wrap: wrap;">
-            <span class="cyber-tag buy">MOMENTUM BULL</span>
-            <span class="cyber-tag watch">TARGET 107.20</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
     
     st.markdown("""
         </div>
@@ -618,8 +557,10 @@ with col_kanan:
     """, unsafe_allow_html=True)
 
 # ==============================================================================
-# BAGIAN BAWAH: TRADE SETUPS (4 kolom)
+# BAGIAN BAWAH: TRADE SETUPS + WATCHLIST + SINYAL
 # ==============================================================================
+
+# --- Trade Setups (4 kolom) ---
 st.markdown("""
 <div class="cyber-panel" style="margin-top: 10px;">
     <div class="cyber-header">
@@ -629,124 +570,44 @@ st.markdown("""
     <div class="cyber-body" style="padding: 12px;">
 """, unsafe_allow_html=True)
 
-# Buat 4 kolom untuk trade setups
 col_s1, col_s2, col_s3, col_s4 = st.columns(4)
 
-with col_s1:
-    st.markdown("""
-    <div style="background: #111D35; border: 1px solid #162035; border-radius: 8px; padding: 10px; position: relative; overflow: hidden;">
-        <div style="position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, #8B5CF6, #FF3D71);"></div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px;">
-            <span style="font-family: 'Share Tech Mono', monospace; font-size: 13px; color: #C8D8F0; letter-spacing: 2px;">EURUSD</span>
-            <span style="font-family: 'Share Tech Mono', monospace; font-size: 8px; letter-spacing: 1px; padding: 2px 7px; border-radius: 3px; background: rgba(255,61,113,0.12); color: #FF3D71; border: 1px solid rgba(255,61,113,0.25);">SELL</span>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
-            <div style="grid-column: 1 / -1; background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
-                <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">Entry</div>
-                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #C8D8F0;">1.08420</div>
-            </div>
-            <div style="background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
-                <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">TP 1</div>
-                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #00FF9D;">1.07950</div>
-            </div>
-            <div style="background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
-                <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">TP 2</div>
-                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #00FF9D;">1.07500</div>
-            </div>
-            <div style="grid-column: 1 / -1; background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
-                <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">Stop Loss</div>
-                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #FF3D71;">1.08900</div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+setup_data = [
+    {"pair": "EURUSD", "dir": "SELL", "dir_cls": "sell", "entry": "1.08420", "tp1": "1.07950", "tp2": "1.07500", "tp3": "1.06800", "sl": "1.08900", "gradient": "linear-gradient(90deg, #8B5CF6, #FF3D71)"},
+    {"pair": "USDJPY", "dir": "BUY", "dir_cls": "buy", "entry": "149.820", "tp1": "150.500", "tp2": "151.200", "tp3": "152.000", "sl": "149.200", "gradient": "linear-gradient(90deg, #00EEFF, #00FF9D)"},
+    {"pair": "XAUUSD", "dir": "SELL", "dir_cls": "sell", "entry": "2,014.50", "tp1": "2,000.00", "tp2": "1,990.00", "tp3": "1,975.00", "sl": "2,025.00", "gradient": "linear-gradient(90deg, #8B5CF6, #FF3D71)"},
+    {"pair": "DXY", "dir": "LONG BIAS", "dir_cls": "buy", "entry": "105.840", "tp1": "106.500", "tp2": "107.200", "tp3": "108.000", "sl": "104.900", "gradient": "linear-gradient(90deg, #00EEFF, #00FF9D)"}
+]
 
-with col_s2:
-    st.markdown("""
-    <div style="background: #111D35; border: 1px solid #162035; border-radius: 8px; padding: 10px; position: relative; overflow: hidden;">
-        <div style="position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, #00EEFF, #00FF9D);"></div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px;">
-            <span style="font-family: 'Share Tech Mono', monospace; font-size: 13px; color: #C8D8F0; letter-spacing: 2px;">USDJPY</span>
-            <span style="font-family: 'Share Tech Mono', monospace; font-size: 8px; letter-spacing: 1px; padding: 2px 7px; border-radius: 3px; background: rgba(0,255,157,0.12); color: #00FF9D; border: 1px solid rgba(0,255,157,0.25);">BUY</span>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
-            <div style="grid-column: 1 / -1; background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
-                <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">Entry</div>
-                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #C8D8F0;">149.820</div>
+for idx, setup in enumerate(setup_data):
+    with [col_s1, col_s2, col_s3, col_s4][idx]:
+        st.markdown(f"""
+        <div style="background: #111D35; border: 1px solid #162035; border-radius: 8px; padding: 10px; position: relative; overflow: hidden;">
+            <div style="position: absolute; top: 0; left: 0; right: 0; height: 2px; background: {setup['gradient']};"></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px;">
+                <span style="font-family: 'Share Tech Mono', monospace; font-size: 13px; color: #C8D8F0; letter-spacing: 2px;">{setup['pair']}</span>
+                <span style="font-family: 'Share Tech Mono', monospace; font-size: 8px; letter-spacing: 1px; padding: 2px 7px; border-radius: 3px; background: rgba({'0,255,157' if setup['dir_cls']=='buy' else '255,61,113'},0.12); color: {'#00FF9D' if setup['dir_cls']=='buy' else '#FF3D71'}; border: 1px solid rgba({'0,255,157' if setup['dir_cls']=='buy' else '255,61,113'},0.25);">{setup['dir']}</span>
             </div>
-            <div style="background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
-                <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">TP 1</div>
-                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #00FF9D;">150.500</div>
-            </div>
-            <div style="background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
-                <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">TP 2</div>
-                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #00FF9D;">151.200</div>
-            </div>
-            <div style="grid-column: 1 / -1; background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
-                <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">Stop Loss</div>
-                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #FF3D71;">149.200</div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col_s3:
-    st.markdown("""
-    <div style="background: #111D35; border: 1px solid #162035; border-radius: 8px; padding: 10px; position: relative; overflow: hidden;">
-        <div style="position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, #8B5CF6, #FF3D71);"></div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px;">
-            <span style="font-family: 'Share Tech Mono', monospace; font-size: 13px; color: #C8D8F0; letter-spacing: 2px;">XAUUSD</span>
-            <span style="font-family: 'Share Tech Mono', monospace; font-size: 8px; letter-spacing: 1px; padding: 2px 7px; border-radius: 3px; background: rgba(255,61,113,0.12); color: #FF3D71; border: 1px solid rgba(255,61,113,0.25);">SELL</span>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
-            <div style="grid-column: 1 / -1; background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
-                <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">Entry</div>
-                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #C8D8F0;">2,014.50</div>
-            </div>
-            <div style="background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
-                <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">TP 1</div>
-                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #00FF9D;">2,000.00</div>
-            </div>
-            <div style="background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
-                <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">TP 2</div>
-                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #00FF9D;">1,990.00</div>
-            </div>
-            <div style="grid-column: 1 / -1; background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
-                <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">Stop Loss</div>
-                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #FF3D71;">2,025.00</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+                <div style="grid-column: 1 / -1; background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
+                    <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">Entry</div>
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #C8D8F0;">{setup['entry']}</div>
+                </div>
+                <div style="background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
+                    <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">TP 1</div>
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #00FF9D;">{setup['tp1']}</div>
+                </div>
+                <div style="background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
+                    <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">TP 2</div>
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #00FF9D;">{setup['tp2']}</div>
+                </div>
+                <div style="grid-column: 1 / -1; background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
+                    <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">Stop Loss</div>
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #FF3D71;">{setup['sl']}</div>
+                </div>
             </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col_s4:
-    st.markdown("""
-    <div style="background: #111D35; border: 1px solid #162035; border-radius: 8px; padding: 10px; position: relative; overflow: hidden;">
-        <div style="position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, #00EEFF, #00FF9D);"></div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px;">
-            <span style="font-family: 'Share Tech Mono', monospace; font-size: 13px; color: #C8D8F0; letter-spacing: 2px;">DXY</span>
-            <span style="font-family: 'Share Tech Mono', monospace; font-size: 8px; letter-spacing: 1px; padding: 2px 7px; border-radius: 3px; background: rgba(0,255,157,0.12); color: #00FF9D; border: 1px solid rgba(0,255,157,0.25);">LONG BIAS</span>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
-            <div style="grid-column: 1 / -1; background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
-                <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">Watch Level</div>
-                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #C8D8F0;">105.840</div>
-            </div>
-            <div style="background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
-                <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">Target 1</div>
-                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #00FF9D;">106.500</div>
-            </div>
-            <div style="background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
-                <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">Target 2</div>
-                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #00FF9D;">107.200</div>
-            </div>
-            <div style="grid-column: 1 / -1; background: rgba(0,0,0,0.2); border: 1px solid #162035; border-radius: 5px; padding: 5px 7px;">
-                <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #243450; letter-spacing: 1px; text-transform: uppercase;">Invalidation</div>
-                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #FF3D71;">104.900</div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
 st.markdown("""
     </div>
@@ -754,21 +615,75 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ==============================================================================
-# BAGIAN BAWAH: WATCHLIST HARGA (dari iframe)
-# ==============================================================================
+# --- WATCHLIST + SINYAL (tabel sinyal XAUUSD, BTCUSD, dll) ---
 st.markdown("""
 <div class="cyber-panel" style="margin-top: 10px;">
     <div class="cyber-header">
-        <span class="cyber-title">Watchlist Prices</span>
+        <span class="cyber-title">Signal Matrix & Watchlist</span>
         <span class="cyber-badge">Live</span>
     </div>
-    <div class="cyber-body" style="padding: 0; height: 320px; overflow: hidden;">
-        <iframe src="https://metatraderweb.app/watchlist" 
-                style="width: 100%; height: 100%; border: none;" 
-                allow="fullscreen; autoplay">
-        </iframe>
+    <div class="cyber-body" style="padding: 12px;">
+""", unsafe_allow_html=True)
+
+# Tampilkan sinyal dalam grid
+st.markdown("""
+<div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+""", unsafe_allow_html=True)
+
+for sig in signal_data:
+    dir_color = "#00FF9D" if sig['direction'] == "BUY" else "#FF3D71"
+    dir_bg = "rgba(0,255,157,0.12)" if sig['direction'] == "BUY" else "rgba(255,61,113,0.12)"
+    dir_border = "rgba(0,255,157,0.25)" if sig['direction'] == "BUY" else "rgba(255,61,113,0.25)"
+    st.markdown(f"""
+    <div style="background: #111D35; border: 1px solid #162035; border-radius: 8px; padding: 12px; position: relative; overflow: hidden;">
+        <div style="position: absolute; top: 0; left: 0; right: 0; height: 2px; background: {dir_color};"></div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-family: 'Share Tech Mono', monospace; font-size: 14px; color: #00EEFF; letter-spacing: 2px;">{sig['symbol']}</span>
+            <span style="font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: 1px; padding: 2px 10px; border-radius: 3px; background: {dir_bg}; color: {dir_color}; border: 1px solid {dir_border};">{sig['direction']}</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 4px;">
+            <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 4px; text-align: center;">
+                <div style="font-family: 'Share Tech Mono', monospace; font-size: 6px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase;">Entry</div>
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #C8D8F0;">{sig['entry']}</div>
+            </div>
+            <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 4px; text-align: center;">
+                <div style="font-family: 'Share Tech Mono', monospace; font-size: 6px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase;">SL</div>
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #FF3D71;">{sig['sl']}</div>
+            </div>
+            <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 4px; text-align: center;">
+                <div style="font-family: 'Share Tech Mono', monospace; font-size: 6px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase;">TP1</div>
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #00FF9D;">{sig['tp1']}</div>
+            </div>
+            <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 4px; text-align: center;">
+                <div style="font-family: 'Share Tech Mono', monospace; font-size: 6px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase;">Conf</div>
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #00EEFF;">{sig['conf']}%</div>
+            </div>
+        </div>
+        <div style="margin-top: 6px; display: flex; gap: 3px; flex-wrap: wrap;">
+            <span style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #4B6A8A;">TP2: {sig['tp2']}</span>
+            <span style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #4B6A8A;">| TP3: {sig['tp3']}</span>
+        </div>
     </div>
+    """, unsafe_allow_html=True)
+
+st.markdown("</div>", unsafe_allow_html=True)
+
+# Tambahkan iframe watchlist di bawah (jika ingin)
+st.markdown("""
+<div style="margin-top: 12px; border-top: 1px solid #162035; padding-top: 12px;">
+    <div style="font-family: 'Share Tech Mono', monospace; font-size: 9px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px;">
+        [WATCHLIST PRICES]
+    </div>
+    <iframe src="https://metatraderweb.app/watchlist" 
+            style="width: 100%; height: 250px; border: 1px solid #162035; border-radius: 6px;" 
+            allow="fullscreen; autoplay">
+    </iframe>
+</div>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+    </div>
+    <div class="scan-wrap"><div class="scan-line" style="animation-delay: 9s;"></div></div>
 </div>
 """, unsafe_allow_html=True)
 
