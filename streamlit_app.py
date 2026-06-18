@@ -1,7 +1,7 @@
 # ==============================================================================
-# sentinel_page.py - Halaman AeroVulpis Sentinel (Terintegrasi)
+# sentinel_page.py - Halaman AeroVulpis Sentinel (Terintegrasi Sempurna)
 # ==============================================================================
-# LOGIKA ASLI DIURUS PENUH, TAMPILAN MATRIKS TERMINAL 3 LAYOUT KUSTOM DIAPLIKASIKAN.
+# LOGIKA CORE BACKEND DIURUS PENUH, INTEGRASI TOP STORIES WIDGET DIPERBAIKI.
 # ==============================================================================
 
 import streamlit as st
@@ -263,7 +263,7 @@ def show():
         components.html(heatmap_html, height=620)
 
     # ==========================================================================
-    # AI SIGNAL FEED & ANALYSIS TERMINAL (V4.0)
+    # AI SIGNAL FEED & ANALYSIS TERMINAL (LOGIKA BACKEND UTUH ASLI)
     # ==========================================================================
     st.markdown("""
     <div style="background: #0C1425; border: 1px solid #162035; border-radius: 8px; margin-top: 20px; padding: 0 0 10px 0;">
@@ -298,9 +298,7 @@ def show():
         send_clicked = st.button("▶ RUN ANALYSIS", key="sentinel_ai_send", use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # ==========================================================================
-    # LOGIKA CORE BACKEND AI (TIDAK DIUBAH)
-    # ==========================================================================
+    # --- LOGIKA CORE BACKEND AI (100% DIURUS ASLI) ---
     if send_clicked and user_input:
         user_limits = LIMITS.get(st.session_state.user_tier, LIMITS["free"])
         if user_limits["sentinel_per_day"] == 0:
@@ -335,7 +333,7 @@ def show():
         st.markdown(st.session_state.sentinel_ai_output, unsafe_allow_html=True)
 
     # ==========================================================================
-    # ACTIVE TRADE SETUPS (LOGIKA DINAMIS ASLI)
+    # ACTIVE TRADE SETUPS (LOGIKA DINAMIS ASLI DARI DATABASE/MAIN)
     # ==========================================================================
     from streamlit_app import get_active_trade_setups   
     setups = get_active_trade_setups()
@@ -390,40 +388,31 @@ def show():
         st.info("Belum ada sinyal aktif. Tunggu update berikutnya.")
 
     # ==========================================================================
-    # SEKSYEN ABSOLUT BAWAH: TRADINGVIEW WIDGET (TOP STORIES) - INTEGRASI PENUH
+    # SEKSYEN ABSOLUT BAWAH: TRADINGVIEW WIDGET (TOP STORIES) - INTEGRASI EMED KODE 2
     # ==========================================================================
+    # Memberikan space di luar area komponen iframe agar layout rapi dan tidak memotong tinggi widget
+    st.markdown('<div style="margin-top: 20px;"></div>', unsafe_allow_html=True)
+    
     news_html = IFRAME_PANEL_CSS + """
-    <div class="cyber-panel-native" style="margin-top: 20px;">
+    <div class="cyber-panel-native">
         <div class="panel-header">
             <span class="panel-title">Top Stories</span>
             <span class="panel-badge">TradingView</span>
         </div>
         <div class="panel-body">
-            <!-- TradingView Widget BEGIN -->
             <div class="tradingview-widget-container" style="width:100%; height:100%;">
                 <div class="tradingview-widget-container__widget" style="height:100%;"></div>
-                <div class="tradingview-widget-copyright" style="padding: 4px 10px; font-size: 10px;">
-                    <a href="https://id.tradingview.com/news/top-providers/tradingview/" rel="noopener nofollow" target="_blank" style="color: #00EEFF; text-decoration: none;">
-                        <span class="blue-text">Track all markets on TradingView</span>
-                    </a>
-                </div>
                 <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-timeline.js" async>
                 {
-                "displayMode": "regular",
-                "feedMode": "all_symbols",
-                "colorTheme": "dark",
-                "isTransparent": true,
-                "locale": "id",
-                "width": "100%",
-                "height": "100%"
+                "feedMode": "all_symbols", "colorTheme": "dark", "isTransparent": true,
+                "displayMode": "regular", "width": "100%", "height": "100%", "locale": "id"
                 }
                 </script>
             </div>
-            <!-- TradingView Widget END -->
         </div>
     </div>
     """
-    components.html(news_html, height=620)
+    components.html(news_html, height=500)
 
 # Jika file dijalankan langsung (testing)
 if __name__ == "__main__":
