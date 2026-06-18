@@ -1,7 +1,8 @@
 # ==============================================================================
 # sentinel_page.py - Halaman AeroVulpis Sentinel (terpisah)
 # ==============================================================================
-# HANYA LOGIKA YANG DIUBAH, TAMPILAN TETAP SEPERTI KODE ASLI.
+# HANYA LOGIKA TAMPILAN 3 KOLOM ATAS YANG DIUBAH AGAR BISA SCROLL HORIZONTAL.
+# LOGIKA AI FEED, PROMPT, DAN ACTIVE SETUPS TETAP ASLI.
 # ==============================================================================
 
 import streamlit as st
@@ -9,8 +10,6 @@ import streamlit.components.v1 as components
 # ==============================================================================
 # PAGE CONFIG (hanya untuk keperluan jika dibuka langsung)
 # ==============================================================================
-# Jika file ini dijalankan sebagai halaman utama, set page config.
-# Namun jika di-import dari streamlit_app.py, page config sudah diatur di sana.
 if __name__ == "__main__":
     st.set_page_config(
         page_title="Aerovulpis Pro Terminal",
@@ -21,10 +20,7 @@ if __name__ == "__main__":
 def show():
     """
     Fungsi utama untuk menampilkan halaman Sentinel.
-    Semua fungsi pendukung (get_market_data_with_cache, get_historical_data,
-    add_technical_indicators, get_weighted_signal, get_sentinel_analysis,
-    get_news_analysis, get_active_trade_setups, format_price_display, LIMITS, dll.)
-    diharapkan sudah tersedia di namespace global (dari streamlit_app.py).
+    Semua fungsi pendukung diharapkan sudah tersedia di namespace global (dari streamlit_app.py).
     """
 
     # --- INISIALISASI SESSION STATE UNTUK SENTINEL ---
@@ -36,9 +32,8 @@ def show():
         st.session_state.sentinel_analysis_mode = "pair"
 
     # ==========================================================================
-    # TAMPILAN (TIDAK DIUBAH)
+    # TAMPILAN & HEADER
     # ==========================================================================
-    # --- HEADER ---
     st.markdown("""
     <div style="height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; background: rgba(7,12,24,0.97); border-bottom: 1px solid #162035;">
         <div style="display: flex; align-items: center; gap: 6px;">
@@ -68,10 +63,46 @@ def show():
     """
     st.components.v1.html(ticker_html, height=55)
 
-    # --- 3 KOLOM UTAMA ---
+    # ==========================================================================
+    # CUSTOM CSS AGAR 3 KOLOM UTAMA BISA DI-SCROLL KANAN KIRI
+    # ==========================================================================
+    st.markdown("""
+    <style>
+    /* Target blok kolom yang berisi kalender ekonomi Tradays */
+    div[data-testid="stHorizontalBlock"]:has(iframe[src*="tradays.com"]) {
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        gap: 16px !important;
+        padding-bottom: 15px;
+    }
+    /* Set ukuran minimum per kolom agar tidak gepeng saat di-scroll */
+    div[data-testid="stHorizontalBlock"]:has(iframe[src*="tradays.com"]) > div[data-testid="column"] {
+        min-width: 440px !important;
+        flex: 1 0 440px !important;
+    }
+    /* Style Scrollbar agar senada dengan tema cyberpunk dark */
+    div[data-testid="stHorizontalBlock"]:has(iframe[src*="tradays.com"])::-webkit-scrollbar {
+        height: 7px;
+    }
+    div[data-testid="stHorizontalBlock"]:has(iframe[src*="tradays.com"])::-webkit-scrollbar-track {
+        background: #0C1425;
+        border-radius: 4px;
+    }
+    div[data-testid="stHorizontalBlock"]:has(iframe[src*="tradays.com"])::-webkit-scrollbar-thumb {
+        background: #162035;
+        border-radius: 4px;
+        border: 1px solid rgba(0,238,255,0.1);
+    }
+    div[data-testid="stHorizontalBlock"]:has(iframe[src*="tradays.com"])::-webkit-scrollbar-thumb:hover {
+        background: #00EEFF;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # --- 3 KOLOM UTAMA (KIRI: CALENDAR, TENGAH: CHART, KANAN: HEATMAP) ---
     col1, col2, col3 = st.columns(3)
 
-    # KOLOM 1: ECONOMIC CALENDAR
+    # KOLOM 1: ECONOMIC CALENDAR (DI KIRI)
     with col1:
         eco_html = """
         <style>
@@ -99,7 +130,7 @@ def show():
         """
         st.components.v1.html(eco_html, height=620)
 
-    # KOLOM 2: TRADINGVIEW CHART
+    # KOLOM 2: TRADINGVIEW CHART (DI TENGAH)
     with col2:
         pair_options = ["XAUUSD", "BTCUSD", "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USOIL"]
         selected_pair = st.selectbox("", pair_options, index=pair_options.index(st.session_state.sentinel_chart_pair) if st.session_state.sentinel_chart_pair in pair_options else 0, key="sentinel_chart_pair_select", label_visibility="collapsed")
@@ -110,6 +141,19 @@ def show():
         tv_symbol = symbol_map.get(selected_pair, "OANDA:XAUUSD")
 
         chart_html = f"""
+        <style>
+        .cyber-panel-native {
+            background: #0C1425; border: 1px solid #162035; border-radius: 8px;
+            display: flex; flex-direction: column; height: 100%; box-sizing: border-box;
+        }
+        .panel-header {
+            background: rgba(0,0,0,0.28); border-bottom: 1px solid #162035;
+            padding: 6px 10px; display: flex; justify-content: space-between; align-items: center;
+        }
+        .panel-title { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: #00EEFF; letter-spacing: 2px; text-transform: uppercase; }
+        .panel-badge { font-family: monospace; font-size: 9px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase; }
+        .panel-body { flex: 1; min-height: 0; overflow: hidden; }
+        </style>
         <div class="cyber-panel-native">
             <div class="panel-header">
                 <span class="panel-title">{selected_pair} Premium Chart</span>
@@ -130,9 +174,22 @@ def show():
         """
         st.components.v1.html(chart_html, height=584)
 
-    # KOLOM 3: CURRENCY HEATMAP
+    # KOLOM 3: CURRENCY HEATMAP (DI KANAN)
     with col3:
         heatmap_html = """
+        <style>
+        .cyber-panel-native {
+            background: #0C1425; border: 1px solid #162035; border-radius: 8px;
+            display: flex; flex-direction: column; height: 100%; box-sizing: border-box;
+        }
+        .panel-header {
+            background: rgba(0,0,0,0.28); border-bottom: 1px solid #162035;
+            padding: 6px 10px; display: flex; justify-content: space-between; align-items: center;
+        }
+        .panel-title { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: #00EEFF; letter-spacing: 2px; text-transform: uppercase; }
+        .panel-badge { font-family: monospace; font-size: 9px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase; }
+        .panel-body { flex: 1; min-height: 0; overflow: hidden; }
+        </style>
         <div class="cyber-panel-native">
             <div class="panel-header">
                 <span class="panel-title">Currency Heatmap</span>
@@ -155,7 +212,7 @@ def show():
         st.components.v1.html(heatmap_html, height=620)
 
     # ==========================================================================
-    # AI SIGNAL FEED & ANALYSIS TERMINAL
+    # AI SIGNAL FEED & ANALYSIS TERMINAL (LOGIKA & PROMPT TIDAK DIUBAH)
     # ==========================================================================
     st.markdown("""
     <div style="background: #0C1425; border: 1px solid #162035; border-radius: 8px; margin-top: 20px; padding: 0 0 10px 0;">
@@ -190,21 +247,15 @@ def show():
         send_clicked = st.button("▶ RUN ANALYSIS", key="sentinel_ai_send", use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # ==========================================================================
-    # LOGIKA ANALISIS (DIUBAH)
-    # ==========================================================================
     if send_clicked and user_input:
-        # Cek limit dan premium
         user_limits = LIMITS.get(st.session_state.user_tier, LIMITS["free"])
         if user_limits["sentinel_per_day"] == 0:
             st.error("SENTINEL PRO ACCESS RESTRICTED | UPGRADE TIER")
         elif st.session_state.daily_sentinel_count >= user_limits["sentinel_per_day"]:
             st.error(f"LIMIT REACHED [{st.session_state.daily_sentinel_count}/{user_limits['sentinel_per_day']}] | UPGRADE TIER")
         else:
-            # Tentukan pair yang digunakan (dari dropdown chart)
             pair_for_analysis = st.session_state.sentinel_chart_pair
             if st.session_state.sentinel_analysis_mode == "pair":
-                # Mode Pair: jalankan sentinel analysis menggunakan get_sentinel_analysis
                 ticker_map = {"XAUUSD": "GC=F", "BTCUSD": "BTC-USD", "EURUSD": "EURUSD=X", "GBPUSD": "GBPUSD=X", "USDJPY": "USDJPY=X", "AUDUSD": "AUDUSD=X", "USOIL": "CL=F"}
                 ticker = ticker_map.get(pair_for_analysis, "GC=F")
                 market = get_market_data_with_cache(ticker, force_refresh=False)
@@ -220,20 +271,18 @@ def show():
                 else:
                     st.error("Gagal mengambil harga untuk pair ini.")
             else:
-                # Mode News: user_input dianggap berita/event
                 analysis = get_news_analysis(pair_for_analysis, user_input)
                 st.session_state.sentinel_ai_output = analysis
 
-    # Tampilkan output jika ada
     if st.session_state.get("sentinel_ai_output"):
         st.markdown("---")
         st.markdown("### [OUTPUT ANALYSIS]")
         st.markdown(st.session_state.sentinel_ai_output, unsafe_allow_html=True)
 
     # ==========================================================================
-    # ACTIVE TRADE SETUPS (DIUBAH - AMBIL DARI SIGNAL ANALYSIS)
+    # ACTIVE TRADE SETUPS (LOGIKA TIDAK DIUBAH)
     # ==========================================================================
-    from streamlit_app import get_active_trade_setups   # import di dalam fungsi
+    from streamlit_app import get_active_trade_setups   
     setups = get_active_trade_setups()
 
     if setups:
@@ -286,7 +335,7 @@ def show():
         st.info("Belum ada sinyal aktif. Tunggu update berikutnya.")
 
     # ==========================================================================
-    # TOP STORIES (TIDAK DIUBAH)
+    # TOP STORIES FROM TRADINGVIEW (DIPALING BAWAH)
     # ==========================================================================
     news_html = """
     <style>
@@ -302,7 +351,7 @@ def show():
     .panel-badge { font-family: monospace; font-size: 9px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase; }
     .panel-body { flex: 1; min-height: 0; overflow: hidden; }
     </style>
-    <div class="cyber-panel-native">
+    <div class="cyber-panel-native" style="margin-top: 15px;">
         <div class="panel-header">
             <span class="panel-title">Top Stories</span>
             <span class="panel-badge">TradingView</span>
@@ -322,9 +371,6 @@ def show():
     """
     st.components.v1.html(news_html, height=500)
 
-# Jika file dijalankan langsung (testing)
 if __name__ == "__main__":
-    # Catatan: saat dijalankan langsung, fungsi-fungsi pendukung belum tersedia.
-    # Untuk testing, pastikan semua fungsi di-import atau didefinisikan terlebih dahulu.
     st.warning("File ini dirancang untuk di-import dari streamlit_app.py. Fungsi-fungsi pendukung belum tersedia saat dijalankan langsung.")
     show()
