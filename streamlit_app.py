@@ -1,14 +1,14 @@
 # ==============================================================================
-# sentinel_page.py - Halaman AeroVulpis Sentinel (terpisah)
+# sentinel_page.py - Halaman AeroVulpis Sentinel (Terintegrasi)
 # ==============================================================================
-# HANYA LOGIKA TAMPILAN 3 KOLOM ATAS YANG DIUBAH AGAR BISA SCROLL HORIZONTAL.
-# LOGIKA AI FEED, PROMPT, DAN ACTIVE SETUPS TETAP ASLI.
+# LOGIKA ASLI DIURUS PENUH, TAMPILAN MATRIKS TERMINAL 3 LAYOUT KUSTOM DIAPLIKASIKAN.
 # ==============================================================================
 
 import streamlit as st
 import streamlit.components.v1 as components
+
 # ==============================================================================
-# PAGE CONFIG (hanya untuk keperluan jika dibuka langsung)
+# PAGE CONFIG (Untuk testing langsung / fallback)
 # ==============================================================================
 if __name__ == "__main__":
     st.set_page_config(
@@ -17,10 +17,31 @@ if __name__ == "__main__":
         layout="wide"
     )
 
+# ==============================================================================
+# INJEKSI GLOBAL PANEL IFRAME
+# ==============================================================================
+IFRAME_PANEL_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+body { margin: 0; padding: 0; background: transparent; overflow: hidden; height: 100vh;}
+.cyber-panel-native {
+    background: #0C1425; border: 1px solid #162035; border-radius: 8px;
+    display: flex; flex-direction: column; height: 100%; box-sizing: border-box;
+}
+.panel-header {
+    background: rgba(0,0,0,0.28); border-bottom: 1px solid #162035;
+    padding: 6px 10px; display: flex; justify-content: space-between; align-items: center;
+}
+.panel-title { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: #00EEFF; letter-spacing: 2px; text-transform: uppercase; }
+.panel-badge { font-family: monospace; font-size: 9px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase; }
+.panel-body { flex: 1; min-height: 0; overflow: hidden; }
+</style>
+"""
+
 def show():
     """
-    Fungsi utama untuk menampilkan halaman Sentinel.
-    Semua fungsi pendukung diharapkan sudah tersedia di namespace global (dari streamlit_app.py).
+    Fungsi utama untuk menampilkan halaman Sentinel dengan tata letak matriks 3 kolom.
+    Mengekstrak fungsi inti dari global namespace (streamlit_app.py).
     """
 
     # --- INISIALISASI SESSION STATE UNTUK SENTINEL ---
@@ -32,8 +53,111 @@ def show():
         st.session_state.sentinel_analysis_mode = "pair"
 
     # ==========================================================================
-    # TAMPILAN & HEADER
+    # GLOBAL CSS - MEMAKSA HORIZONTAL SCROLL & FIX TAMPILAN MATRIKS
     # ==========================================================================
+    st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+    :root {
+        --bg: #070C18;
+        --panel: #0C1425;
+        --card: #111D35;
+        --cyan: #00EEFF;
+        --purple: #8B5CF6;
+        --green: #00FF9D;
+        --red: #FF3D71;
+        --text: #C8D8F0;
+        --text-muted: #4B6A8A;
+        --border: #162035;
+    }
+    .stApp {
+        background: #070C18 !important;
+        background-image: 
+            radial-gradient(ellipse at 10% 70%, rgba(139,92,246,0.07) 0%, transparent 45%),
+            radial-gradient(ellipse at 90% 15%, rgba(0,238,255,0.07) 0%, transparent 45%),
+            linear-gradient(rgba(0,238,255,0.022) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0,238,255,0.022) 1px, transparent 1px);
+        background-size: auto, auto, 48px 48px, 48px 48px;
+        color: #C8D8F0 !important;
+    }
+    .block-container {
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        max-width: 100% !important;
+        padding-left: 0.3rem !important;
+        padding-right: 0.3rem !important;
+        overflow-x: hidden;
+    }
+
+    /* --- PAKSA 3 KOLOM UTAMA AGAR TETAP SEJAJAR HORIZONTAL --- */
+    div[data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        gap: 10px !important;
+        padding: 5px 0 0 0 !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        width: 100% !important;
+    }
+
+    div[data-testid="column"] {
+        flex: 0 0 auto !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    /* Penataan Lebar Layout 3 Kolom Utama */
+    div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-of-type(1) { width: 330px !important; min-width: 330px !important; }
+    div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-of-type(2) { width: 620px !important; min-width: 620px !important; }
+    div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-of-type(3) { width: 350px !important; min-width: 350px !important; }
+
+    /* Desain Kustom Scrollbar */
+    div[data-testid="stHorizontalBlock"]::-webkit-scrollbar { height: 8px !important; }
+    div[data-testid="stHorizontalBlock"]::-webkit-scrollbar-thumb { background: #00EEFF !important; border-radius: 4px !important; }
+    div[data-testid="stHorizontalBlock"]::-webkit-scrollbar-track { background: rgba(16,32,53,0.3) !important; }
+
+    /* Reset Form Input agar Responsif di Baris Baru */
+    .ai-input-container [data-testid="stHorizontalBlock"] {
+        width: 100% !important;
+        overflow: visible !important;
+        padding: 0 !important;
+    }
+    .ai-input-container [data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-of-type(1) { width: auto !important; min-width: 0 !important; flex: 5 1 0% !important; }
+    .ai-input-container [data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-of-type(2) { width: auto !important; min-width: 0 !important; flex: 1 1 0% !important; }
+
+    /* --- CYBER BUTTON --- */
+    div.stButton > button {
+        background: linear-gradient(135deg, rgba(0,238,255,0.15), rgba(139,92,246,0.15)) !important;
+        border: 1px solid #00EEFF !important;
+        border-radius: 4px !important;
+        color: #00EEFF !important;
+        font-family: 'Share Tech Mono', monospace !important;
+        font-size: 10px !important;
+        transition: all 0.3s ease !important;
+        text-transform: uppercase !important;
+        width: 100% !important;
+        height: 38px !important;
+    }
+
+    /* --- SELECTOR PAIR & RADIO BUTTONS --- */
+    div[data-testid="stSelectbox"] { padding: 0 !important; margin: 0 0 4px 0 !important; }
+    div[data-testid="stSelectbox"] label { display: none !important; }
+    div[data-testid="stSelectbox"] div[data-baseweb="select"] div {
+        font-size: 11px !important;
+        font-family: 'Share Tech Mono', monospace !important;
+        color: #00EEFF !important;
+        background: #0C1425 !important;
+        border: 1px solid rgba(0,238,255,0.2) !important;
+    }
+
+    div[role="radiogroup"] { flex-direction: row; gap: 15px; margin-bottom: 8px; }
+    div[role="radiogroup"] label { font-family: 'Share Tech Mono', monospace !important; font-size: 11px !important; color: #C8D8F0 !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # --- HEADER ---
     st.markdown("""
     <div style="height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; background: rgba(7,12,24,0.97); border-bottom: 1px solid #162035;">
         <div style="display: flex; align-items: center; gap: 6px;">
@@ -61,63 +185,16 @@ def show():
         </script>
     </div>
     """
-    st.components.v1.html(ticker_html, height=55)
+    components.html(ticker_html, height=55)
 
     # ==========================================================================
-    # CUSTOM CSS AGAR 3 KOLOM UTAMA BISA DI-SCROLL KANAN KIRI
+    # 3 KOLOM UTAMA (MATRIX LAYOUT)
     # ==========================================================================
-    st.markdown("""
-    <style>
-    /* Target blok kolom yang berisi kalender ekonomi Tradays */
-    div[data-testid="stHorizontalBlock"]:has(iframe[src*="tradays.com"]) {
-        flex-wrap: nowrap !important;
-        overflow-x: auto !important;
-        gap: 16px !important;
-        padding-bottom: 15px;
-    }
-    /* Set ukuran minimum per kolom agar tidak gepeng saat di-scroll */
-    div[data-testid="stHorizontalBlock"]:has(iframe[src*="tradays.com"]) > div[data-testid="column"] {
-        min-width: 440px !important;
-        flex: 1 0 440px !important;
-    }
-    /* Style Scrollbar agar senada dengan tema cyberpunk dark */
-    div[data-testid="stHorizontalBlock"]:has(iframe[src*="tradays.com"])::-webkit-scrollbar {
-        height: 7px;
-    }
-    div[data-testid="stHorizontalBlock"]:has(iframe[src*="tradays.com"])::-webkit-scrollbar-track {
-        background: #0C1425;
-        border-radius: 4px;
-    }
-    div[data-testid="stHorizontalBlock"]:has(iframe[src*="tradays.com"])::-webkit-scrollbar-thumb {
-        background: #162035;
-        border-radius: 4px;
-        border: 1px solid rgba(0,238,255,0.1);
-    }
-    div[data-testid="stHorizontalBlock"]:has(iframe[src*="tradays.com"])::-webkit-scrollbar-thumb:hover {
-        background: #00EEFF;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # --- 3 KOLOM UTAMA (KIRI: CALENDAR, TENGAH: CHART, KANAN: HEATMAP) ---
     col1, col2, col3 = st.columns(3)
 
-    # KOLOM 1: ECONOMIC CALENDAR (DI KIRI)
+    # --- KOLOM 1: ECONOMIC CALENDAR ---
     with col1:
-        eco_html = """
-        <style>
-        .cyber-panel-native {
-            background: #0C1425; border: 1px solid #162035; border-radius: 8px;
-            display: flex; flex-direction: column; height: 100%; box-sizing: border-box;
-        }
-        .panel-header {
-            background: rgba(0,0,0,0.28); border-bottom: 1px solid #162035;
-            padding: 6px 10px; display: flex; justify-content: space-between; align-items: center;
-        }
-        .panel-title { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: #00EEFF; letter-spacing: 2px; text-transform: uppercase; }
-        .panel-badge { font-family: monospace; font-size: 9px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase; }
-        .panel-body { flex: 1; min-height: 0; overflow: hidden; }
-        </style>
+        eco_html = IFRAME_PANEL_CSS + """
         <div class="cyber-panel-native">
             <div class="panel-header">
                 <span class="panel-title">Economic Calendar</span>
@@ -128,9 +205,9 @@ def show():
             </div>
         </div>
         """
-        st.components.v1.html(eco_html, height=620)
+        components.html(eco_html, height=620)
 
-    # KOLOM 2: TRADINGVIEW CHART (DI TENGAH)
+    # --- KOLOM 2: TRADINGVIEW CHART ---
     with col2:
         pair_options = ["XAUUSD", "BTCUSD", "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USOIL"]
         selected_pair = st.selectbox("", pair_options, index=pair_options.index(st.session_state.sentinel_chart_pair) if st.session_state.sentinel_chart_pair in pair_options else 0, key="sentinel_chart_pair_select", label_visibility="collapsed")
@@ -140,20 +217,7 @@ def show():
         symbol_map = {"XAUUSD": "OANDA:XAUUSD", "BTCUSD": "BITSTAMP:BTCUSD", "EURUSD": "FX_IDC:EURUSD", "GBPUSD": "FX_IDC:GBPUSD", "USDJPY": "FX_IDC:USDJPY", "AUDUSD": "FX_IDC:AUDUSD", "USOIL": "TVC:USOIL"}
         tv_symbol = symbol_map.get(selected_pair, "OANDA:XAUUSD")
 
-        chart_html = f"""
-        <style>
-        .cyber-panel-native {
-            background: #0C1425; border: 1px solid #162035; border-radius: 8px;
-            display: flex; flex-direction: column; height: 100%; box-sizing: border-box;
-        }
-        .panel-header {
-            background: rgba(0,0,0,0.28); border-bottom: 1px solid #162035;
-            padding: 6px 10px; display: flex; justify-content: space-between; align-items: center;
-        }
-        .panel-title { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: #00EEFF; letter-spacing: 2px; text-transform: uppercase; }
-        .panel-badge { font-family: monospace; font-size: 9px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase; }
-        .panel-body { flex: 1; min-height: 0; overflow: hidden; }
-        </style>
+        chart_html = IFRAME_PANEL_CSS + f"""
         <div class="cyber-panel-native">
             <div class="panel-header">
                 <span class="panel-title">{selected_pair} Premium Chart</span>
@@ -172,24 +236,11 @@ def show():
             </script>
         </div>
         """
-        st.components.v1.html(chart_html, height=584)
+        components.html(chart_html, height=584)
 
-    # KOLOM 3: CURRENCY HEATMAP (DI KANAN)
+    # --- KOLOM 3: CURRENCY HEATMAP ---
     with col3:
-        heatmap_html = """
-        <style>
-        .cyber-panel-native {
-            background: #0C1425; border: 1px solid #162035; border-radius: 8px;
-            display: flex; flex-direction: column; height: 100%; box-sizing: border-box;
-        }
-        .panel-header {
-            background: rgba(0,0,0,0.28); border-bottom: 1px solid #162035;
-            padding: 6px 10px; display: flex; justify-content: space-between; align-items: center;
-        }
-        .panel-title { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: #00EEFF; letter-spacing: 2px; text-transform: uppercase; }
-        .panel-badge { font-family: monospace; font-size: 9px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase; }
-        .panel-body { flex: 1; min-height: 0; overflow: hidden; }
-        </style>
+        heatmap_html = IFRAME_PANEL_CSS + """
         <div class="cyber-panel-native">
             <div class="panel-header">
                 <span class="panel-title">Currency Heatmap</span>
@@ -209,10 +260,10 @@ def show():
             </div>
         </div>
         """
-        st.components.v1.html(heatmap_html, height=620)
+        components.html(heatmap_html, height=620)
 
     # ==========================================================================
-    # AI SIGNAL FEED & ANALYSIS TERMINAL (LOGIKA & PROMPT TIDAK DIUBAH)
+    # AI SIGNAL FEED & ANALYSIS TERMINAL
     # ==========================================================================
     st.markdown("""
     <div style="background: #0C1425; border: 1px solid #162035; border-radius: 8px; margin-top: 20px; padding: 0 0 10px 0;">
@@ -238,7 +289,7 @@ def show():
     )
     st.session_state.sentinel_analysis_mode = "pair" if "Pair" in analysis_type else "news"
 
-    # Input dan tombol
+    # Input dan tombol dibungkus container kustom agar responsif kembali
     st.markdown('<div class="ai-input-container">', unsafe_allow_html=True)
     col_input, col_btn = st.columns([5, 1], gap="small")
     with col_input:
@@ -247,6 +298,9 @@ def show():
         send_clicked = st.button("▶ RUN ANALYSIS", key="sentinel_ai_send", use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # ==========================================================================
+    # LOGIKA CORE BACKEND AI (TIDAK DIUBAH)
+    # ==========================================================================
     if send_clicked and user_input:
         user_limits = LIMITS.get(st.session_state.user_tier, LIMITS["free"])
         if user_limits["sentinel_per_day"] == 0:
@@ -274,13 +328,14 @@ def show():
                 analysis = get_news_analysis(pair_for_analysis, user_input)
                 st.session_state.sentinel_ai_output = analysis
 
+    # Tampilkan output pemicu analisis dinamis asli
     if st.session_state.get("sentinel_ai_output"):
         st.markdown("---")
         st.markdown("### [OUTPUT ANALYSIS]")
         st.markdown(st.session_state.sentinel_ai_output, unsafe_allow_html=True)
 
     # ==========================================================================
-    # ACTIVE TRADE SETUPS (LOGIKA TIDAK DIUBAH)
+    # ACTIVE TRADE SETUPS (LOGIKA DINAMIS ASLI)
     # ==========================================================================
     from streamlit_app import get_active_trade_setups   
     setups = get_active_trade_setups()
@@ -335,23 +390,10 @@ def show():
         st.info("Belum ada sinyal aktif. Tunggu update berikutnya.")
 
     # ==========================================================================
-    # TOP STORIES FROM TRADINGVIEW (DIPALING BAWAH)
+    # SEKSYEN BAWAH 3: TOP STORIES WITH INJECTED CSS
     # ==========================================================================
-    news_html = """
-    <style>
-    .cyber-panel-native {
-        background: #0C1425; border: 1px solid #162035; border-radius: 8px;
-        display: flex; flex-direction: column; height: 100%; box-sizing: border-box;
-    }
-    .panel-header {
-        background: rgba(0,0,0,0.28); border-bottom: 1px solid #162035;
-        padding: 6px 10px; display: flex; justify-content: space-between; align-items: center;
-    }
-    .panel-title { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: #00EEFF; letter-spacing: 2px; text-transform: uppercase; }
-    .panel-badge { font-family: monospace; font-size: 9px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase; }
-    .panel-body { flex: 1; min-height: 0; overflow: hidden; }
-    </style>
-    <div class="cyber-panel-native" style="margin-top: 15px;">
+    news_html = IFRAME_PANEL_CSS + """
+    <div class="cyber-panel-native">
         <div class="panel-header">
             <span class="panel-title">Top Stories</span>
             <span class="panel-badge">TradingView</span>
@@ -369,8 +411,9 @@ def show():
         </div>
     </div>
     """
-    st.components.v1.html(news_html, height=500)
+    components.html(news_html, height=500)
 
+# Jika file dijalankan langsung (testing)
 if __name__ == "__main__":
     st.warning("File ini dirancang untuk di-import dari streamlit_app.py. Fungsi-fungsi pendukung belum tersedia saat dijalankan langsung.")
     show()
