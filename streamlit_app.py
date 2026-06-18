@@ -390,10 +390,10 @@ def show():
         st.info("Belum ada sinyal aktif. Tunggu update berikutnya.")
 
     # ==========================================================================
-    # SEKSYEN BAWAH 3: TOP STORIES WITH INJECTED CSS
+    # SEKSYEN ABSOLUT BAWAH: TOP STORIES WITH INJECTED CSS & TOP MARGIN
     # ==========================================================================
     news_html = IFRAME_PANEL_CSS + """
-    <div class="cyber-panel-native">
+    <div class="cyber-panel-native" style="margin-top: 20px;">
         <div class="panel-header">
             <span class="panel-title">Top Stories</span>
             <span class="panel-badge">TradingView</span>
