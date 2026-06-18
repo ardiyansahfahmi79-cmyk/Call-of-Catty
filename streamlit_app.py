@@ -263,13 +263,13 @@ def show():
         components.html(heatmap_html, height=620)
 
     # ==========================================================================
-    # AI SIGNAL FEED & ANALYSIS TERMINAL
+    # AI SIGNAL FEED & ANALYSIS TERMINAL (V4.0)
     # ==========================================================================
     st.markdown("""
     <div style="background: #0C1425; border: 1px solid #162035; border-radius: 8px; margin-top: 20px; padding: 0 0 10px 0;">
         <div style="background: rgba(0,0,0,0.28); border-bottom: 1px solid #162035; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; border-radius: 8px 8px 0 0;">
             <span style="font-family: 'Share Tech Mono', monospace; font-size: 12px; color: #00EEFF; letter-spacing: 2px; text-transform: uppercase;">AI Signal Feed & Analysis Terminal</span>
-            <span style="font-family: monospace; font-size: 9px; color: #4B6A8A; letter-spacing: 1px;">CORE ENGINE V3.5</span>
+            <span style="font-family: monospace; font-size: 9px; color: #4B6A8A; letter-spacing: 1px;">CORE ENGINE V4.0</span>
         </div>
         <div style="padding: 12px 12px 2px 12px;">
             <div style="font-family:'Share Tech Mono',monospace; font-size:10px; color:#4B6A8A; background:rgba(0,238,255,0.05); border-left:2px solid #00EEFF; padding:8px; border-radius:3px; margin-bottom:10px;">
@@ -390,7 +390,7 @@ def show():
         st.info("Belum ada sinyal aktif. Tunggu update berikutnya.")
 
     # ==========================================================================
-    # SEKSYEN ABSOLUT BAWAH: TOP STORIES WITH INJECTED CSS & TOP MARGIN
+    # SEKSYEN ABSOLUT BAWAH: TRADINGVIEW WIDGET (TOP STORIES) - INTEGRASI PENUH
     # ==========================================================================
     news_html = IFRAME_PANEL_CSS + """
     <div class="cyber-panel-native" style="margin-top: 20px;">
@@ -399,19 +399,31 @@ def show():
             <span class="panel-badge">TradingView</span>
         </div>
         <div class="panel-body">
+            <!-- TradingView Widget BEGIN -->
             <div class="tradingview-widget-container" style="width:100%; height:100%;">
                 <div class="tradingview-widget-container__widget" style="height:100%;"></div>
+                <div class="tradingview-widget-copyright" style="padding: 4px 10px; font-size: 10px;">
+                    <a href="https://id.tradingview.com/news/top-providers/tradingview/" rel="noopener nofollow" target="_blank" style="color: #00EEFF; text-decoration: none;">
+                        <span class="blue-text">Track all markets on TradingView</span>
+                    </a>
+                </div>
                 <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-timeline.js" async>
                 {
-                "feedMode": "all_symbols", "colorTheme": "dark", "isTransparent": true,
-                "displayMode": "regular", "width": "100%", "height": "100%", "locale": "id"
+                "displayMode": "regular",
+                "feedMode": "all_symbols",
+                "colorTheme": "dark",
+                "isTransparent": true,
+                "locale": "id",
+                "width": "100%",
+                "height": "100%"
                 }
                 </script>
             </div>
+            <!-- TradingView Widget END -->
         </div>
     </div>
     """
-    components.html(news_html, height=500)
+    components.html(news_html, height=620)
 
 # Jika file dijalankan langsung (testing)
 if __name__ == "__main__":
