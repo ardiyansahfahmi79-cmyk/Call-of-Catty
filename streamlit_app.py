@@ -233,7 +233,6 @@ def show():
     # ==========================================================================
     # ACTIVE TRADE SETUPS (DIUBAH - AMBIL DARI SIGNAL ANALYSIS)
     # ==========================================================================
- def show():
     from streamlit_app import get_active_trade_setups   # import di dalam fungsi
     setups = get_active_trade_setups()
 
