@@ -97,7 +97,7 @@ div.stButton > button {
     height: 38px !important;
 }
 
-/* --- SELECTOR PAIR --- */
+/* --- SELECTOR PAIR & RADIO BUTTONS --- */
 div[data-testid="stSelectbox"] { padding: 0 !important; margin: 0 0 4px 0 !important; }
 div[data-testid="stSelectbox"] label { display: none !important; }
 div[data-testid="stSelectbox"] div[data-baseweb="select"] div {
@@ -107,6 +107,9 @@ div[data-testid="stSelectbox"] div[data-baseweb="select"] div {
     background: #0C1425 !important;
     border: 1px solid rgba(0,238,255,0.2) !important;
 }
+
+div[role="radiogroup"] { flex-direction: row; gap: 15px; margin-bottom: 8px; }
+div[role="radiogroup"] label { font-family: 'Share Tech Mono', monospace !important; font-size: 11px !important; color: #C8D8F0 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -214,7 +217,7 @@ with col2:
     """
     components.html(chart_html, height=584)
 
-# --- KOLOM 3: CURRENCY HEATMAP ONLY (Dinaikkan agar sejajar sempurna) ---
+# --- KOLOM 3: CURRENCY HEATMAP ONLY ---
 with col3:
     heatmap_html = IFRAME_PANEL_CSS + """
     <div class="cyber-panel-native">
@@ -240,7 +243,7 @@ with col3:
 
 
 # ==============================================================================
-# SEKSYEN BAWAH 1: AI SIGNAL FEED & MARKET ANALYSIS (FULL-WIDTH SEKARANG)
+# SEKSYEN BAWAH 1: AI SIGNAL FEED & MARKET ANALYSIS
 # ==============================================================================
 st.markdown("""
 <div style="background: #0C1425; border: 1px solid #162035; border-radius: 8px; margin-top: 20px; padding: 0 0 10px 0;">
@@ -249,51 +252,88 @@ st.markdown("""
         <span style="font-family: monospace; font-size: 9px; color: #4B6A8A; letter-spacing: 1px;">CORE ENGINE V3.5</span>
     </div>
     <div style="padding: 12px 12px 2px 12px;">
-        <div style="font-family:'Share Tech Mono',monospace; font-size:10px; color:#4B6A8A; background:rgba(0,238,255,0.05); border-left:2px solid #00EEFF; padding:8px; border-radius:3px;">
-            [SYSTEM GENUINE] Masukkan market pair atau topik fundamental untuk mengekstrak analisis kecerdasan buatan secara penuh.
+        <div style="font-family:'Share Tech Mono',monospace; font-size:10px; color:#4B6A8A; background:rgba(0,238,255,0.05); border-left:2px solid #00EEFF; padding:8px; border-radius:3px; margin-bottom:10px;">
+            [SYSTEM GENUINE] Pilih mode analisis, lalu ketik market pair atau topik fundamental untuk mengekstrak data.
         </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Bungkus input ke container dengan kelas custom untuk kontrol horizontal block
+# Radio Pilihan Tipe Analisis
+analysis_type = st.radio(
+    "Pilih Mode AI:", 
+    ["Analisis Pair (Teknikal/SMC)", "Analisis News (Fundamental)"], 
+    horizontal=True, 
+    label_visibility="collapsed"
+)
+
+# Bungkus input ke container dengan kelas custom
 st.markdown('<div class="ai-input-container">', unsafe_allow_html=True)
 col_input, col_btn = st.columns([5, 1], gap="small")
 with col_input:
-    user_input = st.text_input("", placeholder="Ketik di sini (contoh: XAUUSD SMC Analisis atau Hubungan Data NFP)...", key="ai_input", label_visibility="collapsed")
+    user_input = st.text_input("", placeholder="Ketik di sini (contoh: XAUUSD atau Berita NFP)...", key="ai_input", label_visibility="collapsed")
 with col_btn:
     send_clicked = st.button("▶ RUN ANALYSIS", key="ai_send", use_container_width=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
 if send_clicked and user_input:
-    # Desain tampilan response AI yang luas, sangat rapi untuk dibaca
-    st.markdown(f"""
-    <div style="margin-top: 10px; padding: 15px; background: rgba(0, 238, 255, 0.02); border: 1px dashed rgba(0, 238, 255, 0.2); border-radius: 6px; font-family: 'Share Tech Mono', monospace; color: #C8D8F0; line-height: 1.6;">
-        <span style="color: #00EEFF; font-weight: bold;">[AEROVULPIS AI REPORT ENGINE] Target: {user_input.upper()}</span><br>
-        <hr style="border-color: rgba(22,32,53,0.5); margin: 8px 0;">
-        <span style="color: #00FF9D;">● SMART MONEY CONCEPT ANALYSIS:</span><br>
-        • Market Structure Shift / CHoCH terdeteksi pada TF Utama.<br>
-        • Area Order Block valid terkonfirmasi, bersiap memantau area imbalance / Fair Value Gap (FVG).<br>
-        • Sentimen jangka pendek menunjukkan pola akumulasi volume tinggi.<br>
-        <span style="color: #4B6A8A; font-size: 9px; display: block; margin-top: 10px;">*Ini adalah simulasi container output analisis luas. Integrasi script auto-trade atau prompt AI-mu akan tercetak di sini dengan sangat leluasa.</span>
-    </div>
-    """, unsafe_allow_html=True)
+    # Logika deteksi sapaan (greeting)
+    greetings = ["hai", "halo", "hei", "hello", "hi", "pagi", "siang", "sore", "malam", "ping", "tes", "test"]
+    cleaned_input = user_input.lower().strip()
+    
+    # Jika input user hanya 1 kata dan itu adalah sapaan, atau kurang dari 3 karakter
+    is_greeting_only = cleaned_input in greetings or len(cleaned_input) < 3
+
+    if is_greeting_only:
+        st.markdown(f"""
+        <div style="margin-top: 10px; padding: 15px; background: rgba(0, 238, 255, 0.02); border: 1px dashed rgba(0, 238, 255, 0.2); border-radius: 6px; font-family: 'Share Tech Mono', monospace; color: #C8D8F0; line-height: 1.6;">
+            <span style="color: #00EEFF; font-weight: bold;">[AEROVULPIS AI] Sapaan Diterima.</span><br>
+            <hr style="border-color: rgba(22,32,53,0.5); margin: 8px 0;">
+            <span style="color: #00FF9D;">Halo! Sistem AeroVulpis V3.5 siap beroperasi. Silakan pilih Mode Analisis (Pair atau News) lalu masukkan data yang ingin diproses.</span>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        # Tampilan jika user meminta analisis berdasarkan Radio Button
+        if "Pair" in analysis_type:
+            # Output Teknikal / SMC
+            st.markdown(f"""
+            <div style="margin-top: 10px; padding: 15px; background: rgba(0, 238, 255, 0.02); border: 1px dashed rgba(0, 238, 255, 0.2); border-radius: 6px; font-family: 'Share Tech Mono', monospace; color: #C8D8F0; line-height: 1.6;">
+                <span style="color: #00EEFF; font-weight: bold;">[AEROVULPIS AI REPORT ENGINE] Target: {user_input.upper()}</span><br>
+                <hr style="border-color: rgba(22,32,53,0.5); margin: 8px 0;">
+                <span style="color: #00FF9D;">● TECHNICAL & SMC ANALYSIS:</span><br>
+                • Market Structure Shift / CHoCH terdeteksi pada TF Utama.<br>
+                • Area Order Block valid terkonfirmasi, bersiap memantau area imbalance / Fair Value Gap (FVG).<br>
+                • Sentimen jangka pendek menunjukkan pola akumulasi volume tinggi.<br>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            # Output Fundamental / News
+            st.markdown(f"""
+            <div style="margin-top: 10px; padding: 15px; background: rgba(139, 92, 246, 0.02); border: 1px dashed rgba(139, 92, 246, 0.2); border-radius: 6px; font-family: 'Share Tech Mono', monospace; color: #C8D8F0; line-height: 1.6;">
+                <span style="color: #8B5CF6; font-weight: bold;">[AEROVULPIS AI NEWS ENGINE] Topik: {user_input.upper()}</span><br>
+                <hr style="border-color: rgba(22,32,53,0.5); margin: 8px 0;">
+                <span style="color: #00FF9D;">● FUNDAMENTAL INSIGHTS:</span><br>
+                • Data makroekonomi terbaru menunjukkan volatilitas potensial pada pair terkait.<br>
+                • Berita saat ini memiliki korelasi tinggi dengan pergerakan sentimen DXY (US Dollar Index).<br>
+                • Pelaku pasar disarankan memantau rilis kalender ekonomi dalam 4 jam ke depan.<br>
+            </div>
+            """, unsafe_allow_html=True)
 
 
 # ==============================================================================
-# SEKSYEN BAWAH 2: ACTIVE TRADE SETUP
+# SEKSYEN BAWAH 2: ACTIVE TRADE SETUP (DIUPDATE DENGAN SL, ENTRY, TP1, TP2, TP3)
 # ==============================================================================
 setup_data = [
-    {"pair": "EURUSD", "dir": "SELL", "dir_cls": "sell", "entry": "1.08420", "tp1": "1.0795", "tp2": "1.0750", "gradient": "#FF3D71"},
-    {"pair": "USDJPY", "dir": "BUY", "dir_cls": "buy", "entry": "149.820", "tp1": "150.50", "tp2": "151.20", "gradient": "#00FF9D"}
+    {"pair": "EURUSD", "dir": "SELL", "dir_cls": "sell", "sl": "1.08900", "entry": "1.08420", "tp1": "1.07950", "tp2": "1.07500", "tp3": "1.07100", "gradient": "#FF3D71"},
+    {"pair": "USDJPY", "dir": "BUY", "dir_cls": "buy", "sl": "148.500", "entry": "149.820", "tp1": "150.500", "tp2": "151.200", "tp3": "152.000", "gradient": "#00FF9D"}
 ]
 
 bottom_html = """<style>
 .cyber-tag { font-family: 'Share Tech Mono', monospace; font-size: 8px; letter-spacing: 1px; padding: 2px 6px; border-radius: 3px; display: inline-block; }
 .cyber-tag.buy { background: rgba(0,255,157,0.12); color: #00FF9D; border: 1px solid rgba(0,255,157,0.25); }
 .cyber-tag.sell { background: rgba(255,61,113,0.12); color: #FF3D71; border: 1px solid rgba(255,61,113,0.25); }
-.grid-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; padding: 10px; }
-.setup-card { background: #111D35; border: 1px solid #162035; border-radius: 6px; padding: 10px; position: relative; }
+.grid-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 10px; padding: 10px; }
+.setup-card { background: #111D35; border: 1px solid #162035; border-radius: 6px; padding: 12px; position: relative; }
 </style>
 <div style="background: #0C1425; border: 1px solid #162035; border-radius: 8px; margin-top: 15px;">
 <div style="background: rgba(0,0,0,0.28); border-bottom: 1px solid #162035; padding: 8px 12px;">
@@ -304,14 +344,16 @@ bottom_html = """<style>
 for setup in setup_data:
     bottom_html += f"""<div class="setup-card">
 <div style="position:absolute; top:0; left:0; right:0; height:2px; background:{setup['gradient']}; border-radius: 6px 6px 0 0;"></div>
-<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-<span style="font-family:'Share Tech Mono',monospace; font-size:12px; font-weight:bold; color:#C8D8F0;">{setup['pair']}</span>
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+<span style="font-family:'Share Tech Mono',monospace; font-size:14px; font-weight:bold; color:#C8D8F0;">{setup['pair']}</span>
 <span class="cyber-tag {setup['dir_cls']}">{setup['dir']}</span>
 </div>
-<div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:4px; font-family:sans-serif; font-size:10px;">
-<div><span style="color:#4B6A8A;">Entry</span><br><span style="color:#C8D8F0; font-weight:bold;">{setup['entry']}</span></div>
-<div><span style="color:#4B6A8A;">TP1</span><br><span style="color:#00FF9D; font-weight:bold;">{setup['tp1']}</span></div>
-<div><span style="color:#4B6A8A;">TP2</span><br><span style="color:{'#FF3D71' if setup['dir_cls']=='sell' else '#00FF9D'}; font-weight:bold;">{setup['tp2']}</span></div>
+<div style="display:grid; grid-template-columns: repeat(5, 1fr); gap:6px; font-family:sans-serif; font-size:10px; text-align: left;">
+<div><span style="color:#4B6A8A; font-size:9px;">SL</span><br><span style="color:#FF3D71; font-weight:bold;">{setup['sl']}</span></div>
+<div><span style="color:#4B6A8A; font-size:9px;">ENTRY</span><br><span style="color:#00FF9D; font-weight:bold;">{setup['entry']}</span></div>
+<div><span style="color:#4B6A8A; font-size:9px;">TP1</span><br><span style="color:#00FF9D; font-weight:bold;">{setup['tp1']}</span></div>
+<div><span style="color:#4B6A8A; font-size:9px;">TP2</span><br><span style="color:#00FF9D; font-weight:bold;">{setup['tp2']}</span></div>
+<div><span style="color:#4B6A8A; font-size:9px;">TP3</span><br><span style="color:#00FF9D; font-weight:bold;">{setup['tp3']}</span></div>
 </div>
 </div>"""
 
@@ -341,14 +383,3 @@ news_html = IFRAME_PANEL_CSS + """
 </div>
 """
 components.html(news_html, height=500)
-
-# ==============================================================================
-# FOOTER
-# ==============================================================================
-st.markdown("""
-<div style="text-align: center; padding: 15px; opacity: 0.4;">
-    <p style="font-family: 'Share Tech Mono', monospace; font-size: 9px; color: #4B6A8A; margin: 0; letter-spacing: 1px;">
-        [PROTOTYPE] AEROVULPIS V3.5 | DYNAMIHATCH SYSTEM INTEGRATION
-    </p>
-</div>
-""", unsafe_allow_html=True)
