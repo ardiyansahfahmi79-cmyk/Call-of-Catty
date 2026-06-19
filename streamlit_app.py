@@ -1,420 +1,174 @@
 # ==============================================================================
-# sentinel_page.py - Halaman AeroVulpis Sentinel (Terintegrasi Sempurna)
-# ==============================================================================
-# LOGIKA CORE BACKEND DIURUS PENUH, INTEGRASI TOP STORIES WIDGET DIPERBAIKI.
+# bloomberg_prototype.py - Eksperimen UI AeroVulpis ala Bloomberg Terminal
 # ==============================================================================
 
 import streamlit as st
 import streamlit.components.v1 as components
 
-# ==============================================================================
-# PAGE CONFIG (Untuk testing langsung / fallback)
-# ==============================================================================
-if __name__ == "__main__":
-    st.set_page_config(
-        page_title="Aerovulpis Pro Terminal",
-        page_icon="🔷",
-        layout="wide"
-    )
+# 1. PAGE CONFIG
+st.set_page_config(page_title="AeroVulpis BBG Theme", page_icon="📈", layout="wide")
 
-# ==============================================================================
-# INJEKSI GLOBAL PANEL IFRAME
-# ==============================================================================
-IFRAME_PANEL_CSS = """
+# 2. INJEKSI CSS KUSTOM (Tema Pure Black & Monospace)
+st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
-body { margin: 0; padding: 0; background: transparent; overflow: hidden; height: 100vh;}
-.cyber-panel-native {
-    background: #0C1425; border: 1px solid #162035; border-radius: 8px;
-    display: flex; flex-direction: column; height: 100%; box-sizing: border-box;
-}
-.panel-header {
-    background: rgba(0,0,0,0.28); border-bottom: 1px solid #162035;
-    padding: 6px 10px; display: flex; justify-content: space-between; align-items: center;
-}
-.panel-title { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: #00EEFF; letter-spacing: 2px; text-transform: uppercase; }
-.panel-badge { font-family: monospace; font-size: 9px; color: #4B6A8A; letter-spacing: 1px; text-transform: uppercase; }
-.panel-body { flex: 1; min-height: 0; overflow: hidden; }
-</style>
-"""
+    /* Import font mirip terminal */
+    @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&display=swap');
 
-def show():
-    """
-    Fungsi utama untuk menampilkan halaman Sentinel dengan tata letak matriks 3 kolom.
-    Mengekstrak fungsi inti dari global namespace (streamlit_app.py).
-    """
-
-    # --- INISIALISASI SESSION STATE UNTUK SENTINEL ---
-    if "sentinel_ai_output" not in st.session_state:
-        st.session_state.sentinel_ai_output = None
-    if "sentinel_chart_pair" not in st.session_state:
-        st.session_state.sentinel_chart_pair = "XAUUSD"
-    if "sentinel_analysis_mode" not in st.session_state:
-        st.session_state.sentinel_analysis_mode = "pair"
-
-    # ==========================================================================
-    # GLOBAL CSS - MEMAKSA HORIZONTAL SCROLL & FIX TAMPILAN MATRIKS
-    # ==========================================================================
-    st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
-
-    :root {
-        --bg: #070C18;
-        --panel: #0C1425;
-        --card: #111D35;
-        --cyan: #00EEFF;
-        --purple: #8B5CF6;
-        --green: #00FF9D;
-        --red: #FF3D71;
-        --text: #C8D8F0;
-        --text-muted: #4B6A8A;
-        --border: #162035;
-    }
+    /* Reset Streamlit default padding & background */
     .stApp {
-        background: #070C18 !important;
-        background-image: 
-            radial-gradient(ellipse at 10% 70%, rgba(139,92,246,0.07) 0%, transparent 45%),
-            radial-gradient(ellipse at 90% 15%, rgba(0,238,255,0.07) 0%, transparent 45%),
-            linear-gradient(rgba(0,238,255,0.022) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(0,238,255,0.022) 1px, transparent 1px);
-        background-size: auto, auto, 48px 48px, 48px 48px;
-        color: #C8D8F0 !important;
+        background-color: #000000 !important;
+        color: #FFFFFF !important;
+        font-family: 'Courier Prime', monospace !important;
     }
-    .block-container {
-        padding-top: 0 !important;
-        padding-bottom: 0 !important;
-        max-width: 100% !important;
-        padding-left: 0.3rem !important;
-        padding-right: 0.3rem !important;
-        overflow-x: hidden;
-    }
-
-    /* --- PAKSA 3 KOLOM UTAMA AGAR TETAP SEJAJAR HORIZONTAL --- */
-    div[data-testid="stHorizontalBlock"] {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        gap: 10px !important;
-        padding: 5px 0 0 0 !important;
-        overflow-x: auto !important;
-        overflow-y: hidden !important;
-        width: 100% !important;
-    }
-
-    div[data-testid="column"] {
-        flex: 0 0 auto !important;
-        display: flex !important;
-        flex-direction: column !important;
-    }
-
-    /* Penataan Lebar Layout 3 Kolom Utama */
-    div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-of-type(1) { width: 330px !important; min-width: 330px !important; }
-    div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-of-type(2) { width: 620px !important; min-width: 620px !important; }
-    div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-of-type(3) { width: 350px !important; min-width: 350px !important; }
-
-    /* Desain Kustom Scrollbar */
-    div[data-testid="stHorizontalBlock"]::-webkit-scrollbar { height: 8px !important; }
-    div[data-testid="stHorizontalBlock"]::-webkit-scrollbar-thumb { background: #00EEFF !important; border-radius: 4px !important; }
-    div[data-testid="stHorizontalBlock"]::-webkit-scrollbar-track { background: rgba(16,32,53,0.3) !important; }
-
-    /* Reset Form Input agar Responsif di Baris Baru */
-    .ai-input-container [data-testid="stHorizontalBlock"] {
-        width: 100% !important;
-        overflow: visible !important;
-        padding: 0 !important;
-    }
-    .ai-input-container [data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-of-type(1) { width: auto !important; min-width: 0 !important; flex: 5 1 0% !important; }
-    .ai-input-container [data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-of-type(2) { width: auto !important; min-width: 0 !important; flex: 1 1 0% !important; }
-
-    /* --- CYBER BUTTON --- */
-    div.stButton > button {
-        background: linear-gradient(135deg, rgba(0,238,255,0.15), rgba(139,92,246,0.15)) !important;
-        border: 1px solid #00EEFF !important;
-        border-radius: 4px !important;
-        color: #00EEFF !important;
-        font-family: 'Share Tech Mono', monospace !important;
-        font-size: 10px !important;
-        transition: all 0.3s ease !important;
-        text-transform: uppercase !important;
-        width: 100% !important;
-        height: 38px !important;
-    }
-
-    /* --- SELECTOR PAIR & RADIO BUTTONS --- */
-    div[data-testid="stSelectbox"] { padding: 0 !important; margin: 0 0 4px 0 !important; }
-    div[data-testid="stSelectbox"] label { display: none !important; }
-    div[data-testid="stSelectbox"] div[data-baseweb="select"] div {
-        font-size: 11px !important;
-        font-family: 'Share Tech Mono', monospace !important;
-        color: #00EEFF !important;
-        background: #0C1425 !important;
-        border: 1px solid rgba(0,238,255,0.2) !important;
-    }
-
-    div[role="radiogroup"] { flex-direction: row; gap: 15px; margin-bottom: 8px; }
-    div[role="radiogroup"] label { font-family: 'Share Tech Mono', monospace !important; font-size: 11px !important; color: #C8D8F0 !important; }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # --- HEADER ---
-    st.markdown("""
-    <div style="height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; background: rgba(7,12,24,0.97); border-bottom: 1px solid #162035;">
-        <div style="display: flex; align-items: center; gap: 6px;">
-            <div style="width: 24px; height: 24px; background: linear-gradient(135deg, #00EEFF, #8B5CF6); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-family: 'Share Tech Mono', monospace; font-size: 9px; font-weight: 700; color: #fff;">AV</div>
-            <div style="font-family: 'Share Tech Mono', monospace; font-size: 12px; color: #00EEFF; letter-spacing: 1px;">AEROVULPIS PRO</div>
-        </div>
-        <div style="display: flex; align-items: center; gap: 6px;">
-            <div style="font-family: 'Share Tech Mono', monospace; font-size: 7px; color: #00EEFF; background: rgba(0,238,255,0.10); border: 1px solid rgba(0,238,255,0.22); padding: 2px 6px; border-radius: 3px; letter-spacing: 1px;">LONDON/NY</div>
-        </div>
-    </div>
-    <div style="text-align: center; padding: 6px 0; border-bottom: 1px solid rgba(0,238,255,0.15); margin-bottom: 4px;">
-        <span style="font-family: 'Share Tech Mono', monospace; font-size: 14px; color: #00EEFF; letter-spacing: 4px; text-shadow: 0 0 20px rgba(0,238,255,0.3);">[ AEROVULPIS SENTINEL NEXUS ]</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # --- TICKER TAPE ---
-    ticker_html = """
-    <div class="tradingview-widget-container" style="height: 55px; overflow: hidden;">
-        <div class="tradingview-widget-container__widget"></div>
-        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
-        {
-        "symbols": [{"proName": "FOREXCOM:SPXUSD", "title": "S&P 500"}, {"proName": "FX_IDC:EURUSD", "title": "EUR/USD"}, {"proName": "BITSTAMP:BTCUSD", "title": "Bitcoin"}, {"proName": "OANDA:XAUUSD", "title": "XAUUSD"}],
-        "colorTheme": "dark", "isTransparent": true, "locale": "id", "width": "100%", "height": 55
-        }
-        </script>
-    </div>
-    """
-    components.html(ticker_html, height=55)
-
-    # ==========================================================================
-    # 3 KOLOM UTAMA (MATRIX LAYOUT)
-    # ==========================================================================
-    col1, col2, col3 = st.columns(3)
-
-    # --- KOLOM 1: ECONOMIC CALENDAR ---
-    with col1:
-        eco_html = IFRAME_PANEL_CSS + """
-        <div class="cyber-panel-native">
-            <div class="panel-header">
-                <span class="panel-title">Economic Calendar</span>
-                <span class="panel-badge">Tradays</span>
-            </div>
-            <div class="panel-body">
-                <iframe src="https://www.tradays.com/en/economic-calendar/widget?mode=2&colorTheme=dark" style="width:100%; height:100%; border:none; background:#0C1425;" frameborder="0" scrolling="auto"></iframe>
-            </div>
-        </div>
-        """
-        components.html(eco_html, height=620)
-
-    # --- KOLOM 2: TRADINGVIEW CHART ---
-    with col2:
-        pair_options = ["XAUUSD", "BTCUSD", "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USOIL"]
-        selected_pair = st.selectbox("", pair_options, index=pair_options.index(st.session_state.sentinel_chart_pair) if st.session_state.sentinel_chart_pair in pair_options else 0, key="sentinel_chart_pair_select", label_visibility="collapsed")
-        if selected_pair != st.session_state.sentinel_chart_pair:
-            st.session_state.sentinel_chart_pair = selected_pair
-
-        symbol_map = {"XAUUSD": "OANDA:XAUUSD", "BTCUSD": "BITSTAMP:BTCUSD", "EURUSD": "FX_IDC:EURUSD", "GBPUSD": "FX_IDC:GBPUSD", "USDJPY": "FX_IDC:USDJPY", "AUDUSD": "FX_IDC:AUDUSD", "USOIL": "TVC:USOIL"}
-        tv_symbol = symbol_map.get(selected_pair, "OANDA:XAUUSD")
-
-        chart_html = IFRAME_PANEL_CSS + f"""
-        <div class="cyber-panel-native">
-            <div class="panel-header">
-                <span class="panel-title">{selected_pair} Premium Chart</span>
-                <span class="panel-badge">Live</span>
-            </div>
-            <div class="panel-body" id="tv_chart_main"></div>
-            <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-            <script type="text/javascript">
-            new TradingView.widget({{
-                "autosize": true, "symbol": "{tv_symbol}", "interval": "60", "timezone": "Asia/Jakarta",
-                "theme": "dark", "style": "2", "locale": "id", "enable_publishing": false,
-                "hide_top_toolbar": false, "hide_legend": false, "save_image": false,
-                "container_id": "tv_chart_main", "studies": ["RSI@tv-basicstudies"],
-                "backgroundColor": "rgba(12,20,37,1)", "gridColor": "rgba(0,238,255,0.05)"
-            }});
-            </script>
-        </div>
-        """
-        components.html(chart_html, height=584)
-
-    # --- KOLOM 3: CURRENCY HEATMAP ---
-    with col3:
-        heatmap_html = IFRAME_PANEL_CSS + """
-        <div class="cyber-panel-native">
-            <div class="panel-header">
-                <span class="panel-title">Currency Heatmap</span>
-                <span class="panel-badge">Live</span>
-            </div>
-            <div class="panel-body">
-                <div class="tradingview-widget-container" style="height: 100%;">
-                    <div class="tradingview-widget-container__widget" style="height: 100%;"></div>
-                    <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-forex-heat-map.js" async>
-                    {
-                    "colorTheme": "dark", "isTransparent": true, "locale": "id",
-                    "currencies": ["EUR","USD","JPY","GBP","CHF","AUD","CAD","NZD"],
-                    "width": "100%", "height": "100%"
-                    }
-                    </script>
-                </div>
-            </div>
-        </div>
-        """
-        components.html(heatmap_html, height=620)
-
-    # ==========================================================================
-    # AI SIGNAL FEED & ANALYSIS TERMINAL (LOGIKA BACKEND UTUH ASLI)
-    # ==========================================================================
-    st.markdown("""
-    <div style="background: #0C1425; border: 1px solid #162035; border-radius: 8px; margin-top: 20px; padding: 0 0 10px 0;">
-        <div style="background: rgba(0,0,0,0.28); border-bottom: 1px solid #162035; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; border-radius: 8px 8px 0 0;">
-            <span style="font-family: 'Share Tech Mono', monospace; font-size: 12px; color: #00EEFF; letter-spacing: 2px; text-transform: uppercase;">AI Signal Feed & Analysis Terminal</span>
-            <span style="font-family: monospace; font-size: 9px; color: #4B6A8A; letter-spacing: 1px;">CORE ENGINE V4.0</span>
-        </div>
-        <div style="padding: 12px 12px 2px 12px;">
-            <div style="font-family:'Share Tech Mono',monospace; font-size:10px; color:#4B6A8A; background:rgba(0,238,255,0.05); border-left:2px solid #00EEFF; padding:8px; border-radius:3px; margin-bottom:10px;">
-                [SYSTEM GENUINE] Pilih mode analisis, lalu ketik market pair atau topik fundamental untuk mengekstrak data.
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Radio Pilihan Tipe Analisis
-    analysis_type = st.radio(
-        "Pilih Mode AI:",
-        ["Analisis Pair (Teknikal/SMC)", "Analisis News (Fundamental)"],
-        horizontal=True,
-        label_visibility="collapsed",
-        key="sentinel_analysis_type"
-    )
-    st.session_state.sentinel_analysis_mode = "pair" if "Pair" in analysis_type else "news"
-
-    # Input dan tombol dibungkus container kustom agar responsif kembali
-    st.markdown('<div class="ai-input-container">', unsafe_allow_html=True)
-    col_input, col_btn = st.columns([5, 1], gap="small")
-    with col_input:
-        user_input = st.text_input("", placeholder="Ketik di sini (contoh: XAUUSD atau Berita NFP)...", key="sentinel_ai_input", label_visibility="collapsed")
-    with col_btn:
-        send_clicked = st.button("▶ RUN ANALYSIS", key="sentinel_ai_send", use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # --- LOGIKA CORE BACKEND AI (100% DIURUS ASLI) ---
-    if send_clicked and user_input:
-        user_limits = LIMITS.get(st.session_state.user_tier, LIMITS["free"])
-        if user_limits["sentinel_per_day"] == 0:
-            st.error("SENTINEL PRO ACCESS RESTRICTED | UPGRADE TIER")
-        elif st.session_state.daily_sentinel_count >= user_limits["sentinel_per_day"]:
-            st.error(f"LIMIT REACHED [{st.session_state.daily_sentinel_count}/{user_limits['sentinel_per_day']}] | UPGRADE TIER")
-        else:
-            pair_for_analysis = st.session_state.sentinel_chart_pair
-            if st.session_state.sentinel_analysis_mode == "pair":
-                ticker_map = {"XAUUSD": "GC=F", "BTCUSD": "BTC-USD", "EURUSD": "EURUSD=X", "GBPUSD": "GBPUSD=X", "USDJPY": "USDJPY=X", "AUDUSD": "AUDUSD=X", "USOIL": "CL=F"}
-                ticker = ticker_map.get(pair_for_analysis, "GC=F")
-                market = get_market_data_with_cache(ticker, force_refresh=False)
-                if market:
-                    df = get_historical_data(ticker, period="1mo", interval="1h")
-                    if not df.empty:
-                        df = add_technical_indicators(df)
-                        score, signal, reasons, bull, bear, neut = get_weighted_signal(df)
-                        analysis = get_sentinel_analysis(pair_for_analysis, market, df, signal, reasons)
-                        st.session_state.sentinel_ai_output = analysis
-                    else:
-                        st.error("Data historis tidak tersedia untuk pair ini.")
-                else:
-                    st.error("Gagal mengambil harga untuk pair ini.")
-            else:
-                analysis = get_news_analysis(pair_for_analysis, user_input)
-                st.session_state.sentinel_ai_output = analysis
-
-    # Tampilkan output pemicu analisis dinamis asli
-    if st.session_state.get("sentinel_ai_output"):
-        st.markdown("---")
-        st.markdown("### [OUTPUT ANALYSIS]")
-        st.markdown(st.session_state.sentinel_ai_output, unsafe_allow_html=True)
-
-    # ==========================================================================
-    # ACTIVE TRADE SETUPS (LOGIKA DINAMIS ASLI DARI DATABASE/MAIN)
-    # ==========================================================================
-    from streamlit_app import get_active_trade_setups   
-    setups = get_active_trade_setups()
-
-    if setups:
-        bottom_html = """<style>
-        .cyber-tag { font-family: 'Share Tech Mono', monospace; font-size: 8px; letter-spacing: 1px; padding: 2px 6px; border-radius: 3px; display: inline-block; }
-        .cyber-tag.buy { background: rgba(0,255,157,0.12); color: #00FF9D; border: 1px solid rgba(0,255,157,0.25); }
-        .cyber-tag.sell { background: rgba(255,61,113,0.12); color: #FF3D71; border: 1px solid rgba(255,61,113,0.25); }
-        .grid-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 10px; padding: 10px; }
-        .setup-card { background: #111D35; border: 1px solid #162035; border-radius: 6px; padding: 12px; position: relative; }
-        .tp-status { font-size: 10px; margin-left: 4px; }
-        .tp-hit { color: #00FF9D; }
-        .tp-miss { color: #FF3D71; }
-        .tp-pending { color: #FFD700; }
-        </style>
-        <div style="background: #0C1425; border: 1px solid #162035; border-radius: 8px; margin-top: 15px;">
-        <div style="background: rgba(0,0,0,0.28); border-bottom: 1px solid #162035; padding: 8px 12px;">
-        <span style="font-family: 'Share Tech Mono', monospace; font-size: 12px; color: #00EEFF; letter-spacing: 2px; text-transform: uppercase;">Active Trade Setups</span>
-        </div>
-        <div class="grid-container">"""
-
-        for s in setups:
-            dir_cls = "buy" if s["dir"] == "BUY" else "sell"
-            gradient = "#00FF9D" if s["dir"] == "BUY" else "#FF3D71"
-            tp1_status = "✓" if s["tp1_hit"] else "✗" if s["sl_hit"] else "~"
-            tp2_status = "✓" if s["tp2_hit"] else "✗" if s["sl_hit"] else "~"
-            tp3_status = "✓" if s["tp3_hit"] else "✗" if s["sl_hit"] else "~"
-            tp1_class = "tp-hit" if s["tp1_hit"] else "tp-miss" if s["sl_hit"] else "tp-pending"
-            tp2_class = "tp-hit" if s["tp2_hit"] else "tp-miss" if s["sl_hit"] else "tp-pending"
-            tp3_class = "tp-hit" if s["tp3_hit"] else "tp-miss" if s["sl_hit"] else "tp-pending"
-
-            bottom_html += f"""
-            <div class="setup-card">
-                <div style="position:absolute; top:0; left:0; right:0; height:2px; background:{gradient}; border-radius: 6px 6px 0 0;"></div>
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <span style="font-family:'Share Tech Mono',monospace; font-size:14px; font-weight:bold; color:#C8D8F0;">{s['pair']}</span>
-                    <span class="cyber-tag {dir_cls}">{s['dir']}</span>
-                </div>
-                <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap:6px; font-family:sans-serif; font-size:10px; text-align: left;">
-                    <div><span style="color:#4B6A8A; font-size:9px;">SL</span><br><span style="color:#FF3D71; font-weight:bold;">{format_price_display(s['sl'], s['pair'])}</span></div>
-                    <div><span style="color:#4B6A8A; font-size:9px;">ENTRY</span><br><span style="color:#00FF9D; font-weight:bold;">{format_price_display(s['entry'], s['pair'])}</span></div>
-                    <div><span style="color:#4B6A8A; font-size:9px;">TP1</span><br><span style="color:#00FF9D; font-weight:bold;">{format_price_display(s['tp1'], s['pair'])}</span> <span class="tp-status {tp1_class}">{tp1_status}</span></div>
-                    <div><span style="color:#4B6A8A; font-size:9px;">TP2</span><br><span style="color:#00FF9D; font-weight:bold;">{format_price_display(s['tp2'], s['pair'])}</span> <span class="tp-status {tp2_class}">{tp2_status}</span></div>
-                    <div><span style="color:#4B6A8A; font-size:9px;">TP3</span><br><span style="color:#00FF9D; font-weight:bold;">{format_price_display(s['tp3'], s['pair'])}</span> <span class="tp-status {tp3_class}">{tp3_status}</span></div>
-                </div>
-            </div>"""
-
-        bottom_html += "</div></div>"
-        st.markdown(bottom_html, unsafe_allow_html=True)
-    else:
-        st.info("Belum ada sinyal aktif. Tunggu update berikutnya.")
-
-    # ==========================================================================
-    # SEKSYEN ABSOLUT BAWAH: TRADINGVIEW WIDGET (TOP STORIES) - INTEGRASI EMED KODE 2
-    # ==========================================================================
-    # Memberikan space di luar area komponen iframe agar layout rapi dan tidak memotong tinggi widget
-    st.markdown('<div style="margin-top: 20px;"></div>', unsafe_allow_html=True)
     
-    news_html = IFRAME_PANEL_CSS + """
-    <div class="cyber-panel-native">
-        <div class="panel-header">
-            <span class="panel-title">Top Stories</span>
-            <span class="panel-badge">TradingView</span>
-        </div>
-        <div class="panel-body">
-            <div class="tradingview-widget-container" style="width:100%; height:100%;">
-                <div class="tradingview-widget-container__widget" style="height:100%;"></div>
-                <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-timeline.js" async>
-                {
-                "feedMode": "all_symbols", "colorTheme": "dark", "isTransparent": true,
-                "displayMode": "regular", "width": "100%", "height": "100%", "locale": "id"
-                }
-                </script>
-            </div>
+    .block-container {
+        padding-top: 0rem !important;
+        padding-bottom: 0rem !important;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+        max-width: 100% !important;
+    }
+
+    /* Warna khas Bloomberg */
+    .bbg-amber { color: #FFB000; }
+    .bbg-blue { color: #00A1FF; }
+    .bbg-green { color: #00FF00; }
+    .bbg-red { color: #FF0000; }
+    .bbg-bg-green { background-color: #00FF00; color: #000000; font-weight: bold; }
+    .bbg-bg-amber { background-color: #FFB000; color: #000000; font-weight: bold; }
+    .bbg-bg-red { background-color: #AA0000; color: #FFFFFF; font-weight: bold; }
+
+    /* Top Command Menu */
+    .cmd-menu {
+        display: flex; gap: 2px; padding: 2px 0; border-bottom: 1px solid #333; margin-bottom: 4px;
+    }
+    .cmd-btn {
+        background-color: #00FF00; color: #000000; padding: 1px 6px; font-size: 11px; font-weight: bold; text-transform: uppercase; cursor: pointer;
+    }
+
+    /* Ticker Header */
+    .ticker-header {
+        display: flex; align-items: center; gap: 15px; font-size: 14px; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 4px;
+    }
+    .ticker-name { background-color: #FFB000; color: #000000; padding: 2px 8px; font-weight: bold; }
+    
+    /* Panel Data Kiri */
+    .data-panel {
+        font-size: 12px; line-height: 1.2;
+    }
+    .data-row {
+        display: flex; justify-content: space-between; border-bottom: 1px dotted #333; padding: 2px 0;
+    }
+    .data-label { color: #FFFFFF; }
+    .data-value-highlight { background-color: #FFB000; color: #000000; padding: 0 4px; min-width: 80px; text-align: right; }
+
+    /* News Feed Bawah */
+    .news-feed {
+        background-color: #000044; color: #FFB000; padding: 4px; font-size: 12px; margin-top: 10px; border-top: 2px solid #00A1FF; height: 100px; overflow-y: hidden;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# 3. TOP COMMAND MENU (Meniru deretan tombol hijau di atas)
+st.markdown("""
+<div class="cmd-menu">
+    <div class="cmd-btn" style="background-color: #FF00FF; color: white;">CANC</div>
+    <div class="cmd-btn">HELP</div>
+    <div class="cmd-btn">SEARC</div>
+    <div class="cmd-btn">NEWS</div>
+    <div class="cmd-btn">QUOTE</div>
+    <div class="cmd-btn">MSG</div>
+    <div class="cmd-btn">MENU</div>
+    <div class="cmd-btn">PRINT</div>
+</div>
+""", unsafe_allow_html=True)
+
+# 4. TICKER HEADER
+st.markdown("""
+<div class="ticker-header">
+    <div class="ticker-name">TSLA US Equity</div>
+    <div>$ <span class="bbg-amber" style="font-size: 18px;">315.13</span></div>
+    <div class="bbg-green">+3.89</div>
+    <div><span class="bbg-amber">Vol</span> 3,468,458</div>
+    <div><span class="bbg-amber">O</span> 314.60K</div>
+    <div><span class="bbg-amber">H</span> 316.98Q</div>
+    <div><span class="bbg-amber">L</span> 311.26K</div>
+    <div class="bbg-bg-red" style="padding: 2px 8px; margin-left: auto;">Bloomberg Default Risk</div>
+</div>
+""", unsafe_allow_html=True)
+
+# 5. MAIN LAYOUT (Kiri: Data, Kanan: Chart)
+col_left, col_right = st.columns([1, 2.2])
+
+with col_left:
+    # Panel Data Fundamental (Hardcoded HTML untuk prototipe visual)
+    st.markdown("""
+    <div class="data-panel">
+        <div style="color: #FFB000; margin-bottom: 5px;">1-Yr Default Risk</div>
+        <div style="font-size: 24px; margin-bottom: 10px;">IG9 <span style="font-size: 14px; float: right;">0.2796%</span></div>
+        
+        <div style="color: #00A1FF; margin-top: 15px; margin-bottom: 5px;">Model Inputs (USD) <input type="checkbox" checked> Override 2026:Q2</div>
+        
+        <div class="data-row"><span class="data-label">6) Share Price</span><span class="data-value-highlight">315.13</span></div>
+        <div class="data-row"><span class="data-label">7) Market Cap</span><span class="data-value-highlight">52,963.08 MM</span></div>
+        <div class="data-row"><span class="data-label">8) Price Vol (1-Yr)</span><span class="data-value-highlight">35.65 %</span></div>
+        <div class="data-row"><span class="data-label">9) Short-Term Debt</span><span class="data-value-highlight">324.22 MM</span></div>
+        <div class="data-row"><span class="data-label">10) Long-Term Debt</span><span class="data-value-highlight">10,719.38 MM</span></div>
+        <div class="data-row"><span class="data-label">11) Total Debt</span><span style="background-color: #888; color: black; padding: 0 4px;">11,043.6 MM</span></div>
+        <div class="data-row"><span class="data-label">12) Interest Expn (T12M)</span><span class="data-value-highlight">430.9 MM</span></div>
+        <div class="data-row"><span class="data-label">13) Adj CFO (T12M)</span><span class="data-value-highlight">-459.96 MM</span></div>
+        
+        <div class="bbg-bg-amber" style="margin-top: 15px; padding: 2px;">20) Sector Comparison | AUTO &raquo;</div>
+        <div style="background-color: #FFB000; color: #000; padding: 2px; font-size: 10px;">United States of America - Consumer Discretionary: Automobiles</div>
+        
+        <div class="data-row" style="border:none; margin-top: 5px;">
+            <span class="data-label">Debt/Equity (%)</span>
+            <span class="bbg-amber">115.9</span>
+            <span class="data-label" style="font-size: 8px;">138.7 [---|---] 448.1</span>
         </div>
     </div>
-    """
-    components.html(news_html, height=500)
+    """, unsafe_allow_html=True)
 
-# Jika file dijalankan langsung (testing)
-if __name__ == "__main__":
-    st.warning("File ini dirancang untuk di-import dari streamlit_app.py. Fungsi-fungsi pendukung belum tersedia saat dijalankan langsung.")
-    show()
+with col_right:
+    # Menggunakan Advanced Chart TradingView dengan tema sangat gelap
+    chart_html = """
+    <div class="tradingview-widget-container" style="height: 400px; width: 100%;">
+      <div id="tv_chart_bbg" style="height: 100%;"></div>
+      <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+      <script type="text/javascript">
+      new TradingView.widget(
+      {
+      "autosize": true,
+      "symbol": "NASDAQ:TSLA",
+      "interval": "D",
+      "timezone": "Asia/Jakarta",
+      "theme": "dark",
+      "style": "2", /* Style 2 adalah Line Chart, mirip gambar BBG */
+      "locale": "id",
+      "enable_publishing": false,
+      "backgroundColor": "#000000", /* Pure Black */
+      "gridColor": "#111111",
+      "hide_top_toolbar": true,
+      "hide_legend": false,
+      "save_image": false,
+      "container_id": "tv_chart_bbg",
+      "studies": [
+        "Volume@tv-basicstudies"
+      ]
+    }
+      );
+      </script>
+    </div>
+    """
+    components.html(chart_html, height=400)
+
+# 6. NEWS FEED BOTTOM PANEL
+st.markdown("""
+<div class="news-feed">
+    <div>469 AGN 21:00 NSW prevents pregnant women being sacked</div>
+    <div>468 BFW 21:00 Singapore Completes S$1.1B Bus Upgrade Program: Straits Times</div>
+    <div>467 TWT 21:00 Nikkei Asian Review: Future of electric cars is at the bottom of a...</div>
+    <div>466 WPT 21:00 Chip on Baker Mayfield's Shoulder Led Him to Oklahoma, And Now He is...</div>
+    <div style="color: #00FF00; margin-top: 5px; font-weight: bold; background-color: #003300; padding: 2px;">Hard-to-explain topics, explained simply. Bloomberg QuickTake</div>
+</div>
+""", unsafe_allow_html=True)
