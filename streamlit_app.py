@@ -84,51 +84,62 @@ div[data-testid="stHorizontalBlock"] { gap:8px !important; }
     background:linear-gradient(90deg,transparent,rgba(0,225,255,0.18),transparent);
 }
 
-/* ── RADIO → neon cyan pill buttons, NO text input possible ── */
-[data-testid="stRadio"] label { display:none !important; }
-[data-testid="stRadio"] > div {
-    display:flex !important;
-    flex-direction:row !important;
-    flex-wrap:wrap !important;
-    gap:5px !important;
-}
-[data-testid="stRadio"] > div > label {
-    display:flex !important;
-    align-items:center !important;
+/* ── SELECTBOX → neon cyan dropdown, tidak bisa diketik ── */
+[data-testid="stSelectbox"] label { display:none !important; }
+[data-testid="stSelectbox"] { margin-bottom:0 !important; }
+[data-testid="stSelectbox"] > div > div {
     background:#09111E !important;
-    border:1px solid #1A3A5A !important;
+    border:1px solid rgba(0,225,255,0.3) !important;
     border-radius:5px !important;
-    padding:6px 13px !important;
-    cursor:pointer !important;
+    color:#00E1FF !important;
     font-family:'Share Tech Mono',monospace !important;
-    font-size:10px !important;
+    font-size:11px !important;
     letter-spacing:1px !important;
-    color:#5A7898 !important;
-    transition:all 0.15s ease !important;
-    white-space:nowrap !important;
+    min-height:36px !important;
+    box-shadow:0 0 8px rgba(0,225,255,0.12) !important;
+    cursor:pointer !important;
 }
-[data-testid="stRadio"] > div > label:hover {
-    border-color:rgba(0,225,255,0.6) !important;
-    color:#00E1FF !important;
-    background:rgba(0,225,255,0.06) !important;
-}
-/* Hide the actual radio circle */
-[data-testid="stRadio"] > div > label > div:first-child {
-    display:none !important;
-}
-/* Active/selected pill */
-[data-testid="stRadio"] > div > label[data-checked="true"],
-[data-testid="stRadio"] > div > label:has(input:checked) {
+[data-testid="stSelectbox"] > div > div:hover {
     border-color:#00E1FF !important;
-    color:#00E1FF !important;
-    background:rgba(0,225,255,0.10) !important;
-    box-shadow:0 0 10px rgba(0,225,255,0.25),inset 0 0 8px rgba(0,225,255,0.05) !important;
+    box-shadow:0 0 14px rgba(0,225,255,0.28) !important;
 }
-[data-testid="stRadio"] input[type="radio"] {
-    display:none !important;
+/* Arrow */
+[data-testid="stSelectbox"] svg { fill:#00E1FF !important; }
+/* Input field di dalam selectbox — pointer only, no keyboard */
+[data-baseweb="select"] input {
+    pointer-events:none !important;
+    caret-color:transparent !important;
+    cursor:pointer !important;
+    user-select:none !important;
+}
+/* Value text */
+[data-baseweb="select"] [data-testid="stMarkdownContainer"] p,
+[data-baseweb="select"] span {
+    color:#00E1FF !important;
+    font-family:'Share Tech Mono',monospace !important;
+    letter-spacing:1px !important;
+}
+/* Dropdown menu */
+[data-baseweb="popover"] [data-baseweb="menu"] {
+    background:#09111E !important;
+    border:1px solid rgba(0,225,255,0.25) !important;
+    border-radius:6px !important;
+}
+[data-baseweb="option"] {
+    background:#09111E !important;
+    color:#8BA0C0 !important;
+    font-family:'Share Tech Mono',monospace !important;
+    font-size:11px !important;
+    border-bottom:1px solid #0E1422 !important;
+    cursor:pointer !important;
+}
+[data-baseweb="option"]:hover,
+[data-baseweb="option"][aria-selected="true"] {
+    background:rgba(0,225,255,0.10) !important;
+    color:#00E1FF !important;
 }
 
-/* ── SELECTOR LABEL above radio ── */
+/* ── SELECTOR LABEL ── */
 .av-sel-label {
     font-size:8px; letter-spacing:1.5px; color:#2A4060;
     margin-bottom:3px; font-family:'Share Tech Mono',monospace;
@@ -593,14 +604,13 @@ def tv_top_stories() -> str:
     }, 460)
 
 # ==============================================================================
-# HELPER: radio horizontal (tidak bisa diketik, murni klik)
+# HELPER: selectbox neon cyan (tidak bisa diketik via CSS)
 # ==============================================================================
-def av_radio(label_text: str, key: str, options: list, current: str) -> str:
+def av_select(label_text: str, key: str, options: list, current: str) -> str:
     idx = options.index(current) if current in options else 0
     if label_text:
         st.markdown(f'<div class="av-sel-label">{label_text}</div>', unsafe_allow_html=True)
-    chosen = st.radio("_", options, index=idx, key=key,
-                      label_visibility="collapsed", horizontal=True)
+    chosen = st.selectbox("_", options, index=idx, key=key, label_visibility="collapsed")
     return chosen
 
 # ==============================================================================
@@ -627,10 +637,9 @@ st.markdown('<div class="av-sec">// INSTRUMENT · PAIR · TIMEFRAME</div>', unsa
 sc1, sc2, sc3, sc4 = st.columns([1.4, 1.4, 1.1, 1.1])
 
 with sc1:
-    instr_class = av_radio("INSTRUMENT", "sel_instr", list(INSTRUMENTS.keys()), st.session_state.instr_class)
+    instr_class = av_select("INSTRUMENT", "sel_instr", list(INSTRUMENTS.keys()), st.session_state.instr_class)
     if instr_class != st.session_state.instr_class:
         st.session_state.instr_class = instr_class
-        # reset pair to first of new class
         st.session_state.pair_label = INSTRUMENTS[instr_class][0][0]
         st.rerun()
 
@@ -638,13 +647,13 @@ pairs       = INSTRUMENTS[st.session_state.instr_class]
 pair_labels = [p[0] for p in pairs]
 
 with sc2:
-    pair_label = av_radio("PAIR", "sel_pair", pair_labels, st.session_state.pair_label)
+    pair_label = av_select("PAIR", "sel_pair", pair_labels, st.session_state.pair_label)
     if pair_label != st.session_state.pair_label:
         st.session_state.pair_label = pair_label
         st.rerun()
 
 with sc3:
-    timeframe = av_radio("TIMEFRAME", "sel_tf", TIMEFRAMES, st.session_state.timeframe)
+    timeframe = av_select("TIMEFRAME", "sel_tf", TIMEFRAMES, st.session_state.timeframe)
     if timeframe != st.session_state.timeframe:
         st.session_state.timeframe = timeframe
         st.rerun()
@@ -724,7 +733,7 @@ with ch_col:
     cs_vals   = {s[0]: s[1] for s in CHART_STYLES}
     cur_cs_lbl = next((s[0] for s in CHART_STYLES if s[1]==st.session_state.chart_style), "LINE")
 
-    chart_style_lbl = av_radio("CHART TYPE", "sel_cs", cs_labels, cur_cs_lbl)
+    chart_style_lbl = av_select("CHART TYPE", "sel_cs", cs_labels, cur_cs_lbl)
     chosen_style    = cs_vals[chart_style_lbl]
     if chosen_style != st.session_state.chart_style:
         st.session_state.chart_style = chosen_style
@@ -757,7 +766,7 @@ for col, state_key, sel_key, default in [
 ]:
     with col:
         st.markdown('<div class="av-panel">', unsafe_allow_html=True)
-        chosen = av_radio("", sel_key, mini_labels, st.session_state.get(state_key, default))
+        chosen = av_select("", sel_key, mini_labels, st.session_state.get(state_key, default))
         if chosen != st.session_state.get(state_key):
             st.session_state[state_key] = chosen
             st.rerun()
