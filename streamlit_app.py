@@ -79,7 +79,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
     padding:0 !important;
 }
 div[data-testid="stHorizontalBlock"] {
-    gap:0px !important; /* Diubah menjadi 0px agar saling berdekatan */
+    gap:0px !important; 
 }
 
 /* ── BRAND compact — rapat ke ticker ── */
@@ -133,7 +133,7 @@ iframe {
     margin:0 !important;
 }
 
-/* ── SECTION LABEL ── */
+/* ── SECTION LABEL (CSS dipertahankan tapi penggunaannya dihapus di Python) ── */
 .av-sec {
     font-size:7px;
     letter-spacing:2px;
@@ -143,7 +143,7 @@ iframe {
     margin:0;
 }
 
-/* ── PANEL ── */
+/* ── PANEL (Global) ── */
 .av-panel {
     background:#09111E;
     border:1px solid #111827;
@@ -161,7 +161,7 @@ iframe {
     background:linear-gradient(90deg,transparent,rgba(0,225,255,0.18),transparent);
 }
 
-/* ── SELECTBOX → neon cyan dropdown, tidak bisa diketik ── */
+/* ── SELECTBOX → neon cyan dropdown ── */
 [data-testid="stSelectbox"] label {
     display:none !important;
 }
@@ -188,7 +188,7 @@ iframe {
 [data-testid="stSelectbox"] svg {
     fill:#00E1FF !important;
 }
-/* Input field di dalam selectbox — pointer only, no keyboard */
+/* Input field di dalam selectbox */
 [data-baseweb="select"] input {
     pointer-events:none !important;
     caret-color:transparent !important;
@@ -289,6 +289,7 @@ iframe {
     padding:12px;
     position:relative;
     overflow:hidden;
+    margin-bottom:8px;
 }
 .av-trade-card::before {
     content:"";
@@ -414,7 +415,6 @@ TV_TA_INT = {"15m":"15m","30m":"30m","1h":"1h","4h":"4h","1D":"1D"}
 TD_INTERVAL = {"15m":"15min","30m":"30min","1h":"1h","4h":"4h","1D":"1day"}
 CHART_STYLES = [("LINE","3"),("CANDLES","1"),("HEIKIN","8"),("AREA","9"),("BARS","0")]
 
-# Mini chart options — dipisah per instrumen class
 MINI_OPTIONS = {
     "FOREX": [
         ("EURUSD","OANDA:EURUSD"),
@@ -484,11 +484,10 @@ for _k, _v in _DEFAULTS.items():
         st.session_state[_k] = _v
 
 # ==============================================================================
-# MCT ENGINE — Real data from Twelve Data, RSI+MACD+Volume, Bloomberg-grade
+# MCT ENGINE
 # ==============================================================================
 @st.cache_data(ttl=60, show_spinner=False)
 def fetch_twelvedata(symbol: str, interval: str, outputsize: int = 300) -> pd.DataFrame:
-    """Fetch OHLCV from Twelve Data. Keyed by symbol+interval so each TF gets fresh data."""
     try:
         api_key = st.secrets["TWELVE_DATA_API_KEY"]
     except Exception:
@@ -516,7 +515,6 @@ def fetch_twelvedata(symbol: str, interval: str, outputsize: int = 300) -> pd.Da
         return pd.DataFrame()
 
 def _make_dummy_df(seed_str: str, n: int = 300) -> pd.DataFrame:
-    """Deterministic OHLCV — differs per pair+timeframe combination."""
     rng = np.random.default_rng(abs(hash(seed_str)) % 2**32)
     price = np.cumprod(1 + rng.normal(0.0002, 0.004, n))
     price = price / price[0] * 1.15
@@ -531,14 +529,6 @@ def _make_dummy_df(seed_str: str, n: int = 300) -> pd.DataFrame:
     }, index=pd.date_range("2024-01-01", periods=n, freq=freq))
 
 def calculate_mct(df: pd.DataFrame) -> dict:
-    """
-    Bloomberg-class MCT oscillator: 
-    RSI(14) z-score → weight 40%
-    MACD histogram → weight 40%
-    Volume pressure → weight 20%
-    Composite scaled -100..+100 then Savitzky-Golay smoothed (w=25, p=3).
-    Returns smoothed array + per-factor last values for Bloomberg sub-panel.
-    """
     lookback = 63
     
     def z_norm(s: pd.Series) -> pd.Series:
@@ -549,28 +539,23 @@ def calculate_mct(df: pd.DataFrame) -> dict:
     close = df["close"]
     volume = df.get("volume", pd.Series(np.ones(len(df)), index=df.index))
 
-    # Factor 1 — RSI(14) centered
     rsi_raw = ta.rsi(close, length=14).fillna(50) - 50.0
     z_rsi = z_norm(rsi_raw)
     rsi_score = float(np.clip(z_rsi.iloc[-1] * 100, -100, 100))
 
-    # Factor 2 — MACD Histogram(12,26,9)
     macd_df = ta.macd(close, fast=12, slow=26, signal=9)
     macd_hist = macd_df["MACDh_12_26_9"].fillna(0)
     z_macd = z_norm(macd_hist)
     macd_score = float(np.clip(z_macd.iloc[-1] * 100, -100, 100))
 
-    # Factor 3 — Volume pressure vs 20-bar MA
     vol_ma = volume.rolling(20, min_periods=5).mean().replace(0, np.nan)
     vol_mom = ((volume / vol_ma) - 1.0).fillna(0).clip(-2, 2)
     z_vol = z_norm(vol_mom)
     vol_score = float(np.clip(z_vol.iloc[-1] * 100, -100, 100))
 
-    # Composite
     comp = (0.40 * z_rsi) + (0.40 * z_macd) + (0.20 * z_vol)
     raw = np.clip((comp * 100).fillna(0).to_numpy(), -100, 100)
     
-    # Savitzky-Golay smoothing
     n = len(raw)
     wl = min(25, n)
     if wl % 2 == 0: wl -= 1
@@ -621,7 +606,6 @@ def render_mct(result: dict) -> go.Figure:
         mode="lines", showlegend=False, hovertemplate="MCT: %{y:.2f}<extra></extra>",
     ))
     
-    # Glow ring + dot
     fig.add_trace(go.Scatter(x=[x[-1]], y=[current], mode="markers", 
                              marker=dict(color=dot_c, size=13, opacity=0.2, line=dict(width=0)), 
                              showlegend=False, hoverinfo="skip"))
@@ -679,17 +663,37 @@ def factor_bars_html(r: dict) -> str:
     return f'<div class="av-factor-wrap">{items}</div>'
 
 # ==============================================================================
-# TV WIDGET HELPERS
+# TV WIDGET HELPERS (Internal Panel Style diinjeksikan agar tidak patah di Streamlit)
 # ==============================================================================
 
 def _tv(src: str, cfg: dict, h: int) -> str:
     cj = json.dumps(cfg)
     return f"""<!DOCTYPE html><html><head>
-    <style>*{{margin:0;padding:0;box-sizing:border-box}}body{{background:transparent;overflow:hidden}}</style>
+    <style>
+    *{{margin:0;padding:0;box-sizing:border-box}}
+    html, body{{background:transparent;overflow:hidden;height:100%;}}
+    .av-panel-iframe {{
+        background:#09111E;
+        border:1px solid #111827;
+        border-radius:8px;
+        padding:8px;
+        position:relative;
+        height:100%;
+    }}
+    .av-panel-iframe::before {{
+        content:"";
+        position:absolute;
+        top:0; left:0; right:0;
+        height:1px;
+        background:linear-gradient(90deg,transparent,rgba(0,225,255,0.18),transparent);
+    }}
+    </style>
     </head><body>
-    <div class="tradingview-widget-container" style="width:100%;height:{h}px">
-      <div class="tradingview-widget-container__widget"></div>
-      <script type="text/javascript" src="{src}" async>{cj}</script>
+    <div class="av-panel-iframe">
+        <div class="tradingview-widget-container" style="width:100%;height:100%">
+          <div class="tradingview-widget-container__widget" style="width:100%;height:100%"></div>
+          <script type="text/javascript" src="{src}" async>{cj}</script>
+        </div>
     </div></body></html>"""
 
 def tv_ticker_tape() -> str:
@@ -744,7 +748,6 @@ def tv_market_overview() -> str:
         "width":"100%","height":"390","showSymbolLogo":True,"showChart":True,
     }, 390)
 
-# Indikator mode untuk main chart (Pine Script public IDs)
 INDICATOR_MODES = {
     "NO MODE": None,
     "VOFS": "PUB;LuxAlgo/Volumetric-Order-Flow-Structure",
@@ -759,20 +762,39 @@ def tv_advanced_chart(symbol: str, interval: str, style: str, studies: list = No
     cfg = json.dumps({
         "autosize":True,"symbol":symbol,"interval":TV_INTERVAL[interval],
         "timezone":"Etc/UTC","theme":"dark","style":style,"locale":"en",
-        "backgroundColor":"#070A12","gridColor":"rgba(42,53,80,0.3)",
+        "backgroundColor":"#09111E","gridColor":"rgba(42,53,80,0.3)",
         "hide_top_toolbar":False,"hide_legend":False,
         "allow_symbol_change":False,"save_image":False,
         "calendar":False,"support_host":"https://www.tradingview.com",
         "studies": studies if studies else [],
     })
     return f"""<!DOCTYPE html><html><head>
-    <style>*{{margin:0;padding:0;box-sizing:border-box}}
-    html,body{{height:100%;background:#070A12;overflow:hidden}}</style>
+    <style>
+    *{{margin:0;padding:0;box-sizing:border-box}}
+    html,body{{height:100%;background:transparent;overflow:hidden}}
+    .av-panel-iframe {{
+        background:#09111E;
+        border:1px solid #111827;
+        border-radius:8px;
+        padding:8px;
+        position:relative;
+        height:100%;
+    }}
+    .av-panel-iframe::before {{
+        content:"";
+        position:absolute;
+        top:0; left:0; right:0;
+        height:1px;
+        background:linear-gradient(90deg,transparent,rgba(0,225,255,0.18),transparent);
+    }}
+    </style>
     </head><body>
-    <div class="tradingview-widget-container" style="height:490px;width:100%">
-      <div class="tradingview-widget-container__widget" style="height:490px;width:100%"></div>
-      <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
-      {cfg}</script>
+    <div class="av-panel-iframe">
+        <div class="tradingview-widget-container" style="height:100%;width:100%">
+          <div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>
+          <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
+          {cfg}</script>
+        </div>
     </div></body></html>"""
 
 def tv_tech_gauge(symbol: str, interval: str) -> str:
@@ -808,13 +830,13 @@ def tv_top_stories() -> str:
     }, 460)
 
 # ==============================================================================
-# HELPER: selectbox neon cyan (tidak bisa diketik via CSS)
+# HELPER: selectbox neon cyan
 # ==============================================================================
 def av_select(label_text: str, key: str, options: list, current: str) -> str:
     idx = options.index(current) if current in options else 0
     if label_text:
         st.markdown(f'<div class="av-sel-label">{label_text}</div>', unsafe_allow_html=True)
-    chosen = st.selectbox("_", options, index=idx, key=key, label_visibility="collapsed")
+    chosen = st.selectbox(" ", options, index=idx, key=key, label_visibility="collapsed")
     return chosen
 
 # ==============================================================================
@@ -831,10 +853,10 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Ticker tape — zero gap ke brand dan selector
+# Ticker tape 
 components.html(tv_ticker_tape(), height=46, scrolling=False)
 
-# Selector bar — langsung setelah ticker
+# Selector bar 
 sc1, sc2, sc3 = st.columns([1.4, 1.4, 1.1])
 with sc1:
     instr_class = av_select("INSTRUMENT", "sel_instr", list(INSTRUMENTS.keys()), st.session_state.instr_class)
@@ -858,22 +880,18 @@ with sc3:
         st.session_state.timeframe = timeframe
         st.rerun()
 
-# Resolve active pair
 active_pair = next(p for p in pairs if p[0] == st.session_state.pair_label)
 active_label = active_pair[0]
-active_td = active_pair[1]   # Twelve Data symbol
-active_tv = active_pair[2]   # TradingView symbol
+active_td = active_pair[1]   
+active_tv = active_pair[2]   
 tf = st.session_state.timeframe
 
 # ==============================================================================
 # ROW 1 — MCT + MARKET OVERVIEW
 # ==============================================================================
-st.markdown('<div class="av-sec">// MARKET INTELLIGENCE LAYER</div>', unsafe_allow_html=True)
-
 mct_col, ov_col = st.columns([1.1, 1])
 
 with mct_col:
-    st.markdown('<div class="av-panel">', unsafe_allow_html=True)
     st.markdown(f"""
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
         <div style="font-size:11px;font-weight:700;letter-spacing:2px;color:#00E1FF;
@@ -887,7 +905,6 @@ with mct_col:
         </div>
     </div>""", unsafe_allow_html=True)
 
-    # Fetch per symbol+timeframe (cache key includes both)
     seed_str = f"{active_label}-{tf}"
     df = fetch_twelvedata(active_td, TD_INTERVAL[tf], outputsize=300)
     if df.empty:
@@ -913,21 +930,15 @@ with mct_col:
 
     st.plotly_chart(render_mct(mct), use_container_width=True, config={"displayModeBar":False, "scrollZoom":False, "doubleClick":False, "showTips":False})
     st.markdown(factor_bars_html(mct), unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
 
 with ov_col:
-    st.markdown('<div class="av-panel">', unsafe_allow_html=True)
     components.html(tv_market_overview(), height=405, scrolling=False)
-    st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
 # ROW 2 — MAIN CHART + (BANK SENTRAL atas, TECH GAUGE bawah)
 # ==============================================================================
-st.markdown(f'<div class="av-sec">// CHART CORE · {active_label} · {tf}</div>', unsafe_allow_html=True)
-
-# ── Init indicator state ──
 if "chart_indic" not in st.session_state:
-    st.session_state.chart_indic = []  # max 2
+    st.session_state.chart_indic = []  
 if "show_indic_modal" not in st.session_state:
     st.session_state.show_indic_modal = False
 
@@ -942,8 +953,6 @@ INDIC_STUDY = {
 ch_col, ga_col = st.columns([1.75, 1])
 
 with ch_col:
-    st.markdown('<div class="av-panel">', unsafe_allow_html=True)
-    
     # ── Row kontrol: CHART TYPE + INDIKATOR AKTIF + TOMBOL + ──
     ctrl_l, ctrl_mid, ctrl_r = st.columns([1.2, 2, 0.5])
     with ctrl_l:
@@ -958,7 +967,6 @@ with ch_col:
             st.rerun()
 
     with ctrl_mid:
-        # Tampilkan indikator aktif sebagai pill yang bisa dihapus (X)
         active_indics = st.session_state.chart_indic
         if active_indics:
             pills_html = '<div style="display:flex;gap:5px;align-items:center;margin-top:18px;flex-wrap:wrap">'
@@ -1027,7 +1035,6 @@ with ch_col:
                         {ind}
                     </div>""", unsafe_allow_html=True)
         
-        # Tombol clear semua + tutup modal — (Kolom kosong sebelumnya dihilangkan dan menjadi st.columns(2))
         cl1, cl2 = st.columns(2)
         with cl1:
             if st.button("✕ CLEAR", key="btn_clear_indic", use_container_width=True):
@@ -1039,16 +1046,14 @@ with ch_col:
                 st.session_state.show_indic_modal = False
                 st.rerun()
 
-    # ── Main Chart dengan studies dari pilihan user ──
     active_studies = [INDIC_STUDY[i] for i in st.session_state.chart_indic]
     components.html(
         tv_advanced_chart(active_tv, tf, st.session_state.chart_style, active_studies), 
         height=520, scrolling=False,
     )
-    st.markdown('</div>', unsafe_allow_html=True)
 
 with ga_col:
-    # ── Panel atas: Bunga Bank Sentral (iframe seputarforex) ──
+    # ── Panel atas: Bunga Bank Sentral (Iframe seputarforex aman di dalam st.markdown) ──
     st.markdown("""
     <div class="av-panel" style="padding:10px;margin-bottom:6px">
         <div style="font-size:8px;letter-spacing:2px;color:#00E1FF;
@@ -1070,21 +1075,15 @@ with ga_col:
     """, unsafe_allow_html=True)
     
     # ── Panel bawah: Technical Analysis Gauge ──
-    st.markdown('<div class="av-panel" style="padding-top:6px">', unsafe_allow_html=True)
     components.html(tv_tech_gauge(active_tv, tf), height=370, scrolling=False)
-    st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# ROW 3 — MINI CHARTS × 3 (filter sesuai instrumen aktif)
+# ROW 3 — MINI CHARTS × 3
 # ==============================================================================
-st.markdown('<div class="av-sec">// MULTI-PAIR MONITOR</div>', unsafe_allow_html=True)
-
-# Ambil options sesuai instrumen yang dipilih user
 active_mini_opts = MINI_OPTIONS[st.session_state.instr_class]
 active_mini_labels = [m[0] for m in active_mini_opts]
 active_mini_map = {m[0]: m[1] for m in active_mini_opts}
 
-# Reset mini state jika instrumen berubah dan nilai lama tidak ada di list baru
 for sk, default_idx in [("mini_a", 0), ("mini_b", 1), ("mini_c", 2)]:
     cur = st.session_state.get(sk, active_mini_labels[default_idx])
     if cur not in active_mini_labels:
@@ -1098,7 +1097,6 @@ for col, state_key, sel_key, def_idx in [
     (m3, "mini_c", "sel_mc", 2),
 ]:
     with col:
-        st.markdown('<div class="av-panel">', unsafe_allow_html=True)
         cur_val = st.session_state.get(state_key, active_mini_labels[def_idx])
         if cur_val not in active_mini_labels:
             cur_val = active_mini_labels[def_idx]
@@ -1109,33 +1107,22 @@ for col, state_key, sel_key, def_idx in [
             st.rerun()
             
         components.html(tv_mini_chart(active_mini_map[chosen]), height=215, scrolling=False)
-        st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ==============================================================================
 # ROW 4 — ECONOMIC CALENDAR + SCREENER
 # ==============================================================================
-st.markdown('<div class="av-sec">// FUNDAMENTAL DATA · PENYARING</div>', unsafe_allow_html=True)
-
 ec_col, sc_col = st.columns(2)
 
 with ec_col:
-    st.markdown('<div class="av-panel">', unsafe_allow_html=True)
     components.html(tv_econ_calendar(), height=445, scrolling=False)
-    st.markdown('</div>', unsafe_allow_html=True)
 
 with sc_col:
-    st.markdown('<div class="av-panel">', unsafe_allow_html=True)
     components.html(tv_screener(), height=445, scrolling=False)
-    st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
 # ROW 5 — AI ANALYSIS
 # ==============================================================================
-st.markdown('<div class="av-sec">// AI INTELLIGENCE ENGINE</div>', unsafe_allow_html=True)
-st.markdown('<div class="av-panel">', unsafe_allow_html=True)
-
-# Tombol mode berdekatan di satu row (Kolom kosong `_` tetap dipertahankan sesuai instruksi)
 btn_row_l, btn_row_r, _ = st.columns([0.8, 0.9, 4])
 with btn_row_l:
     if st.button("◈ ANALISIS PAIR", key="btn_pair"):
@@ -1146,7 +1133,6 @@ with btn_row_r:
         st.session_state.ai_mode = "news"
         st.session_state.ai_result = None
 
-# Mode indicator
 mode_color = "#00E1FF" if st.session_state.ai_mode == "pair" else "#A855F7"
 mode_label = "PAIR MODE — TEKNIKAL & SMC" if st.session_state.ai_mode == "pair" else "NEWS MODE — FUNDAMENTAL & SENTIMEN"
 st.markdown(f"""
@@ -1159,7 +1145,7 @@ st.markdown(f"""
 if st.session_state.ai_mode == "news":
     ni, nr = st.columns([5, 1])
     with ni:
-        news_text = st.text_input("n", placeholder="PASTE HEADLINE / KONTEKS BERITA...", key="news_inp")
+        news_text = st.text_input(" ", placeholder="PASTE HEADLINE / KONTEKS BERITA...", key="news_inp")
     with nr:
         if st.button("RUN", key="btn_run_n") and news_text.strip():
             st.session_state.ai_result = (
@@ -1169,7 +1155,6 @@ if st.session_state.ai_mode == "news":
                 f"(Placeholder — akan diganti Claude API asli.)"
             )
 else:
-    # Kolom kosong pada Analisis Pair tetap dipertahankan
     rc, _ = st.columns([0.7, 5])
     with rc:
         if st.button("RUN", key="btn_run_p"):
@@ -1184,15 +1169,9 @@ else:
 if st.session_state.ai_result:
     st.markdown(f'<div class="av-ai-result">{st.session_state.ai_result}</div>', unsafe_allow_html=True)
 
-st.markdown('</div>', unsafe_allow_html=True)
-
-
 # ==============================================================================
 # ROW 6 — ACTIVE TRADE SIGNALS
 # ==============================================================================
-st.markdown('<div class="av-sec">// ACTIVE TRADE SIGNALS</div>', unsafe_allow_html=True)
-
-st.markdown('<div class="av-panel">', unsafe_allow_html=True)
 tc = st.columns(len(DUMMY_TRADES))
 for col, t in zip(tc, DUMMY_TRADES):
     with col:
@@ -1209,13 +1188,8 @@ for col, t in zip(tc, DUMMY_TRADES):
             <span class="av-trade-symbol">{t['symbol']}</span>
             <span class="{dc}">{t['dir']}</span>
         </div>{rows}</div>""", unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
 # ROW 7 — TOP STORIES
 # ==============================================================================
-st.markdown('<div class="av-sec">// MARKET INTELLIGENCE · NEWS FEED</div>', unsafe_allow_html=True)
-
-st.markdown('<div class="av-panel">', unsafe_allow_html=True)
 components.html(tv_top_stories(), height=475, scrolling=False)
-st.markdown('</div>', unsafe_allow_html=True)
