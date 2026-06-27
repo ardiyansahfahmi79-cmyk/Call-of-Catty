@@ -199,6 +199,20 @@ div[data-testid="stHorizontalBlock"] { gap:8px !important; }
 .av-factor-bar-wrap { height:2px; background:#0E1422; border-radius:1px; }
 .av-factor-v { font-size:8px; margin-top:2px; text-align:right; }
 
+/* ── MODE OVERLAY BUTTONS — pill div di atas, button invisible di bawah ── */
+[data-testid="stButton"][key^="mode_"] > button,
+button[kind="secondary"][data-testid="stBaseButton-secondary"] {
+    opacity: 0 !important;
+    position: absolute !important;
+    top: 0 !important; left: 0 !important;
+    width: 100% !important; height: 100% !important;
+    margin: 0 !important; padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    cursor: pointer !important;
+    z-index: 10 !important;
+}
+
 /* ── PLOTLY modebar hide ── */
 .js-plotly-plot .plotly .modebar { display:none !important; }
 </style>
@@ -245,21 +259,47 @@ TD_INTERVAL = {"15m":"15min","30m":"30min","1h":"1h","4h":"4h","1D":"1day"}
 
 CHART_STYLES = [("LINE","3"),("CANDLES","1"),("HEIKIN","8"),("AREA","9"),("BARS","0")]
 
-# Mini chart options — DXY pakai CAPITALCOM, Oil pakai CAPITALCOM
-MINI_OPTIONS = [
-    ("EURUSD","OANDA:EURUSD"),
-    ("GBPUSD","OANDA:GBPUSD"),
-    ("USDJPY","OANDA:USDJPY"),
-    ("AUDUSD","OANDA:AUDUSD"),
-    ("XAUUSD","OANDA:XAUUSD"),
-    ("BTCUSD","COINBASE:BTCUSD"),
-    ("NVDA",  "NASDAQ:NVDA"),
-    ("USDCHF","OANDA:USDCHF"),
-    ("DXY",   "CAPITALCOM:DXY"),
-    ("US10Y", "TVC:US10Y"),
-    ("OIL",   "CAPITALCOM:OIL_CRUDE"),
-    ("AAPL",  "NASDAQ:AAPL"),
-]
+# Mini chart options — dipisah per instrumen class
+MINI_OPTIONS = {
+    "FOREX": [
+        ("EURUSD","OANDA:EURUSD"),
+        ("GBPUSD","OANDA:GBPUSD"),
+        ("USDJPY","OANDA:USDJPY"),
+        ("AUDUSD","OANDA:AUDUSD"),
+        ("USDCHF","OANDA:USDCHF"),
+        ("NZDUSD","OANDA:NZDUSD"),
+        ("USDCAD","OANDA:USDCAD"),
+        ("EURGBP","OANDA:EURGBP"),
+    ],
+    "COMMODITIES": [
+        ("XAUUSD","OANDA:XAUUSD"),
+        ("XAGUSD","OANDA:XAGUSD"),
+        ("OIL",   "CAPITALCOM:OIL_CRUDE"),
+        ("DXY",   "CAPITALCOM:DXY"),
+        ("US10Y", "TVC:US10Y"),
+        ("NATGAS","TVC:NATURALGAS"),
+    ],
+    "US STOCKS": [
+        ("AAPL",  "NASDAQ:AAPL"),
+        ("NVDA",  "NASDAQ:NVDA"),
+        ("TSLA",  "NASDAQ:TSLA"),
+        ("MSFT",  "NASDAQ:MSFT"),
+        ("AMZN",  "NASDAQ:AMZN"),
+        ("GOOGL", "NASDAQ:GOOGL"),
+        ("META",  "NASDAQ:META"),
+        ("SPX",   "FOREXCOM:SPXUSD"),
+    ],
+    "CRYPTO": [
+        ("BTCUSD","COINBASE:BTCUSD"),
+        ("ETHUSD","COINBASE:ETHUSD"),
+        ("SOLUSD","COINBASE:SOLUSD"),
+        ("BNBUSD","BINANCE:BNBUSDT"),
+        ("XRPUSD","COINBASE:XRPUSD"),
+        ("ADAUSD","COINBASE:ADAUSD"),
+        ("DOTUSD","COINBASE:DOTUSD"),
+        ("AVAXUSD","COINBASE:AVAXUSD"),
+    ],
+}
 
 DUMMY_TRADES = [
     {"symbol":"EURUSD","dir":"BUY", "entry":"1.14620","sl":"1.14280","tp1":"1.14950","tp2":"1.15300","tp3":"1.15700"},
@@ -276,6 +316,7 @@ _DEFAULTS = {
     "pair_label":  "EURUSD",
     "timeframe":   "15m",
     "chart_style": "3",
+    "indicator_mode": "NO MODE",
     "mini_a":      "GBPUSD",
     "mini_b":      "USDJPY",
     "mini_c":      "AUDUSD",
@@ -499,10 +540,10 @@ def tv_ticker_tape() -> str:
             {"proName":"FX:GBPUSD","title":"GBP/USD"},
             {"proName":"FX:USDJPY","title":"USD/JPY"},
             {"proName":"FX:AUDUSD","title":"AUD/USD"},
-            {"proName":"FX:USDCHF","title":"USD/CHF"},
             {"proName":"OANDA:XAUUSD","title":"XAU/USD"},
-            {"proName":"TVC:DXY","title":"DXY"},
+            {"proName":"CAPITALCOM:DXY","title":"DXY"},
             {"proName":"TVC:US10Y","title":"US10Y"},
+            {"proName":"CAPITALCOM:OIL_CRUDE","title":"OIL"},
             {"proName":"COINBASE:BTCUSD","title":"BTC/USD"},
             {"proName":"COINBASE:ETHUSD","title":"ETH/USD"},
             {"proName":"NASDAQ:NVDA","title":"NVDA"},
@@ -546,7 +587,19 @@ def tv_market_overview() -> str:
     }, 390)
 
 
-def tv_advanced_chart(symbol: str, interval: str, style: str) -> str:
+# Indikator mode untuk main chart (Pine Script public IDs)
+INDICATOR_MODES = {
+    "NO MODE":  None,
+    "VOFS":     "PUB;LuxAlgo/Volumetric-Order-Flow-Structure",
+    "OBMTE":    "PUB;AlphaExtract/Order-Block-Matrix-Trade-Engine",
+    "OFVB":     "PUB;QuantumEdge/Volume-bubbles",
+    "BOB":      "PUB;TradingIQ/Big-Order-Bubbles-IQ",
+    "OI":       "PUB;LeviathanCapital/Volume-Open-Interest-Footprint",
+    "BSS":      "PUB;Bjorgum/Bjorgum-SuperScript",
+}
+
+
+def tv_advanced_chart(symbol: str, interval: str, style: str, studies: list = None) -> str:
     cfg = json.dumps({
         "autosize":True,"symbol":symbol,"interval":TV_INTERVAL[interval],
         "timezone":"Etc/UTC","theme":"dark","style":style,"locale":"en",
@@ -554,13 +607,14 @@ def tv_advanced_chart(symbol: str, interval: str, style: str) -> str:
         "hide_top_toolbar":False,"hide_legend":False,
         "allow_symbol_change":False,"save_image":False,
         "calendar":False,"support_host":"https://www.tradingview.com",
+        "studies": studies if studies else [],
     })
     return f"""<!DOCTYPE html><html><head>
 <style>*{{margin:0;padding:0;box-sizing:border-box}}
 html,body{{height:100%;background:#070A12;overflow:hidden}}</style>
 </head><body>
-<div class="tradingview-widget-container" style="height:430px;width:100%">
-  <div class="tradingview-widget-container__widget" style="height:430px;width:100%"></div>
+<div class="tradingview-widget-container" style="height:490px;width:100%">
+  <div class="tradingview-widget-container__widget" style="height:490px;width:100%"></div>
   <script type="text/javascript"
     src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
   {cfg}</script>
@@ -725,52 +779,139 @@ with ov_col:
 # ROW 2 — MAIN CHART + TECH GAUGE
 # ==============================================================================
 st.markdown(f'<div class="av-sec">// CHART CORE · {active_label} · {tf}</div>', unsafe_allow_html=True)
-ch_col, ga_col = st.columns([1.45, 1])
+
+# Init mode state
+if "chart_mode" not in st.session_state:
+    st.session_state.chart_mode = "NO MODE"
+
+CHART_MODES = ["NO MODE","VOFS","OBMTE","OFVB","BOB","OI FOOTPRINT","BSS"]
+CHART_MODE_DESC = {
+    "NO MODE":     "Standard chart tanpa overlay indikator",
+    "VOFS":        "Volumetric Order Flow Structure — distribusi volume & institutional order flow",
+    "OBMTE":       "Order Block Matrix Trade Engine — deteksi order block institusional",
+    "OFVB":        "Order Flow Volume Bubbles — bubble volume abnormal pada price bar",
+    "BOB":         "Big Order Bubbles — identifikasi partisipasi order besar di market",
+    "OI FOOTPRINT":"Volume / OI Footprint — footprint bar volume & open interest",
+    "BSS":         "Bjorgum SuperScript — multi-strategy MA, TSI, RSI bar color system",
+}
+
+# Mode studies mapping (embed-widget-advanced-chart studies parameter)
+CHART_MODE_STUDIES = {
+    "NO MODE":     [],
+    "VOFS":        ["STD;Volumetric%20Order%20Flow%20Structure"],
+    "OBMTE":       ["STD;Order%20Block%20Matrix%20Trade%20Engine"],
+    "OFVB":        ["STD;Volume%20bubbles"],
+    "BOB":         ["STD;Big%20Order%20Bubbles%20IQ"],
+    "OI FOOTPRINT":["STD;Volume%20%2F%20Open%20Interest%20Footprint"],
+    "BSS":         ["STD;Bjorgum%20SuperScript"],
+}
+
+ch_col, ga_col = st.columns([1.6, 1])
 
 with ch_col:
     st.markdown('<div class="av-panel">', unsafe_allow_html=True)
-    cs_labels = [s[0] for s in CHART_STYLES]
-    cs_vals   = {s[0]: s[1] for s in CHART_STYLES}
+
+    # ── Row 1 dalam panel: CHART TYPE + MODE SELECTOR ──
+    cs_labels  = [s[0] for s in CHART_STYLES]
+    cs_vals    = {s[0]: s[1] for s in CHART_STYLES}
     cur_cs_lbl = next((s[0] for s in CHART_STYLES if s[1]==st.session_state.chart_style), "LINE")
 
-    chart_style_lbl = av_select("CHART TYPE", "sel_cs", cs_labels, cur_cs_lbl)
-    chosen_style    = cs_vals[chart_style_lbl]
-    if chosen_style != st.session_state.chart_style:
-        st.session_state.chart_style = chosen_style
-        st.rerun()
+    c_type_col, _ = st.columns([1.2, 3])
+    with c_type_col:
+        chart_style_lbl = av_select("CHART TYPE", "sel_cs", cs_labels, cur_cs_lbl)
+        chosen_style    = cs_vals[chart_style_lbl]
+        if chosen_style != st.session_state.chart_style:
+            st.session_state.chart_style = chosen_style
+            st.rerun()
 
-    # Chart keyed so Streamlit reloads the iframe when symbol/interval/style changes
+    # ── Mode selector pill buttons ──
+    cur_mode = st.session_state.chart_mode
+    mode_desc = CHART_MODE_DESC.get(cur_mode, "")
+    st.markdown(f"""
+    <div style="margin-bottom:4px">
+        <div style="font-size:8px;letter-spacing:1.5px;color:#2A4060;
+                    font-family:'Share Tech Mono',monospace;margin-bottom:4px">
+            OVERLAY MODE
+        </div>
+        <div style="font-size:8px;color:#3A5A3A;letter-spacing:0.5px;
+                    font-family:'Share Tech Mono',monospace;margin-bottom:6px;
+                    color:{'#00E1FF' if cur_mode != 'NO MODE' else '#2A4060'}">
+            {mode_desc}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Render mode buttons dalam grid horizontal
+    mode_cols = st.columns(len(CHART_MODES))
+    for mc, mode in zip(mode_cols, CHART_MODES):
+        with mc:
+            is_active = mode == cur_mode
+            btn_style = (
+                "background:rgba(0,225,255,0.12);border:1px solid #00E1FF;"
+                "color:#00E1FF;box-shadow:0 0 8px rgba(0,225,255,0.2);"
+            ) if is_active else (
+                "background:#09111E;border:1px solid #1A2E4A;color:#4A6080;"
+            )
+            st.markdown(f"""
+            <div style="{btn_style}border-radius:4px;padding:5px 4px;
+                         text-align:center;font-family:'Share Tech Mono',monospace;
+                         font-size:8px;letter-spacing:0.5px;cursor:pointer;
+                         margin-bottom:6px;white-space:nowrap;overflow:hidden">
+                {mode}
+            </div>""", unsafe_allow_html=True)
+            if st.button("", key=f"mode_{mode}",
+                         help=CHART_MODE_DESC.get(mode,""),
+                         use_container_width=True):
+                if mode != st.session_state.chart_mode:
+                    st.session_state.chart_mode = mode
+                    st.rerun()
+
+    # ── Main Chart ──
+    active_studies = CHART_MODE_STUDIES.get(st.session_state.chart_mode, [])
     components.html(
-        tv_advanced_chart(active_tv, tf, st.session_state.chart_style),
-        height=445, scrolling=False,
+        tv_advanced_chart(active_tv, tf, st.session_state.chart_style, active_studies),
+        height=500, scrolling=False,
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
 with ga_col:
     st.markdown('<div class="av-panel" style="padding-top:8px">', unsafe_allow_html=True)
-    components.html(tv_tech_gauge(active_tv, tf), height=445, scrolling=False)
+    components.html(tv_tech_gauge(active_tv, tf), height=500, scrolling=False)
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# ROW 3 — MINI CHARTS × 3 (each with dropdown selector)
+# ROW 3 — MINI CHARTS × 3 (filter sesuai instrumen aktif)
 # ==============================================================================
 st.markdown('<div class="av-sec">// MULTI-PAIR MONITOR</div>', unsafe_allow_html=True)
-m1, m2, m3 = st.columns(3)
-mini_labels = [m[0] for m in MINI_OPTIONS]
-mini_tv_map = {m[0]: m[1] for m in MINI_OPTIONS}
 
-for col, state_key, sel_key, default in [
-    (m1, "mini_a", "sel_ma", "GBPUSD"),
-    (m2, "mini_b", "sel_mb", "USDJPY"),
-    (m3, "mini_c", "sel_mc", "AUDUSD"),
+# Ambil options sesuai instrumen yang dipilih user
+active_mini_opts  = MINI_OPTIONS[st.session_state.instr_class]
+active_mini_labels = [m[0] for m in active_mini_opts]
+active_mini_map    = {m[0]: m[1] for m in active_mini_opts}
+
+# Reset mini state jika instrumen berubah dan nilai lama tidak ada di list baru
+for sk, default_idx in [("mini_a", 0), ("mini_b", 1), ("mini_c", 2)]:
+    cur = st.session_state.get(sk, active_mini_labels[default_idx])
+    if cur not in active_mini_labels:
+        st.session_state[sk] = active_mini_labels[min(default_idx, len(active_mini_labels)-1)]
+
+m1, m2, m3 = st.columns(3)
+
+for col, state_key, sel_key, def_idx in [
+    (m1, "mini_a", "sel_ma", 0),
+    (m2, "mini_b", "sel_mb", 1),
+    (m3, "mini_c", "sel_mc", 2),
 ]:
     with col:
         st.markdown('<div class="av-panel">', unsafe_allow_html=True)
-        chosen = av_select("", sel_key, mini_labels, st.session_state.get(state_key, default))
+        cur_val = st.session_state.get(state_key, active_mini_labels[def_idx])
+        if cur_val not in active_mini_labels:
+            cur_val = active_mini_labels[def_idx]
+        chosen = av_select("", sel_key, active_mini_labels, cur_val)
         if chosen != st.session_state.get(state_key):
             st.session_state[state_key] = chosen
             st.rerun()
-        components.html(tv_mini_chart(mini_tv_map[chosen]), height=215, scrolling=False)
+        components.html(tv_mini_chart(active_mini_map[chosen]), height=215, scrolling=False)
         st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
