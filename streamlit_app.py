@@ -53,20 +53,24 @@ div[data-testid="stVerticalBlockBorderWrapper"] { padding:0 !important; }
 .stMarkdown { margin:0 !important; padding:0 !important; }
 div[data-testid="stHorizontalBlock"] { gap:8px !important; }
 
-/* ── BRAND compact ── */
-.av-brand-wrap { padding:6px 0 0; margin-bottom:0; }
+/* ── BRAND compact — rapat ke ticker ── */
+.av-brand-wrap { padding:4px 0 0; margin-bottom:0; }
 .av-brand-line { display:flex; align-items:baseline; gap:8px; }
 .av-prefix {
     font-size:7px; letter-spacing:3px; color:#1A3A5A;
-    border:1px solid #1A3A5A; padding:2px 5px; border-radius:2px;
+    border:1px solid #1A3A5A; padding:1px 5px; border-radius:2px;
 }
 .av-title {
-    font-size:17px; letter-spacing:3px; color:#E8F1FF;
-    font-weight:700; font-family:'Share Tech Mono',monospace;
+    font-size:16px; letter-spacing:3px; color:#E8F1FF;
+    font-weight:700; font-family:'Share Tech Mono',monospace; line-height:1.2;
 }
 .av-title .acc { color:#00E1FF; }
 .av-ver { font-size:7px; letter-spacing:2px; color:#2A4060; }
-.av-tagline { font-size:7px; letter-spacing:2px; color:#1A3A5A; margin-top:1px; margin-bottom:0; }
+.av-tagline { font-size:6px; letter-spacing:2px; color:#1A3A5A; margin-top:1px; margin-bottom:0; }
+
+/* Zero gap antara semua elemen atas */
+div.block-container > div > div > div { margin-bottom:0 !important; }
+iframe { display:block; margin:0 !important; }
 
 /* ── SECTION LABEL ── */
 .av-sec {
@@ -146,14 +150,21 @@ div[data-testid="stHorizontalBlock"] { gap:8px !important; }
     margin-bottom:3px; font-family:'Share Tech Mono',monospace;
 }
 
-/* ── BUTTONS (AI, etc) ── */
+/* ── BUTTONS (AI, trade, dll) ── */
 [data-testid="stButton"] > button {
-    background:linear-gradient(135deg,rgba(0,225,255,0.85),rgba(168,85,247,0.85)) !important;
-    color:#030608 !important; font-weight:700 !important;
+    background:linear-gradient(135deg,rgba(0,225,255,0.15),rgba(168,85,247,0.15)) !important;
+    color:#00E1FF !important; font-weight:700 !important;
     font-family:'Share Tech Mono',monospace !important;
-    font-size:10px !important; letter-spacing:1.5px !important;
-    border:none !important; border-radius:5px !important;
-    padding:8px 18px !important;
+    font-size:10px !important; letter-spacing:1px !important;
+    border:1px solid rgba(0,225,255,0.4) !important;
+    border-radius:4px !important;
+    padding:6px 10px !important;
+    transition:all 0.15s ease !important;
+}
+[data-testid="stButton"] > button:hover {
+    background:rgba(0,225,255,0.22) !important;
+    border-color:#00E1FF !important;
+    box-shadow:0 0 10px rgba(0,225,255,0.3) !important;
 }
 
 /* ── TEXT INPUT ── */
@@ -199,45 +210,6 @@ div[data-testid="stHorizontalBlock"] { gap:8px !important; }
 .av-factor-k { font-size:7.5px; color:#4A6080; letter-spacing:1px; margin-bottom:2px; }
 .av-factor-bar-wrap { height:2px; background:#0E1422; border-radius:1px; }
 .av-factor-v { font-size:8px; margin-top:2px; text-align:right; }
-
-/* ── MODE BUTTONS — visible, clickable, neon style ── */
-.mode-btn-row { display:flex; gap:4px; margin-bottom:6px; flex-wrap:nowrap; }
-.mode-pill {
-    flex:1; text-align:center; padding:5px 3px;
-    border-radius:4px; font-family:'Share Tech Mono',monospace;
-    font-size:8px; letter-spacing:0.5px;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-    pointer-events:none; /* visual only, actual click on button below */
-}
-.mode-pill.active {
-    background:rgba(0,225,255,0.12); border:1px solid #00E1FF;
-    color:#00E1FF; box-shadow:0 0 8px rgba(0,225,255,0.2);
-}
-.mode-pill.inactive {
-    background:#09111E; border:1px solid #1A2E4A; color:#4A6080;
-}
-/* Override semua button di area mode agar tampil seperti pill */
-div[data-testid="stButton"] > button {
-    font-family:'Share Tech Mono',monospace !important;
-    font-size:8px !important; letter-spacing:0.5px !important;
-    padding:5px 3px !important;
-    border-radius:4px !important;
-    width:100% !important;
-}
-/* Mode button inactive */
-div.mode-inactive > div[data-testid="stButton"] > button {
-    background:#09111E !important;
-    border:1px solid #1A2E4A !important;
-    color:#4A6080 !important;
-    box-shadow:none !important;
-}
-/* Mode button active */
-div.mode-active > div[data-testid="stButton"] > button {
-    background:rgba(0,225,255,0.12) !important;
-    border:1px solid #00E1FF !important;
-    color:#00E1FF !important;
-    box-shadow:0 0 8px rgba(0,225,255,0.2) !important;
-}
 
 /* ── PLOTLY modebar hide ── */
 .js-plotly-plot .plotly .modebar { display:none !important; }
@@ -707,10 +679,10 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Ticker tape — langsung di bawah brand, tanpa gap
-components.html(tv_ticker_tape(), height=54, scrolling=False)
+# Ticker tape — zero gap ke brand dan selector
+components.html(tv_ticker_tape(), height=46, scrolling=False)
 
-# Selector bar — langsung setelah ticker, tanpa sec label pemisah
+# Selector bar — langsung setelah ticker
 sc1, sc2, sc3 = st.columns([1.4, 1.4, 1.1])
 
 with sc1:
@@ -799,34 +771,22 @@ with ov_col:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# ROW 2 — MAIN CHART + TECH GAUGE
+# ROW 2 — MAIN CHART + (BANK SENTRAL atas, TECH GAUGE bawah)
 # ==============================================================================
 st.markdown(f'<div class="av-sec">// CHART CORE · {active_label} · {tf}</div>', unsafe_allow_html=True)
 
-# Init mode state
-if "chart_mode" not in st.session_state:
-    st.session_state.chart_mode = "NO MODE"
+# ── Init indicator state ──
+if "chart_indic" not in st.session_state:
+    st.session_state.chart_indic = []   # max 2
+if "show_indic_modal" not in st.session_state:
+    st.session_state.show_indic_modal = False
 
-CHART_MODES = ["NO MODE","VOFS","OBMTE","OFVB","BOB","OI FOOTPRINT","BSS"]
-CHART_MODE_DESC = {
-    "NO MODE":     "Standard chart tanpa overlay indikator",
-    "VOFS":        "Volumetric Order Flow Structure — distribusi volume & institutional order flow",
-    "OBMTE":       "Order Block Matrix Trade Engine — deteksi order block institusional",
-    "OFVB":        "Order Flow Volume Bubbles — bubble volume abnormal pada price bar",
-    "BOB":         "Big Order Bubbles — identifikasi partisipasi order besar di market",
-    "OI FOOTPRINT":"Volume / OI Footprint — footprint bar volume & open interest",
-    "BSS":         "Bjorgum SuperScript — multi-strategy MA, TSI, RSI bar color system",
-}
-
-# Mode studies mapping (embed-widget-advanced-chart studies parameter)
-CHART_MODE_STUDIES = {
-    "NO MODE":     [],
-    "VOFS":        ["STD;Volumetric%20Order%20Flow%20Structure"],
-    "OBMTE":       ["STD;Order%20Block%20Matrix%20Trade%20Engine"],
-    "OFVB":        ["STD;Volume%20bubbles"],
-    "BOB":         ["STD;Big%20Order%20Bubbles%20IQ"],
-    "OI FOOTPRINT":["STD;Volume%20%2F%20Open%20Interest%20Footprint"],
-    "BSS":         ["STD;Bjorgum%20SuperScript"],
+INDIC_LIST = ["RSI","MACD","STOCHASTIC","VOLUME"]
+INDIC_STUDY = {
+    "RSI":        "RSI@tv-basicstudies",
+    "MACD":       "MACD@tv-basicstudies",
+    "STOCHASTIC": "Stochastic@tv-basicstudies",
+    "VOLUME":     "Volume@tv-basicstudies",
 }
 
 ch_col, ga_col = st.columns([1.75, 1])
@@ -834,58 +794,136 @@ ch_col, ga_col = st.columns([1.75, 1])
 with ch_col:
     st.markdown('<div class="av-panel">', unsafe_allow_html=True)
 
-    # Chart type selector
-    cs_labels  = [s[0] for s in CHART_STYLES]
-    cs_vals    = {s[0]: s[1] for s in CHART_STYLES}
-    cur_cs_lbl = next((s[0] for s in CHART_STYLES if s[1]==st.session_state.chart_style), "LINE")
+    # ── Row kontrol: CHART TYPE + INDIKATOR AKTIF + TOMBOL + ──
+    ctrl_l, ctrl_mid, ctrl_r = st.columns([1.2, 2, 0.5])
 
-    c_type_col, _ = st.columns([1.2, 3])
-    with c_type_col:
+    with ctrl_l:
+        cs_labels  = [s[0] for s in CHART_STYLES]
+        cs_vals    = {s[0]: s[1] for s in CHART_STYLES}
+        cur_cs_lbl = next((s[0] for s in CHART_STYLES if s[1]==st.session_state.chart_style), "LINE")
         chart_style_lbl = av_select("CHART TYPE", "sel_cs", cs_labels, cur_cs_lbl)
         chosen_style    = cs_vals[chart_style_lbl]
         if chosen_style != st.session_state.chart_style:
             st.session_state.chart_style = chosen_style
             st.rerun()
 
-    # ── Mode selector — st.button langsung, CSS via wrapper div ──
-    cur_mode  = st.session_state.chart_mode
-    mode_desc = CHART_MODE_DESC.get(cur_mode, "")
-    st.markdown(f"""
-    <div style="display:flex;justify-content:space-between;align-items:center;
-                margin-bottom:3px;margin-top:4px">
-        <div style="font-size:8px;letter-spacing:1.5px;color:#2A4060;
-                    font-family:'Share Tech Mono',monospace">OVERLAY MODE</div>
-        <div style="font-size:8px;letter-spacing:0.5px;
-                    font-family:'Share Tech Mono',monospace;
-                    color:{'#00E1FF' if cur_mode != 'NO MODE' else '#2A3050'}">
-            {mode_desc}
-        </div>
-    </div>""", unsafe_allow_html=True)
+    with ctrl_mid:
+        # Tampilkan indikator aktif sebagai pill yang bisa dihapus (X)
+        active_indics = st.session_state.chart_indic
+        if active_indics:
+            pills_html = '<div style="display:flex;gap:5px;align-items:center;margin-top:18px;flex-wrap:wrap">'
+            for ind in active_indics:
+                pills_html += f"""
+                <span style="background:rgba(0,225,255,0.1);border:1px solid rgba(0,225,255,0.4);
+                             color:#00E1FF;font-family:\'Share Tech Mono\',monospace;
+                             font-size:9px;letter-spacing:0.5px;padding:3px 8px;
+                             border-radius:3px;white-space:nowrap">
+                    {ind}
+                </span>"""
+            pills_html += '</div>'
+            st.markdown(pills_html, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div style="margin-top:18px;font-size:8px;color:#2A3A5A;
+                        font-family:'Share Tech Mono',monospace;letter-spacing:1px">
+                NO INDICATOR ACTIVE
+            </div>""", unsafe_allow_html=True)
 
-    mode_cols = st.columns(len(CHART_MODES))
-    for mc, mode in zip(mode_cols, CHART_MODES):
-        with mc:
-            is_active  = (mode == cur_mode)
-            wrap_class = "mode-active" if is_active else "mode-inactive"
-            st.markdown(f'<div class="{wrap_class}">', unsafe_allow_html=True)
-            if st.button(mode, key=f"mode_{mode}", use_container_width=True):
-                if mode != st.session_state.chart_mode:
-                    st.session_state.chart_mode = mode
-                    st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+    with ctrl_r:
+        st.markdown('<div style="margin-top:14px">', unsafe_allow_html=True)
+        if st.button("＋", key="btn_add_indic", help="Tambah indikator ke chart",
+                     use_container_width=True):
+            st.session_state.show_indic_modal = not st.session_state.show_indic_modal
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    # ── Main Chart ──
-    active_studies = CHART_MODE_STUDIES.get(st.session_state.chart_mode, [])
+    # ── MODAL POPUP INDIKATOR ──
+    if st.session_state.show_indic_modal:
+        st.markdown("""
+        <div style="background:#07101C;border:1px solid rgba(0,225,255,0.3);
+                    border-radius:8px;padding:14px;margin:6px 0;
+                    box-shadow:0 0 20px rgba(0,225,255,0.1);position:relative">
+          <div style="font-size:9px;letter-spacing:2px;color:#00E1FF;
+                      font-family:'Share Tech Mono',monospace;margin-bottom:10px;
+                      text-shadow:0 0 8px rgba(0,225,255,0.4)">
+            ◈ TAMBAH INDIKATOR KE GRAFIK
+          </div>
+          <div style="font-size:8px;color:#4A6080;font-family:'Share Tech Mono',monospace;
+                      margin-bottom:10px;line-height:1.6">
+            Pilih maks. 2 indikator · Klik nama untuk buka dokumentasi TradingView
+          </div>
+        </div>""", unsafe_allow_html=True)
+
+        ic = st.columns(len(INDIC_LIST))
+        for col_i, ind in zip(ic, INDIC_LIST):
+            with col_i:
+                is_on    = ind in st.session_state.chart_indic
+                can_add  = len(st.session_state.chart_indic) < 2
+                btn_lbl  = f"✓ {ind}" if is_on else ind
+                if is_on:
+                    if st.button(btn_lbl, key=f"indic_{ind}", use_container_width=True):
+                        st.session_state.chart_indic.remove(ind)
+                        st.rerun()
+                elif can_add:
+                    if st.button(btn_lbl, key=f"indic_{ind}", use_container_width=True):
+                        st.session_state.chart_indic.append(ind)
+                        st.session_state.show_indic_modal = False
+                        st.rerun()
+                else:
+                    st.markdown(f"""
+                    <div style="background:#07101C;border:1px solid #1A2238;
+                                color:#2A3A5A;font-family:'Share Tech Mono',monospace;
+                                font-size:9px;padding:6px;border-radius:4px;
+                                text-align:center">
+                        {ind}
+                    </div>""", unsafe_allow_html=True)
+
+        # Tombol clear semua + tutup modal
+        cl1, cl2, _ = st.columns([0.8, 0.8, 3])
+        with cl1:
+            if st.button("✕ CLEAR", key="btn_clear_indic", use_container_width=True):
+                st.session_state.chart_indic = []
+                st.session_state.show_indic_modal = False
+                st.rerun()
+        with cl2:
+            if st.button("TUTUP", key="btn_close_modal", use_container_width=True):
+                st.session_state.show_indic_modal = False
+                st.rerun()
+
+    # ── Main Chart dengan studies dari pilihan user ──
+    active_studies = [INDIC_STUDY[i] for i in st.session_state.chart_indic]
     components.html(
         tv_advanced_chart(active_tv, tf, st.session_state.chart_style, active_studies),
-        height=540, scrolling=False,
+        height=520, scrolling=False,
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
 with ga_col:
-    # padding-top besar agar jarum turun mengisi gap kosong di bawah
-    st.markdown('<div class="av-panel" style="margin-top:0;padding-top:6px">', unsafe_allow_html=True)
-    components.html(tv_tech_gauge(active_tv, tf), height=600, scrolling=False)
+    # ── Panel atas: Bunga Bank Sentral (iframe seputarforex) ──
+    st.markdown("""
+    <div class="av-panel" style="padding:10px;margin-bottom:6px">
+      <div style="font-size:8px;letter-spacing:2px;color:#00E1FF;
+                  font-family:'Share Tech Mono',monospace;margin-bottom:6px;
+                  text-shadow:0 0 8px rgba(0,225,255,0.4)">
+        ◈ BUNGA BANK SENTRAL
+      </div>
+      <style>
+        .bank-table-wrap iframe {
+            filter: invert(1) hue-rotate(180deg) brightness(0.85) saturate(1.2);
+            border-radius:4px;
+        }
+      </style>
+      <div class="bank-table-wrap">
+        <iframe src="https://www.seputarforex.org/widget/bank_central_interest.php"
+          width="100%" height="220" frameborder="0" scrolling="no"
+          style="overflow:hidden;border-radius:4px;">
+        </iframe>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Panel bawah: Technical Analysis Gauge ──
+    st.markdown('<div class="av-panel" style="padding-top:6px">', unsafe_allow_html=True)
+    components.html(tv_tech_gauge(active_tv, tf), height=370, scrolling=False)
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
@@ -943,23 +981,33 @@ with sc_col:
 st.markdown('<div class="av-sec">// AI INTELLIGENCE ENGINE</div>', unsafe_allow_html=True)
 st.markdown('<div class="av-panel">', unsafe_allow_html=True)
 
-ai1, ai2, _ = st.columns([1,1,4])
-with ai1:
-    if st.button("ANALISIS PAIR", key="btn_pair"):
+# Tombol mode berdekatan di satu row
+btn_row_l, btn_row_r, _ = st.columns([0.8, 0.9, 4])
+with btn_row_l:
+    if st.button("◈ ANALISIS PAIR", key="btn_pair"):
         st.session_state.ai_mode = "pair"
         st.session_state.ai_result = None
-with ai2:
-    if st.button("ANALISIS NEWS", key="btn_news"):
+with btn_row_r:
+    if st.button("◈ ANALISIS NEWS", key="btn_news"):
         st.session_state.ai_mode = "news"
         st.session_state.ai_result = None
 
+# Mode indicator
+mode_color = "#00E1FF" if st.session_state.ai_mode == "pair" else "#A855F7"
+mode_label = "PAIR MODE — TEKNIKAL & SMC" if st.session_state.ai_mode == "pair" else "NEWS MODE — FUNDAMENTAL & SENTIMEN"
+st.markdown(f"""
+<div style="font-size:8px;letter-spacing:1px;color:{mode_color};
+            font-family:'Share Tech Mono',monospace;margin:4px 0 8px;
+            border-left:2px solid {mode_color};padding-left:8px">
+    {mode_label}
+</div>""", unsafe_allow_html=True)
+
 if st.session_state.ai_mode == "news":
-    ni, nr = st.columns([5,1])
+    ni, nr = st.columns([5, 1])
     with ni:
         news_text = st.text_input("n", placeholder="PASTE HEADLINE / KONTEKS BERITA...", key="news_inp")
     with nr:
-        st.markdown("<div style='margin-top:4px'></div>", unsafe_allow_html=True)
-        if st.button("ANALISIS", key="btn_run_n") and news_text.strip():
+        if st.button("RUN", key="btn_run_n") and news_text.strip():
             st.session_state.ai_result = (
                 f"[PROTOTYPE] Dampak berita terhadap {active_label}: Sentimen risk-off meningkat. "
                 f"Potensi volatilitas naik di sesi New York. "
@@ -967,9 +1015,9 @@ if st.session_state.ai_mode == "news":
                 f"(Placeholder — akan diganti Claude API asli.)"
             )
 else:
-    rc, _ = st.columns([1,5])
+    rc, _ = st.columns([0.7, 5])
     with rc:
-        if st.button("ANALISIS", key="btn_run_p"):
+        if st.button("RUN", key="btn_run_p"):
             st.session_state.ai_result = (
                 f"[PROTOTYPE] Analisis teknikal {active_label} · {tf}: "
                 f"Bias bearish-netral jangka pendek. RSI ~42, MACD histogram menyempit. "
