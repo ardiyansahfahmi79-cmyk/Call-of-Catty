@@ -53,25 +53,26 @@ div[data-testid="stVerticalBlockBorderWrapper"] { padding:0 !important; }
 .stMarkdown { margin:0 !important; padding:0 !important; }
 div[data-testid="stHorizontalBlock"] { gap:8px !important; }
 
-/* ── BRAND ── */
-.av-brand-wrap { padding:12px 0 0; }
-.av-brand-line { display:flex; align-items:baseline; gap:10px; }
+/* ── BRAND compact ── */
+.av-brand-wrap { padding:6px 0 0; margin-bottom:0; }
+.av-brand-line { display:flex; align-items:baseline; gap:8px; }
 .av-prefix {
-    font-size:8px; letter-spacing:3px; color:#1A3A5A;
-    border:1px solid #1A3A5A; padding:2px 7px; border-radius:2px;
+    font-size:7px; letter-spacing:3px; color:#1A3A5A;
+    border:1px solid #1A3A5A; padding:2px 5px; border-radius:2px;
 }
 .av-title {
-    font-size:20px; letter-spacing:4px; color:#E8F1FF;
+    font-size:17px; letter-spacing:3px; color:#E8F1FF;
     font-weight:700; font-family:'Share Tech Mono',monospace;
 }
 .av-title .acc { color:#00E1FF; }
-.av-ver { font-size:8px; letter-spacing:2px; color:#2A4060; }
-.av-tagline { font-size:8px; letter-spacing:2.5px; color:#1A3A5A; margin-top:2px; }
+.av-ver { font-size:7px; letter-spacing:2px; color:#2A4060; }
+.av-tagline { font-size:7px; letter-spacing:2px; color:#1A3A5A; margin-top:1px; margin-bottom:0; }
 
 /* ── SECTION LABEL ── */
 .av-sec {
-    font-size:8px; letter-spacing:2.5px; color:#1A3060;
-    padding:8px 0 4px; font-family:'Share Tech Mono',monospace;
+    font-size:7px; letter-spacing:2px; color:#1A3060;
+    padding:4px 0 2px; font-family:'Share Tech Mono',monospace;
+    margin:0;
 }
 
 /* ── PANEL ── */
@@ -199,18 +200,43 @@ div[data-testid="stHorizontalBlock"] { gap:8px !important; }
 .av-factor-bar-wrap { height:2px; background:#0E1422; border-radius:1px; }
 .av-factor-v { font-size:8px; margin-top:2px; text-align:right; }
 
-/* ── MODE OVERLAY BUTTONS — pill div di atas, button invisible di bawah ── */
-[data-testid="stButton"][key^="mode_"] > button,
-button[kind="secondary"][data-testid="stBaseButton-secondary"] {
-    opacity: 0 !important;
-    position: absolute !important;
-    top: 0 !important; left: 0 !important;
-    width: 100% !important; height: 100% !important;
-    margin: 0 !important; padding: 0 !important;
-    background: transparent !important;
-    border: none !important;
-    cursor: pointer !important;
-    z-index: 10 !important;
+/* ── MODE BUTTONS — visible, clickable, neon style ── */
+.mode-btn-row { display:flex; gap:4px; margin-bottom:6px; flex-wrap:nowrap; }
+.mode-pill {
+    flex:1; text-align:center; padding:5px 3px;
+    border-radius:4px; font-family:'Share Tech Mono',monospace;
+    font-size:8px; letter-spacing:0.5px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    pointer-events:none; /* visual only, actual click on button below */
+}
+.mode-pill.active {
+    background:rgba(0,225,255,0.12); border:1px solid #00E1FF;
+    color:#00E1FF; box-shadow:0 0 8px rgba(0,225,255,0.2);
+}
+.mode-pill.inactive {
+    background:#09111E; border:1px solid #1A2E4A; color:#4A6080;
+}
+/* Override semua button di area mode agar tampil seperti pill */
+div[data-testid="stButton"] > button {
+    font-family:'Share Tech Mono',monospace !important;
+    font-size:8px !important; letter-spacing:0.5px !important;
+    padding:5px 3px !important;
+    border-radius:4px !important;
+    width:100% !important;
+}
+/* Mode button inactive */
+div.mode-inactive > div[data-testid="stButton"] > button {
+    background:#09111E !important;
+    border:1px solid #1A2E4A !important;
+    color:#4A6080 !important;
+    box-shadow:none !important;
+}
+/* Mode button active */
+div.mode-active > div[data-testid="stButton"] > button {
+    background:rgba(0,225,255,0.12) !important;
+    border:1px solid #00E1FF !important;
+    color:#00E1FF !important;
+    box-shadow:0 0 8px rgba(0,225,255,0.2) !important;
 }
 
 /* ── PLOTLY modebar hide ── */
@@ -536,18 +562,18 @@ def _tv(src: str, cfg: dict, h: int) -> str:
 def tv_ticker_tape() -> str:
     return _tv("https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js", {
         "symbols":[
-            {"proName":"FX:EURUSD","title":"EUR/USD"},
-            {"proName":"FX:GBPUSD","title":"GBP/USD"},
-            {"proName":"FX:USDJPY","title":"USD/JPY"},
-            {"proName":"FX:AUDUSD","title":"AUD/USD"},
-            {"proName":"OANDA:XAUUSD","title":"XAU/USD"},
-            {"proName":"CAPITALCOM:DXY","title":"DXY"},
-            {"proName":"TVC:US10Y","title":"US10Y"},
+            {"proName":"FX:EURUSD",          "title":"EUR/USD"},
+            {"proName":"FX:GBPUSD",          "title":"GBP/USD"},
+            {"proName":"FX:USDJPY",          "title":"USD/JPY"},
+            {"proName":"FX:AUDUSD",          "title":"AUD/USD"},
+            {"proName":"OANDA:XAUUSD",       "title":"XAU/USD"},
+            {"proName":"CAPITALCOM:DXY",     "title":"DXY"},
+            {"proName":"TVC:US10Y",          "title":"US10Y"},
             {"proName":"CAPITALCOM:OIL_CRUDE","title":"OIL"},
-            {"proName":"COINBASE:BTCUSD","title":"BTC/USD"},
-            {"proName":"COINBASE:ETHUSD","title":"ETH/USD"},
-            {"proName":"NASDAQ:NVDA","title":"NVDA"},
-            {"proName":"FOREXCOM:SPXUSD","title":"S&P 500"},
+            {"proName":"COINBASE:BTCUSD",    "title":"BTC/USD"},
+            {"proName":"COINBASE:ETHUSD",    "title":"ETH/USD"},
+            {"proName":"NASDAQ:NVDA",        "title":"NVDA"},
+            {"proName":"FOREXCOM:SPXUSD",    "title":"S&P 500"},
         ],
         "showSymbolLogo":True,"isTransparent":True,
         "displayMode":"adaptive","colorTheme":"dark","locale":"en",
@@ -681,14 +707,11 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Ticker tape — tight, no gap
-components.html(tv_ticker_tape(), height=58, scrolling=False)
+# Ticker tape — langsung di bawah brand, tanpa gap
+components.html(tv_ticker_tape(), height=54, scrolling=False)
 
-# ==============================================================================
-# SELECTOR BAR — dropdown style (judul saja, klik baru muncul pilihan)
-# ==============================================================================
-st.markdown('<div class="av-sec">// INSTRUMENT · PAIR · TIMEFRAME</div>', unsafe_allow_html=True)
-sc1, sc2, sc3, sc4 = st.columns([1.4, 1.4, 1.1, 1.1])
+# Selector bar — langsung setelah ticker, tanpa sec label pemisah
+sc1, sc2, sc3 = st.columns([1.4, 1.4, 1.1])
 
 with sc1:
     instr_class = av_select("INSTRUMENT", "sel_instr", list(INSTRUMENTS.keys()), st.session_state.instr_class)
@@ -806,12 +829,12 @@ CHART_MODE_STUDIES = {
     "BSS":         ["STD;Bjorgum%20SuperScript"],
 }
 
-ch_col, ga_col = st.columns([1.6, 1])
+ch_col, ga_col = st.columns([1.75, 1])
 
 with ch_col:
     st.markdown('<div class="av-panel">', unsafe_allow_html=True)
 
-    # ── Row 1 dalam panel: CHART TYPE + MODE SELECTOR ──
+    # Chart type selector
     cs_labels  = [s[0] for s in CHART_STYLES]
     cs_vals    = {s[0]: s[1] for s in CHART_STYLES}
     cur_cs_lbl = next((s[0] for s in CHART_STYLES if s[1]==st.session_state.chart_style), "LINE")
@@ -824,59 +847,45 @@ with ch_col:
             st.session_state.chart_style = chosen_style
             st.rerun()
 
-    # ── Mode selector pill buttons ──
-    cur_mode = st.session_state.chart_mode
+    # ── Mode selector — st.button langsung, CSS via wrapper div ──
+    cur_mode  = st.session_state.chart_mode
     mode_desc = CHART_MODE_DESC.get(cur_mode, "")
     st.markdown(f"""
-    <div style="margin-bottom:4px">
+    <div style="display:flex;justify-content:space-between;align-items:center;
+                margin-bottom:3px;margin-top:4px">
         <div style="font-size:8px;letter-spacing:1.5px;color:#2A4060;
-                    font-family:'Share Tech Mono',monospace;margin-bottom:4px">
-            OVERLAY MODE
-        </div>
-        <div style="font-size:8px;color:#3A5A3A;letter-spacing:0.5px;
-                    font-family:'Share Tech Mono',monospace;margin-bottom:6px;
-                    color:{'#00E1FF' if cur_mode != 'NO MODE' else '#2A4060'}">
+                    font-family:'Share Tech Mono',monospace">OVERLAY MODE</div>
+        <div style="font-size:8px;letter-spacing:0.5px;
+                    font-family:'Share Tech Mono',monospace;
+                    color:{'#00E1FF' if cur_mode != 'NO MODE' else '#2A3050'}">
             {mode_desc}
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+    </div>""", unsafe_allow_html=True)
 
-    # Render mode buttons dalam grid horizontal
     mode_cols = st.columns(len(CHART_MODES))
     for mc, mode in zip(mode_cols, CHART_MODES):
         with mc:
-            is_active = mode == cur_mode
-            btn_style = (
-                "background:rgba(0,225,255,0.12);border:1px solid #00E1FF;"
-                "color:#00E1FF;box-shadow:0 0 8px rgba(0,225,255,0.2);"
-            ) if is_active else (
-                "background:#09111E;border:1px solid #1A2E4A;color:#4A6080;"
-            )
-            st.markdown(f"""
-            <div style="{btn_style}border-radius:4px;padding:5px 4px;
-                         text-align:center;font-family:'Share Tech Mono',monospace;
-                         font-size:8px;letter-spacing:0.5px;cursor:pointer;
-                         margin-bottom:6px;white-space:nowrap;overflow:hidden">
-                {mode}
-            </div>""", unsafe_allow_html=True)
-            if st.button("", key=f"mode_{mode}",
-                         help=CHART_MODE_DESC.get(mode,""),
-                         use_container_width=True):
+            is_active  = (mode == cur_mode)
+            wrap_class = "mode-active" if is_active else "mode-inactive"
+            st.markdown(f'<div class="{wrap_class}">', unsafe_allow_html=True)
+            if st.button(mode, key=f"mode_{mode}", use_container_width=True):
                 if mode != st.session_state.chart_mode:
                     st.session_state.chart_mode = mode
                     st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
     # ── Main Chart ──
     active_studies = CHART_MODE_STUDIES.get(st.session_state.chart_mode, [])
     components.html(
         tv_advanced_chart(active_tv, tf, st.session_state.chart_style, active_studies),
-        height=500, scrolling=False,
+        height=540, scrolling=False,
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
 with ga_col:
-    st.markdown('<div class="av-panel" style="padding-top:8px">', unsafe_allow_html=True)
-    components.html(tv_tech_gauge(active_tv, tf), height=500, scrolling=False)
+    # padding-top besar agar jarum turun mengisi gap kosong di bawah
+    st.markdown('<div class="av-panel" style="margin-top:0;padding-top:6px">', unsafe_allow_html=True)
+    components.html(tv_tech_gauge(active_tv, tf), height=600, scrolling=False)
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
