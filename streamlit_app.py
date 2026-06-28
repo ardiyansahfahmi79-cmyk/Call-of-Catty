@@ -371,6 +371,16 @@ iframe {
 .js-plotly-plot .plotly .modebar {
     display:none !important;
 }
+
+/* ── LAYOUT FIX FOR GAPS (MCT & MAIN CHART) ── */
+div[data-testid="column"]:has(.mct-shift) {
+    padding-top: 30px !important;
+}
+div[data-testid="column"]:has(.main-chart-shift) {
+    margin-top: -60px !important;
+    position: relative;
+    z-index: 10;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -492,7 +502,7 @@ def fetch_twelvedata(symbol: str, interval: str, outputsize: int = 300) -> pd.Da
         api_key = st.secrets["TWELVE_DATA_API_KEY"]
     except Exception:
         return pd.DataFrame()
-        
+
     url = (
         f"https://api.twelvedata.com/time_series"
         f"?symbol={symbol}&interval={interval}&outputsize={outputsize}&apikey={api_key}"
@@ -501,13 +511,13 @@ def fetch_twelvedata(symbol: str, interval: str, outputsize: int = 300) -> pd.Da
         r = requests.get(url, timeout=10).json()
         if r.get("status") == "error" or "values" not in r:
             return pd.DataFrame()
-        
+
         df = pd.DataFrame(r["values"])
         df["datetime"] = pd.to_datetime(df["datetime"])
         for c in ["open","high","low","close"]:
             df[c] = pd.to_numeric(df[c], errors="coerce")
         df["volume"] = pd.to_numeric(df.get("volume", 0), errors="coerce").fillna(0)
-        
+
         df = df.sort_values("datetime").reset_index(drop=True)
         df.set_index("datetime", inplace=True)
         return df
@@ -530,7 +540,7 @@ def _make_dummy_df(seed_str: str, n: int = 300) -> pd.DataFrame:
 
 def calculate_mct(df: pd.DataFrame) -> dict:
     lookback = 63
-    
+
     def z_norm(s: pd.Series) -> pd.Series:
         rm = s.rolling(lookback, min_periods=10).mean()
         rs = s.rolling(lookback, min_periods=10).std().replace(0, np.nan)
@@ -555,14 +565,14 @@ def calculate_mct(df: pd.DataFrame) -> dict:
 
     comp = (0.40 * z_rsi) + (0.40 * z_macd) + (0.20 * z_vol)
     raw = np.clip((comp * 100).fillna(0).to_numpy(), -100, 100)
-    
+
     n = len(raw)
     wl = min(25, n)
     if wl % 2 == 0: wl -= 1
     wl = max(wl, 5)
-    
+
     smoothed = np.clip(savgol_filter(raw, window_length=wl, polyorder=3, mode="interp"), -100, 100)
-    
+
     return {
         "values": smoothed,
         "current": float(smoothed[-1]),
@@ -576,14 +586,14 @@ def render_mct(result: dict) -> go.Figure:
     current = result["current"]
     prev = float(values[max(0, len(values)-6)])
     momentum = current - prev
-    
+
     isBull = current >= 0
     dot_c = "#00E1FF" if isBull else "#FF3D71"
-    
+
     x = list(range(len(values)))
     y_up = np.where(values >= 0, values, np.nan)
     y_dn = np.where(values <= 0, values, np.nan)
-    
+
     if current > 60: regime = "STRONG BULL"
     elif current > 25: regime = "BULL"
     elif current < -60: regime = "STRONG BEAR"
@@ -605,7 +615,7 @@ def render_mct(result: dict) -> go.Figure:
         line=dict(color="#FF3D71", width=2.4, shape="spline", smoothing=0.5),
         mode="lines", showlegend=False, hovertemplate="MCT: %{y:.2f}<extra></extra>",
     ))
-    
+
     fig.add_trace(go.Scatter(x=[x[-1]], y=[current], mode="markers", 
                              marker=dict(color=dot_c, size=13, opacity=0.2, line=dict(width=0)), 
                              showlegend=False, hoverinfo="skip"))
@@ -617,13 +627,13 @@ def render_mct(result: dict) -> go.Figure:
         lc = "rgba(255,255,255,0.45)" if lvl==0 else "rgba(42,53,80,0.8)"
         dash = "solid" if lvl==0 else "dot"
         fig.add_hline(y=lvl, line_color=lc, line_width=1.1 if lvl==0 else 0.65, line_dash=dash)
-        
+
         if lbl:
             fc = "rgba(0,225,255,0.45)" if lvl>0 else "rgba(255,61,113,0.45)"
             fig.add_annotation(x=0, y=lvl, xref="paper", text=f" {lbl}", showarrow=False, 
                                font=dict(size=7, color=fc, family="Share Tech Mono,monospace"), 
                                xanchor="left", yanchor="bottom")
-            
+
     sym = "▲" if momentum >= 0 else "▼"
     fig.add_annotation(x=1, y=0.97, xref="paper", yref="paper", 
                        text=f"{regime} {sym} {abs(momentum):.1f}", 
@@ -892,6 +902,9 @@ tf = st.session_state.timeframe
 mct_col, ov_col = st.columns([1.1, 1])
 
 with mct_col:
+    # --- MARKER: MCT SHIFT ---
+    st.markdown('<span class="mct-shift"></span>', unsafe_allow_html=True)
+    
     st.markdown(f"""
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
         <div style="font-size:11px;font-weight:700;letter-spacing:2px;color:#00E1FF;
@@ -912,7 +925,7 @@ with mct_col:
         data_src = "SIMULATION MODE"
     else:
         data_src = "LIVE · TWELVE DATA"
-        
+
     mct = calculate_mct(df)
     cur = mct["current"]
     clr = "#00E1FF" if cur >= 0 else "#FF3D71"
@@ -953,13 +966,16 @@ INDIC_STUDY = {
 ch_col, ga_col = st.columns([1.75, 1])
 
 with ch_col:
+    # --- MARKER: MAIN CHART SHIFT ---
+    st.markdown('<span class="main-chart-shift"></span>', unsafe_allow_html=True)
+
     # ── Row kontrol: CHART TYPE + INDIKATOR AKTIF + TOMBOL + ──
     ctrl_l, ctrl_mid, ctrl_r = st.columns([1.2, 2, 0.5])
     with ctrl_l:
         cs_labels = [s[0] for s in CHART_STYLES]
         cs_vals = {s[0]: s[1] for s in CHART_STYLES}
         cur_cs_lbl = next((s[0] for s in CHART_STYLES if s[1]==st.session_state.chart_style), "LINE")
-        
+
         chart_style_lbl = av_select("CHART TYPE", "sel_cs", cs_labels, cur_cs_lbl)
         chosen_style = cs_vals[chart_style_lbl]
         if chosen_style != st.session_state.chart_style:
@@ -1009,14 +1025,14 @@ with ch_col:
                 Pilih maks. 2 indikator · Klik nama untuk buka dokumentasi TradingView
             </div>
         </div>""", unsafe_allow_html=True)
-        
+
         ic = st.columns(len(INDIC_LIST))
         for col_i, ind in zip(ic, INDIC_LIST):
             with col_i:
                 is_on = ind in st.session_state.chart_indic
                 can_add = len(st.session_state.chart_indic) < 2
                 btn_lbl = f"✓ {ind}" if is_on else ind
-                
+
                 if is_on:
                     if st.button(btn_lbl, key=f"indic_{ind}", use_container_width=True):
                         st.session_state.chart_indic.remove(ind)
@@ -1034,7 +1050,7 @@ with ch_col:
                          text-align:center">
                         {ind}
                     </div>""", unsafe_allow_html=True)
-        
+
         cl1, cl2 = st.columns(2)
         with cl1:
             if st.button("✕ CLEAR", key="btn_clear_indic", use_container_width=True):
@@ -1073,7 +1089,7 @@ with ga_col:
         </div>
     </div>
     """, unsafe_allow_html=True)
-    
+
     # ── Panel bawah: Technical Analysis Gauge ──
     components.html(tv_tech_gauge(active_tv, tf), height=370, scrolling=False)
 
@@ -1100,12 +1116,12 @@ for col, state_key, sel_key, def_idx in [
         cur_val = st.session_state.get(state_key, active_mini_labels[def_idx])
         if cur_val not in active_mini_labels:
             cur_val = active_mini_labels[def_idx]
-            
+
         chosen = av_select("", sel_key, active_mini_labels, cur_val)
         if chosen != st.session_state.get(state_key):
             st.session_state[state_key] = chosen
             st.rerun()
-            
+
         components.html(tv_mini_chart(active_mini_map[chosen]), height=215, scrolling=False)
 
 
