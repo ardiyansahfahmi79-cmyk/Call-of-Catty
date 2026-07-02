@@ -790,7 +790,7 @@ def market_data_engine(df: pd.DataFrame, pair: str, tf: str) -> dict:
         "price": close, "high_50": high, "low_50": low,
         "volume": vol, "atr": atr_val,
         "session": session,
-        "timestamp": now_utc.strftime("%d %b %Y %H:%M UTC"),
+        "timestamp": now_utc.strftime("%d %b %Y"),
     }
 
 # ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -1036,22 +1036,21 @@ def scoring_engine(quant: dict, inst: dict, risk: dict) -> dict:
     return {"composite_rating": round(final_score, 1), "conviction": conviction, "weights": weights}
 
 # ──────────────────────────────────────────────────────────────────────────────────────────────
-# E. AI INTERPRETATION ENGINE (NVIDIA NIM — nvidia/llama-3.1-nemotron-70b-instruct)
+# E. AI INTERPRETATION ENGINE (Groq — llama-3.3-70b-versatile)
 # ──────────────────────────────────────────────────────────────────────────────────────────────
-def call_nvidia_nemotron(system_prompt: str, user_prompt: str, max_tokens: int = 500) -> str:
+def call_groq_llm(system_prompt: str, user_prompt: str, max_tokens: int = 500) -> str:
     try:
-        api_key = st.secrets["NVIDIA_API_KEY"]
+        api_key = st.secrets["GROQ_API_KEY"]
     except Exception:
         return "__AI_UNAVAILABLE__"
 
-    url = "https://integrate.api.nvidia.com/v1/chat/completions"
+    url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
-        "Accept": "application/json",
     }
     payload = {
-        "model": "nvidia/llama-3.1-nemotron-70b-instruct",
+        "model": "llama-3.3-70b-versatile",
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -1110,7 +1109,7 @@ Sesi pasar saat ini: {market['session']}
 Tulis narasi analisis pasar berdasarkan data di atas dalam Bahasa Indonesia formal,
 jelaskan kondisi pasar saat ini, alasan di balik bias arah {risk['direction']}, dan skenario yang diutamakan.
 """
-    result = call_nvidia_nemotron(system_prompt, user_prompt, max_tokens=400)
+    result = call_groq_llm(system_prompt, user_prompt, max_tokens=400)
     if result == "__AI_UNAVAILABLE__":
         return _fallback_narrative_pair(market, quant, inst, risk, score)
     return result
@@ -1162,7 +1161,7 @@ Aset paling terdampak: {', '.join(news_summary['top_assets'])}
 Tulis narasi interpretasi pasar Bahasa Indonesia formal mengenai dampak berita ini terhadap pasar,
 mengapa bias condong ke {news_summary['institutional_bias']}, dan skenario yang lebih mungkin terjadi.
 """
-    result = call_nvidia_nemotron(system_prompt, user_prompt, max_tokens=400)
+    result = call_groq_llm(system_prompt, user_prompt, max_tokens=400)
     if result == "__AI_UNAVAILABLE__":
         return _fallback_narrative_news(news_summary)
     return result
@@ -1504,7 +1503,7 @@ def render_pair_report(market, quant, inst, risk, score, narrative, pair):
 
 def render_news_report(summary, narrative):
     bull_cls = "buy" if summary["bullish_pct"] >= summary["bearish_pct"] else "sell"
-    now_str = datetime.now(timezone.utc).strftime("%d %b %Y %H:%M UTC")
+    now_str = datetime.now(timezone.utc).strftime("%d %b %Y")
 
     assets_html = "".join([
         f'<div class="av-matrix-row"><span class="av-report-k">{a}</span>'
