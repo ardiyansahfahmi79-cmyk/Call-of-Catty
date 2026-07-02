@@ -13,6 +13,7 @@ from scipy.signal import savgol_filter
 import streamlit.components.v1 as components
 import json
 from datetime import datetime, timezone
+from urllib.parse import quote as _url_quote
 
 st.set_page_config(
     page_title="AEROVULPIS TERMINAL",
@@ -1072,11 +1073,19 @@ def call_groq_llm(system_prompt: str, user_prompt: str, max_tokens: int = 500) -
 def ai_interpret_pair(market: dict, quant: dict, inst: dict, risk: dict, score: dict) -> str:
     system_prompt = (
         "Kamu adalah AI Interpretation Engine pada terminal trading institusional bernama "
-        "AEROVULPIS TERMINAL. Tugasmu HANYA menerjemahkan data numerik yang sudah dihitung oleh "
-        "mesin kuantitatif menjadi narasi analisis pasar yang ringkas, profesional, dan dalam "
-        "Bahasa Indonesia formal ala riset institusi (gaya Bloomberg/Reuters). "
-        "Kamu TIDAK BOLEH menghitung ulang indikator apapun — semua angka sudah final. "
-        "Tulis 4-6 kalimat naratif saja, tanpa heading, tanpa bullet point, tanpa markdown."
+        "AEROVULPIS TERMINAL, khusus modul analisis teknikal & struktur pasar (Smart Money Concept). "
+        "Tugasmu HANYA menerjemahkan data numerik yang sudah dihitung mesin kuantitatif menjadi "
+        "narasi analisis yang mendalam, tajam, dan dalam Bahasa Indonesia formal ala trading desk "
+        "institusi (gaya riset teknikal Bloomberg/Reuters). Kamu TIDAK BOLEH menghitung ulang "
+        "indikator apapun — semua angka sudah final, tugasmu murni menginterpretasikan maknanya. "
+        "Tulis narasi sepanjang 3 paragraf (total sekitar 9-12 kalimat), TANPA heading, TANPA "
+        "bullet point, TANPA markdown — paragraf mengalir seperti catatan analis profesional:\n"
+        "Paragraf 1: kondisi pasar saat ini secara umum (trend, momentum, volatilitas) dan apa "
+        "artinya bagi arah harga.\n"
+        "Paragraf 2: pembacaan struktur pasar institusional (BOS, CHoCH, order block, liquidity, "
+        "zona premium/discount) dan bagaimana ini memperkuat atau melemahkan bias arah.\n"
+        "Paragraf 3: kesimpulan rekomendasi eksekusi — mengapa level entry/SL/TP masuk akal secara "
+        "risk management, serta kondisi apa yang bisa membatalkan skenario ini."
     )
     user_prompt = f"""
 Data hasil perhitungan kuantitatif untuk {market['pair']} timeframe {market['timeframe']}:
@@ -1098,6 +1107,9 @@ FVG Aktif: {inst['fvg_active']}
 
 Risk Engine:
 Direction: {risk['direction']}
+Entry: {_fmt_price(risk['entry'], market['pair'])}
+Stop Loss: {_fmt_price(risk['sl'], market['pair'])}
+Take Profit 2: {_fmt_price(risk['tp2'], market['pair'])}
 Risk/Reward: 1:{risk['rr_ratio']}
 Probabilitas Eksekusi: {risk['probability']:.0f}%
 ATR Risk Level: {risk['atr_risk']}
@@ -1106,10 +1118,10 @@ Composite Rating: {score['composite_rating']}/100
 Conviction Level: {score['conviction']}
 Sesi pasar saat ini: {market['session']}
 
-Tulis narasi analisis pasar berdasarkan data di atas dalam Bahasa Indonesia formal,
-jelaskan kondisi pasar saat ini, alasan di balik bias arah {risk['direction']}, dan skenario yang diutamakan.
+Tulis narasi analisis pasar 3 paragraf sesuai instruksi sistem, dalam Bahasa Indonesia formal,
+berdasarkan data di atas untuk bias arah {risk['direction']}.
 """
-    result = call_groq_llm(system_prompt, user_prompt, max_tokens=400)
+    result = call_groq_llm(system_prompt, user_prompt, max_tokens=650)
     if result == "__AI_UNAVAILABLE__":
         return _fallback_narrative_pair(market, quant, inst, risk, score)
     return result
@@ -1118,29 +1130,62 @@ jelaskan kondisi pasar saat ini, alasan di balik bias arah {risk['direction']}, 
 def _fallback_narrative_pair(market, quant, inst, risk, score) -> str:
     """Narasi cadangan berbasis rule Python — dipakai saat lapisan interpretasi AI sedang tidak tersedia."""
     arah = "penguatan" if risk["direction"] == "BUY" else "pelemahan"
-    return (
+    p1 = (
         f"Struktur pasar {market['pair']} pada timeframe {market['timeframe']} menunjukkan "
-        f"{inst['structure'].lower()} dengan {inst['bos_status'].lower()}. "
-        f"Trend Score berada di {quant['trend_score']:.0f}/100 dan Momentum Score {quant['momentum_score']:.0f}/100, "
-        f"mengindikasikan potensi {arah} harga dalam waktu dekat. "
-        f"Zona harga saat ini berada pada {inst['pd_zone'].lower()} dengan likuiditas "
-        f"{inst['liquidity_side'].lower()}. Rating komposit sistem tercatat {score['composite_rating']}/100 "
-        f"dengan klasifikasi {score['conviction'].lower()}, memberikan probabilitas eksekusi "
-        f"sebesar {risk['probability']:.0f}% untuk skenario {risk['direction']}."
+        f"{inst['structure'].lower()}, dengan Trend Score berada di {quant['trend_score']:.0f}/100 "
+        f"dan Momentum Score {quant['momentum_score']:.0f}/100. Kombinasi ini mengindikasikan potensi "
+        f"{arah} harga dalam waktu dekat, didukung Volatility Index {quant['volatility_score']:.0f}/100 "
+        f"yang menggambarkan tingkat pergerakan harga saat ini berada pada sesi {market['session']}."
     )
+    p2 = (
+        f"Dari sisi struktur institusional, sistem mendeteksi {inst['bos_status'].lower()} dengan "
+        f"Change of Character {inst['choch_status'].lower()}. Zona harga saat ini berada pada "
+        f"{inst['pd_zone'].lower()} dengan kondisi likuiditas {inst['liquidity_side'].lower()}, yang "
+        f"secara historis menjadi area di mana pelaku pasar institusional cenderung membuka atau "
+        f"menutup posisi besar."
+    )
+    p3 = (
+        f"Rating komposit sistem tercatat {score['composite_rating']}/100 dengan klasifikasi "
+        f"{score['conviction'].lower()}, memberikan probabilitas eksekusi sebesar {risk['probability']:.0f}% "
+        f"untuk skenario {risk['direction']}. Rasio risk/reward 1:{risk['rr_ratio']} pada level ATR "
+        f"{risk['atr_risk'].lower()} menjadikan setup ini layak dipertimbangkan dengan manajemen risiko "
+        f"yang disiplin, mengingat skenario ini dapat berubah apabila struktur pasar mengalami reversal."
+    )
+    return f"{p1}\n\n{p2}\n\n{p3}"
 
 
-def ai_interpret_news(news_summary: dict) -> str:
+def ai_interpret_news(news_summary: dict, sample_titles: list = None) -> str:
     system_prompt = (
         "Kamu adalah AI Interpretation Engine pada terminal trading institusional bernama "
-        "AEROVULPIS TERMINAL, khusus modul News Intelligence. Tugasmu HANYA menerjemahkan hasil "
-        "analisis macro/sentiment yang sudah dihitung sistem menjadi narasi profesional Bahasa "
-        "Indonesia formal ala riset institusi keuangan. Kamu TIDAK BOLEH membuat klaim baru di luar "
-        "data yang diberikan. Tulis 4-6 kalimat naratif saja, tanpa heading, tanpa bullet, tanpa markdown."
+        "AEROVULPIS TERMINAL, khusus modul News Intelligence & analisis makroekonomi. Beberapa "
+        "judul artikel sumber diberikan dalam Bahasa Inggris — tugasmu adalah membaca makna "
+        "artikel-artikel tersebut dan menerjemahkan intisarinya ke Bahasa Indonesia formal ala "
+        "jurnalis riset makro (gaya Reuters/Bloomberg Indonesia), DIGABUNGKAN dengan hasil "
+        "perhitungan statistik sistem (sentimen, dampak, klasifikasi) yang sudah final — kamu "
+        "TIDAK BOLEH mengubah angka statistik tersebut, hanya menjelaskan maknanya. "
+        "Tulis narasi sepanjang 3 paragraf (total sekitar 9-12 kalimat), TANPA heading, TANPA "
+        "bullet point, TANPA markdown, TANPA menyebut nama media/sumber artikel secara spesifik:\n"
+        "Paragraf 1: ringkasan inti dari berita/topik ini — apa yang sebenarnya terjadi, dalam "
+        "bahasa yang mudah dipahami trader awam.\n"
+        "Paragraf 2: konteks makroekonomi — mengapa ini penting bagi bank sentral, kebijakan "
+        "moneter, dan bagaimana ini membentuk sentimen risk-on/risk-off pasar saat ini.\n"
+        "Paragraf 3: implikasi konkret terhadap aset-aset yang terdampak, dan skenario mana yang "
+        "lebih mungkin terjadi ke depan berdasarkan bias institusional yang terdeteksi sistem."
     )
-    user_prompt = f"""
-Hasil analisis berita untuk topik: "{news_summary['query']}"
 
+    titles_block = ""
+    if sample_titles:
+        titles_block = "\n".join(f"- {t}" for t in sample_titles[:8])
+    else:
+        titles_block = "(tidak ada judul artikel spesifik tersedia — gunakan data statistik saja)"
+
+    user_prompt = f"""
+Topik yang dianalisis: "{news_summary['query']}"
+
+Judul artikel sumber (Bahasa Inggris, untuk kamu pahami maknanya):
+{titles_block}
+
+Hasil perhitungan statistik sistem:
 Jumlah artikel diproses: {news_summary['total_articles']}
 Sumber unik: {news_summary['unique_sources']}
 Tingkat konsensus lintas sumber: {news_summary['consensus_pct']}%
@@ -1150,6 +1195,7 @@ Tingkat dampak: {news_summary['impact']}
 Sensitivitas pasar: {news_summary['sensitivity']}
 
 Tema makro: {news_summary['macro_theme']}
+Outlook kebijakan: {news_summary['policy_outlook']}
 Sentimen Risk-On/Risk-Off: {news_summary['risk_env']}
 
 Probabilitas Bullish: {news_summary['bullish_pct']}%
@@ -1158,10 +1204,9 @@ Bias institusional: {news_summary['institutional_bias']}
 
 Aset paling terdampak: {', '.join(news_summary['top_assets'])}
 
-Tulis narasi interpretasi pasar Bahasa Indonesia formal mengenai dampak berita ini terhadap pasar,
-mengapa bias condong ke {news_summary['institutional_bias']}, dan skenario yang lebih mungkin terjadi.
+Tulis narasi interpretasi pasar 3 paragraf sesuai instruksi sistem, dalam Bahasa Indonesia formal.
 """
-    result = call_groq_llm(system_prompt, user_prompt, max_tokens=400)
+    result = call_groq_llm(system_prompt, user_prompt, max_tokens=650)
     if result == "__AI_UNAVAILABLE__":
         return _fallback_narrative_news(news_summary)
     return result
@@ -1169,17 +1214,27 @@ mengapa bias condong ke {news_summary['institutional_bias']}, dan skenario yang 
 
 def _fallback_narrative_news(summary: dict) -> str:
     """Narasi cadangan berbasis rule Python — dipakai saat lapisan interpretasi AI sedang tidak tersedia."""
-    return (
+    p1 = (
         f"Analisis terhadap topik \"{summary['query']}\" memproses {summary['total_articles']} artikel "
-        f"dari {summary['unique_sources']} sumber dengan tingkat konsensus {summary['consensus_pct']:.0f}%. "
-        f"Klasifikasi berita ini tergolong {summary['classification'].lower()} dengan dampak "
-        f"{summary['impact'].lower()} terhadap pasar. Tema makro yang mendominasi adalah "
-        f"{summary['macro_theme'].lower()} dengan lingkungan risiko {summary['risk_env'].lower()}. "
-        f"Model sentimen mencatat probabilitas bullish {summary['bullish_pct']:.0f}% berbanding "
-        f"bearish {summary['bearish_pct']:.0f}%, mengarahkan bias institusional ke "
-        f"{summary['institutional_bias'].lower()}, dengan aset utama yang terdampak meliputi "
-        f"{', '.join(summary['top_assets'][:4])}."
+        f"dari {summary['unique_sources']} sumber berbeda, dengan tingkat konsensus lintas sumber "
+        f"sebesar {summary['consensus_pct']:.0f}%. Berita ini tergolong dalam klasifikasi "
+        f"{summary['classification'].lower()} dengan tingkat dampak {summary['impact'].lower()} "
+        f"terhadap pergerakan pasar dalam waktu dekat."
     )
+    p2 = (
+        f"Dari sisi makroekonomi, tema yang mendominasi adalah {summary['macro_theme'].lower()} dengan "
+        f"outlook kebijakan {summary['policy_outlook'].lower()}. Kondisi ini menciptakan lingkungan "
+        f"sentimen {summary['risk_env'].lower()} di pasar global, yang secara historis memengaruhi "
+        f"alokasi modal institusional antara aset berisiko dan aset lindung nilai."
+    )
+    p3 = (
+        f"Model sentimen sistem mencatat probabilitas bullish {summary['bullish_pct']:.0f}% berbanding "
+        f"bearish {summary['bearish_pct']:.0f}%, mengarahkan bias institusional ke arah "
+        f"{summary['institutional_bias'].lower()}. Aset yang paling berpotensi terdampak meliputi "
+        f"{', '.join(summary['top_assets'][:4])}, sehingga pelaku pasar disarankan memantau "
+        f"pergerakan pada instrumen tersebut secara khusus dalam waktu dekat."
+    )
+    return f"{p1}\n\n{p2}\n\n{p3}"
 
 # ──────────────────────────────────────────────────────────────────────────────────────────────
 # NEWS PIPELINE — News Engine → Validation → Fundamental → Macro → Sentiment → Impact
@@ -1199,11 +1254,37 @@ DOVISH_WORDS  = ["rate cut","dovish","easing","pause","lower rates","stimulus"]
 POSITIVE_WORDS = ["surge","rally","beat expectations","strong","growth","optimis","bullish"]
 NEGATIVE_WORDS = ["plunge","crash","recession","weak","miss expectations","bearish","risk-off","concern"]
 
+# Kamus terjemahan istilah trading Indonesia → Inggris, agar query tetap match
+# dengan bahasa mayoritas artikel di sumber berita global.
+ID_EN_TERMS = {
+    "inflasi": "inflation", "suku bunga": "interest rate", "bank sentral": "central bank",
+    "nilai tukar": "exchange rate", "ekonomi": "economy", "resesi": "recession",
+    "pengangguran": "unemployment", "gaji": "payroll", "data ketenagakerjaan": "employment data",
+    "kenaikan": "hike", "penurunan": "cut", "kebijakan moneter": "monetary policy",
+    "the fed": "federal reserve", "bank indonesia": "bank indonesia", "rupiah": "rupiah",
+    "dolar": "dollar", "emas": "gold", "minyak": "oil", "harga": "price",
+    "pasar saham": "stock market", "obligasi": "bond", "yield": "yield",
+    "gdp": "gdp", "pdb": "gdp", "cpi": "cpi", "nfp": "non-farm payrolls",
+}
+
+def _translate_query_for_search(query: str) -> str:
+    """Terjemahkan istilah Indonesia umum dalam query ke Inggris agar hasil pencarian
+    berita internasional lebih relevan. Istilah yang tidak dikenali dibiarkan apa adanya
+    (mis. nama pair EURUSD, XAUUSD tetap valid di kedua bahasa)."""
+    q_lower = query.lower()
+    translated = q_lower
+    for id_term, en_term in ID_EN_TERMS.items():
+        if id_term in translated:
+            translated = translated.replace(id_term, en_term)
+    return translated if translated != q_lower else query
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_news_newsapi(query: str) -> list:
     try:
         api_key = st.secrets["NEWSAPI_KEY"]
-        url = f"https://newsapi.org/v2/everything?q={query}&language=en&sortBy=publishedAt&pageSize=15&apiKey={api_key}"
+        q = _url_quote(query)
+        url = f"https://newsapi.org/v2/everything?q={q}&language=en&sortBy=publishedAt&pageSize=15&apiKey={api_key}"
         r = requests.get(url, timeout=10).json()
         arts = r.get("articles", [])
         return [{"title":a.get("title",""), "desc":a.get("description","") or "", "source":a.get("source",{}).get("name","NewsAPI")} for a in arts]
@@ -1214,7 +1295,8 @@ def fetch_news_newsapi(query: str) -> list:
 def fetch_news_marketaux(query: str) -> list:
     try:
         api_key = st.secrets["MARKETAUX_KEY"]
-        url = f"https://api.marketaux.com/v1/news/all?search={query}&language=en&limit=15&api_token={api_key}"
+        q = _url_quote(query)
+        url = f"https://api.marketaux.com/v1/news/all?search={q}&language=en&limit=15&api_token={api_key}"
         r = requests.get(url, timeout=10).json()
         arts = r.get("data", [])
         return [{"title":a.get("title",""), "desc":a.get("description","") or "", "source":a.get("source","MarketAux")} for a in arts]
@@ -1225,7 +1307,8 @@ def fetch_news_marketaux(query: str) -> list:
 def fetch_news_gnews(query: str) -> list:
     try:
         api_key = st.secrets["GNEWS_KEY"]
-        url = f"https://gnews.io/api/v4/search?q={query}&lang=en&max=15&apikey={api_key}"
+        q = _url_quote(query)
+        url = f"https://gnews.io/api/v4/search?q={q}&lang=en&max=15&apikey={api_key}"
         r = requests.get(url, timeout=10).json()
         arts = r.get("articles", [])
         return [{"title":a.get("title",""), "desc":a.get("description","") or "", "source":a.get("source",{}).get("name","GNews")} for a in arts]
@@ -1236,7 +1319,8 @@ def fetch_news_gnews(query: str) -> list:
 def fetch_news_currentnews(query: str) -> list:
     try:
         api_key = st.secrets["CURRENT_NEWS_KEY"]
-        url = f"https://currentsapi.services/v1/search?keywords={query}&language=en&apiKey={api_key}"
+        q = _url_quote(query)
+        url = f"https://currentsapi.services/v1/search?keywords={q}&language=en&apiKey={api_key}"
         r = requests.get(url, timeout=10).json()
         arts = r.get("news", [])
         return [{"title":a.get("title",""), "desc":a.get("description","") or "", "source":a.get("author","CurrentNews") or "CurrentNews"} for a in arts]
@@ -1245,11 +1329,24 @@ def fetch_news_currentnews(query: str) -> list:
 
 
 def news_engine(query: str) -> list:
+    """A. News Engine — terjemahkan query ID->EN dulu, lalu ambil dari 4 sumber sekaligus."""
+    search_query = _translate_query_for_search(query)
+
     all_articles = []
-    all_articles += fetch_news_newsapi(query)
-    all_articles += fetch_news_marketaux(query)
-    all_articles += fetch_news_gnews(query)
-    all_articles += fetch_news_currentnews(query)
+    all_articles += fetch_news_newsapi(search_query)
+    all_articles += fetch_news_marketaux(search_query)
+    all_articles += fetch_news_gnews(search_query)
+    all_articles += fetch_news_currentnews(search_query)
+
+    # Fallback: kalau query spesifik tidak menghasilkan apapun (mis. terlalu niche),
+    # coba lagi dengan kata kunci pertama saja agar tetap ada artikel relevan.
+    if not all_articles and len(search_query.split()) > 1:
+        broad_query = search_query.split()[0]
+        all_articles += fetch_news_newsapi(broad_query)
+        all_articles += fetch_news_marketaux(broad_query)
+        all_articles += fetch_news_gnews(broad_query)
+        all_articles += fetch_news_currentnews(broad_query)
+
     return all_articles
 
 
@@ -1402,6 +1499,8 @@ def run_news_pipeline(query: str) -> dict:
     classification = fundamental["central_bank"] + " Policy" if fundamental["central_bank"] != "—" else "Market Update"
     sensitivity = "ELEVATED" if fundamental["impact"] == "HIGH" else "NORMAL"
 
+    sample_titles = [a.get("title","").strip() for a in clean[:8] if a.get("title","").strip()]
+
     summary = {
         "query": query,
         "total_articles": validation["total_processed"],
@@ -1422,6 +1521,7 @@ def run_news_pipeline(query: str) -> dict:
         "central_bank": fundamental["central_bank"],
         "affected_currencies": fundamental["affected_currencies"],
         "duplicates_removed": validation["duplicates"],
+        "sample_titles": sample_titles,
     }
     return summary
 
@@ -1431,6 +1531,7 @@ def run_news_pipeline(query: str) -> dict:
 def render_pair_report(market, quant, inst, risk, score, narrative, pair):
     now_str = market["timestamp"]
     bias_cls = "buy" if risk["direction"] == "BUY" else "sell"
+    narrative_html = narrative.replace("\n\n", "<br><br>").replace("\n", " ")
 
     html = f"""
     <div class="av-report-wrap">
@@ -1484,7 +1585,7 @@ def render_pair_report(market, quant, inst, risk, score, narrative, pair):
         <div class="av-report-row"><span class="av-report-k">Probabilitas Skenario</span><span class="av-report-v">{risk['contingency_probability']:.0f}%</span></div>
 
         <div class="av-report-section-title">INTERPRETASI AI</div>
-        <div class="av-report-narrative">{narrative}</div>
+        <div class="av-report-narrative">{narrative_html}</div>
 
         <div class="av-report-section-title" style="margin-top:18px;font-size:7px;color:#2A3A5A">DISCLAIMER</div>
         <div style="font-size:8px;color:#3A4A60;line-height:1.7">
@@ -1504,6 +1605,7 @@ def render_pair_report(market, quant, inst, risk, score, narrative, pair):
 def render_news_report(summary, narrative):
     bull_cls = "buy" if summary["bullish_pct"] >= summary["bearish_pct"] else "sell"
     now_str = datetime.now(timezone.utc).strftime("%d %b %Y")
+    narrative_html = narrative.replace("\n\n", "<br><br>").replace("\n", " ")
 
     assets_html = "".join([
         f'<div class="av-matrix-row"><span class="av-report-k">{a}</span>'
@@ -1551,7 +1653,7 @@ def render_news_report(summary, narrative):
         <div class="av-report-row"><span class="av-report-k">Bias Institusional</span><span class="av-report-v {bull_cls}">{summary['institutional_bias']}</span></div>
 
         <div class="av-report-section-title">INTERPRETASI AI</div>
-        <div class="av-report-narrative">{narrative}</div>
+        <div class="av-report-narrative">{narrative_html}</div>
 
         <div class="av-report-section-title" style="margin-top:18px;font-size:7px;color:#2A3A5A">DISCLAIMER</div>
         <div style="font-size:8px;color:#3A4A60;line-height:1.7">
@@ -1923,7 +2025,7 @@ if st.session_state.ai_mode == "news":
     if run_news_clicked and news_text.strip():
         with st.spinner("◈ Menyisir jaringan sumber intelijen pasar global..."):
             news_summary = run_news_pipeline(news_text.strip())
-            narrative = ai_interpret_news(news_summary)
+            narrative = ai_interpret_news(news_summary, news_summary.get("sample_titles"))
             st.session_state.ai_result = render_news_report(news_summary, narrative)
     elif run_news_clicked and not news_text.strip():
         st.markdown(
