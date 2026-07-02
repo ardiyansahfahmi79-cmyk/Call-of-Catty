@@ -167,16 +167,24 @@ iframe { display:block; margin:0 !important; }
     background:linear-gradient(135deg,rgba(0,225,255,0.15),rgba(168,85,247,0.15)) !important;
     color:#00E1FF !important; font-weight:700 !important;
     font-family:'Share Tech Mono',monospace !important;
-    font-size:10px !important; letter-spacing:1px !important;
+    font-size:10px !important; letter-spacing:0.5px !important;
     border:1px solid rgba(0,225,255,0.4) !important;
     border-radius:4px !important;
-    padding:6px 10px !important;
+    padding:6px 8px !important;
     transition:all 0.15s ease !important;
+    white-space:nowrap !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
 }
 [data-testid="stButton"] > button:hover {
     background:rgba(0,225,255,0.22) !important;
     border-color:#00E1FF !important;
     box-shadow:0 0 10px rgba(0,225,255,0.3) !important;
+}
+[data-testid="stButton"] > button p {
+    white-space:nowrap !important;
+    font-size:10px !important;
+    letter-spacing:0.5px !important;
 }
 
 /* ── TEXT INPUT ── */
@@ -278,27 +286,6 @@ iframe { display:block; margin:0 !important; }
 }
 </style>
 """, unsafe_allow_html=True)
-
-# JS injection: paksa semua input di dalam selectbox jadi readonly + inputmode none
-# agar keyboard virtual mobile tidak pernah muncul, walau elemen sempat fokus.
-components.html("""
-<script>
-function av_lock_select_inputs() {
-    try {
-        const doc = window.parent.document;
-        const inputs = doc.querySelectorAll('[data-baseweb="select"] input');
-        inputs.forEach(function(el) {
-            el.setAttribute('readonly', 'readonly');
-            el.setAttribute('inputmode', 'none');
-            el.style.caretColor = 'transparent';
-            el.addEventListener('focus', function(e) { e.target.blur(); });
-        });
-    } catch (e) {}
-}
-av_lock_select_inputs();
-setInterval(av_lock_select_inputs, 800);
-</script>
-""", height=0, width=0)
 
 # ==============================================================================
 # CONSTANTS
@@ -447,12 +434,16 @@ def _make_dummy_df(seed_str: str, n: int = 300) -> pd.DataFrame:
     vol   = rng.uniform(300, 2500, n)
     freq_map = {"15m":"15min","30m":"30min","1h":"1h","4h":"4h","1D":"1D"}
     freq  = freq_map.get(seed_str.split("-")[-1], "15min")
+    open_ = np.roll(price, 1)
+    open_[0] = price[0]
     return pd.DataFrame({
+        "open":   open_,
         "close":  price,
         "high":   price * (1 + np.abs(rng.normal(0, 0.0015, n))),
         "low":    price * (1 - np.abs(rng.normal(0, 0.0015, n))),
         "volume": vol,
     }, index=pd.date_range("2024-01-01", periods=n, freq=freq))
+
 
 
 def calculate_mct(df: pd.DataFrame) -> dict:
@@ -911,7 +902,11 @@ def institutional_engine(df: pd.DataFrame, swing_window: int = 5) -> dict:
     ob_valid = False
     ob_zone = (last_swing_low, last_swing_high)
     if len(df) >= 4:
-        body_sizes = (df["close"] - df["open"]).abs().tail(20)
+        if "open" in df.columns:
+            open_series = df["open"]
+        else:
+            open_series = df["close"].shift(1).fillna(df["close"].iloc[0])
+        body_sizes = (df["close"] - open_series).abs().tail(20)
         avg_body = body_sizes.mean()
         impulse_idx = body_sizes[body_sizes > avg_body * 1.8].index
         if len(impulse_idx) > 0:
@@ -1854,14 +1849,14 @@ with sc_col:
 st.markdown('<div class="av-sec">// AI INTELLIGENCE ENGINE</div>', unsafe_allow_html=True)
 st.markdown('<div class="av-panel">', unsafe_allow_html=True)
 
-# Tombol mode berdekatan di satu row
-btn_row_l, btn_row_r, _ = st.columns([0.8, 0.9, 4])
+# Tombol mode berdekatan di satu row — kolom diperlebar agar teks tidak wrap
+btn_row_l, btn_row_r, _ = st.columns([1.3, 1.3, 2.4])
 with btn_row_l:
-    if st.button("◈ ANALISIS PAIR", key="btn_pair"):
+    if st.button("◈ ANALISIS PAIR", key="btn_pair", use_container_width=True):
         st.session_state.ai_mode = "pair"
         st.session_state.ai_result = None
 with btn_row_r:
-    if st.button("◈ ANALISIS NEWS", key="btn_news"):
+    if st.button("◈ ANALISIS NEWS", key="btn_news", use_container_width=True):
         st.session_state.ai_mode = "news"
         st.session_state.ai_result = None
 
