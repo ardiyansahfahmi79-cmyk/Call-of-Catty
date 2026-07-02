@@ -1042,7 +1042,7 @@ def call_nvidia_nemotron(system_prompt: str, user_prompt: str, max_tokens: int =
     try:
         api_key = st.secrets["NVIDIA_API_KEY"]
     except Exception:
-        return "[NVIDIA_API_KEY tidak ditemukan di secrets — narasi AI tidak dapat dihasilkan]"
+        return "__AI_UNAVAILABLE__"
 
     url = "https://integrate.api.nvidia.com/v1/chat/completions"
     headers = {
@@ -1066,8 +1066,8 @@ def call_nvidia_nemotron(system_prompt: str, user_prompt: str, max_tokens: int =
         resp.raise_for_status()
         data = resp.json()
         return data["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        return f"[AI Interpretation Engine gagal merespons: {e}]"
+    except Exception:
+        return "__AI_UNAVAILABLE__"
 
 
 def ai_interpret_pair(market: dict, quant: dict, inst: dict, risk: dict, score: dict) -> str:
@@ -1110,7 +1110,25 @@ Sesi pasar saat ini: {market['session']}
 Tulis narasi analisis pasar berdasarkan data di atas dalam Bahasa Indonesia formal,
 jelaskan kondisi pasar saat ini, alasan di balik bias arah {risk['direction']}, dan skenario yang diutamakan.
 """
-    return call_nvidia_nemotron(system_prompt, user_prompt, max_tokens=400)
+    result = call_nvidia_nemotron(system_prompt, user_prompt, max_tokens=400)
+    if result == "__AI_UNAVAILABLE__":
+        return _fallback_narrative_pair(market, quant, inst, risk, score)
+    return result
+
+
+def _fallback_narrative_pair(market, quant, inst, risk, score) -> str:
+    """Narasi cadangan berbasis rule Python — dipakai saat lapisan interpretasi AI sedang tidak tersedia."""
+    arah = "penguatan" if risk["direction"] == "BUY" else "pelemahan"
+    return (
+        f"Struktur pasar {market['pair']} pada timeframe {market['timeframe']} menunjukkan "
+        f"{inst['structure'].lower()} dengan {inst['bos_status'].lower()}. "
+        f"Trend Score berada di {quant['trend_score']:.0f}/100 dan Momentum Score {quant['momentum_score']:.0f}/100, "
+        f"mengindikasikan potensi {arah} harga dalam waktu dekat. "
+        f"Zona harga saat ini berada pada {inst['pd_zone'].lower()} dengan likuiditas "
+        f"{inst['liquidity_side'].lower()}. Rating komposit sistem tercatat {score['composite_rating']}/100 "
+        f"dengan klasifikasi {score['conviction'].lower()}, memberikan probabilitas eksekusi "
+        f"sebesar {risk['probability']:.0f}% untuk skenario {risk['direction']}."
+    )
 
 
 def ai_interpret_news(news_summary: dict) -> str:
@@ -1144,7 +1162,25 @@ Aset paling terdampak: {', '.join(news_summary['top_assets'])}
 Tulis narasi interpretasi pasar Bahasa Indonesia formal mengenai dampak berita ini terhadap pasar,
 mengapa bias condong ke {news_summary['institutional_bias']}, dan skenario yang lebih mungkin terjadi.
 """
-    return call_nvidia_nemotron(system_prompt, user_prompt, max_tokens=400)
+    result = call_nvidia_nemotron(system_prompt, user_prompt, max_tokens=400)
+    if result == "__AI_UNAVAILABLE__":
+        return _fallback_narrative_news(news_summary)
+    return result
+
+
+def _fallback_narrative_news(summary: dict) -> str:
+    """Narasi cadangan berbasis rule Python — dipakai saat lapisan interpretasi AI sedang tidak tersedia."""
+    return (
+        f"Analisis terhadap topik \"{summary['query']}\" memproses {summary['total_articles']} artikel "
+        f"dari {summary['unique_sources']} sumber dengan tingkat konsensus {summary['consensus_pct']:.0f}%. "
+        f"Klasifikasi berita ini tergolong {summary['classification'].lower()} dengan dampak "
+        f"{summary['impact'].lower()} terhadap pasar. Tema makro yang mendominasi adalah "
+        f"{summary['macro_theme'].lower()} dengan lingkungan risiko {summary['risk_env'].lower()}. "
+        f"Model sentimen mencatat probabilitas bullish {summary['bullish_pct']:.0f}% berbanding "
+        f"bearish {summary['bearish_pct']:.0f}%, mengarahkan bias institusional ke "
+        f"{summary['institutional_bias'].lower()}, dengan aset utama yang terdampak meliputi "
+        f"{', '.join(summary['top_assets'][:4])}."
+    )
 
 # ──────────────────────────────────────────────────────────────────────────────────────────────
 # NEWS PIPELINE — News Engine → Validation → Fundamental → Macro → Sentiment → Impact
@@ -1461,6 +1497,8 @@ def render_pair_report(market, quant, inst, risk, score, narrative, pair):
       </div>
     </div>
     """
+    # Strip indentasi tiap baris — mencegah Markdown mendeteksinya sebagai code block
+    html = "\n".join(line.strip() for line in html.split("\n"))
     return html
 
 
@@ -1527,6 +1565,8 @@ def render_news_report(summary, narrative):
       </div>
     </div>
     """
+    # Strip indentasi tiap baris — mencegah Markdown mendeteksinya sebagai code block
+    html = "\n".join(line.strip() for line in html.split("\n"))
     return html
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -1882,7 +1922,7 @@ if st.session_state.ai_mode == "news":
         run_news_clicked = st.button("RUN", key="btn_run_n")
 
     if run_news_clicked and news_text.strip():
-        with st.spinner("Menjalankan News Engine → Validation → Fundamental → Macro → Sentiment → Impact..."):
+        with st.spinner("◈ Menyisir jaringan sumber intelijen pasar global..."):
             news_summary = run_news_pipeline(news_text.strip())
             narrative = ai_interpret_news(news_summary)
             st.session_state.ai_result = render_news_report(news_summary, narrative)
@@ -1907,7 +1947,7 @@ else:
         run_pair_clicked = st.button("RUN", key="btn_run_p")
 
     if run_pair_clicked:
-        with st.spinner("Menjalankan Market Data → Quantitative → Institutional → Risk → Scoring → AI Interpretation..."):
+        with st.spinner("◈ Memindai struktur pasar & menghitung model kuantitatif..."):
             pair_df = fetch_twelvedata(active_td, TD_INTERVAL[tf], outputsize=300)
             if pair_df.empty:
                 pair_df = _make_dummy_df(f"{active_label}-{tf}")
