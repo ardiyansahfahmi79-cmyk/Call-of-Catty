@@ -12,6 +12,7 @@ import plotly.graph_objects as go
 from scipy.signal import savgol_filter
 import streamlit.components.v1 as components
 import json
+import re
 from datetime import datetime, timezone
 from urllib.parse import quote as _url_quote
 
@@ -186,6 +187,11 @@ iframe { display:block; margin:0 !important; }
     white-space:nowrap !important;
     font-size:10px !important;
     letter-spacing:0.5px !important;
+}
+
+/* ── COUNTRY FLAG BUTTONS (Analisis News) — compact, 8 dalam 1 row ── */
+div[data-testid="column"] [data-testid="stButton"] > button {
+    min-width:0 !important;
 }
 
 /* ── TEXT INPUT ── */
@@ -387,9 +393,6 @@ _DEFAULTS = {
     "timeframe":   "15m",
     "chart_style": "3",
     "indicator_mode": "NO MODE",
-    "mini_a":      "GBPUSD",
-    "mini_b":      "USDJPY",
-    "mini_c":      "AUDUSD",
     "ai_mode":     "pair",
     "ai_result":   None,
 }
@@ -501,6 +504,33 @@ def calculate_mct(df: pd.DataFrame) -> dict:
         "macd_score": macd_score,
         "vol_score":  vol_score,
     }
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def get_mct_d1(pair_label: str, td_symbol: str) -> dict:
+    """
+    Sumber kebenaran tunggal MCT untuk seluruh sistem (chart, Analisis Pair, Analisis News).
+    SELALU mengambil candle Daily (D1) — apapun timeframe yang sedang aktif di UI —
+    karena MCT dirancang membaca bias makro/struktural, bukan noise intraday.
+    Di-cache 30 menit karena candle harian tidak perlu refresh sesering candle 15m.
+    """
+    df_d1 = fetch_twelvedata(td_symbol, "1day", outputsize=300)
+    if df_d1.empty:
+        df_d1 = _make_dummy_df(f"{pair_label}-1D")
+
+    mct = calculate_mct(df_d1)
+    cur = mct["current"]
+
+    if cur > 60:      regime, bias = "STRONG BULL", "BUY"
+    elif cur > 25:     regime, bias = "BULL", "BUY"
+    elif cur < -60:    regime, bias = "STRONG BEAR", "SELL"
+    elif cur < -25:    regime, bias = "BEAR", "SELL"
+    else:              regime, bias = "NEUTRAL", "NEUTRAL"
+
+    mct["regime"] = regime
+    mct["bias"] = bias
+    mct["timeframe_source"] = "D1"
+    return mct
 
 
 def render_mct(result: dict) -> go.Figure:
@@ -616,7 +646,6 @@ def tv_ticker_tape() -> str:
             {"proName":"FX:AUDUSD",          "title":"AUD/USD"},
             {"proName":"OANDA:XAUUSD",       "title":"XAU/USD"},
             {"proName":"CAPITALCOM:DXY",     "title":"DXY"},
-            {"proName":"TVC:US10Y",          "title":"US10Y"},
             {"proName":"CAPITALCOM:OIL_CRUDE","title":"OIL"},
             {"proName":"COINBASE:BTCUSD",    "title":"BTC/USD"},
             {"proName":"COINBASE:ETHUSD",    "title":"ETH/USD"},
@@ -760,6 +789,93 @@ def _decimals_for(pair: str) -> int:
 def _fmt_price(val: float, pair: str) -> str:
     d = _decimals_for(pair)
     return f"{val:.{d}f}"
+
+# ──────────────────────────────────────────────────────────────────────────────────────────────
+# CENTRAL BANK RATE ENGINE — scrape tabel suku bunga dari seputarforex (sumber sama dengan panel UI)
+# ──────────────────────────────────────────────────────────────────────────────────────────────
+
+# Pemetaan currency pair → nama bank sentral sesuai label di tabel seputarforex
+CURRENCY_TO_BANK_LABEL = {
+    "USD": "US", "EUR": "Euro Zone", "GBP": "UK", "JPY": "Japan",
+    "AUD": "Australia", "CHF": "Swiss", "CAD": "Canada", "CNY": "China",
+    "XAU": "US", "XAG": "US",  # emas/perak korelasi utama ke kebijakan USD
+}
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_central_bank_rates() -> dict:
+    """
+    Scrape tabel suku bunga bank sentral dari seputarforex.org (sumber sama dengan
+    iframe yang tampil di panel UI kanan). Dikembalikan sebagai dict {bank_label: {rate, before, date}}.
+    Cache 1 jam karena rate bank sentral jarang berubah dalam sehari.
+    """
+    try:
+        r = requests.get(
+            "https://www.seputarforex.org/widget/bank_central_interest.php",
+            timeout=10,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; AerovulpisTerminal/5.0)"},
+        )
+        html = r.text
+    except Exception:
+        return {}
+
+    rates = {}
+    try:
+        # Tabel HTML sederhana: <tr><td>Bank</td><td>Rate</td><td>Before</td><td>Date</td></tr>
+        row_pattern = re.findall(
+            r"<tr[^>]*>\s*<td[^>]*>([^<]+)</td>\s*<td[^>]*>([\d.,]+)\s*%?</td>\s*"
+            r"<td[^>]*>([\d.,]+)\s*%?</td>\s*<td[^>]*>([^<]*)</td>",
+            html, re.IGNORECASE,
+        )
+        for bank, rate, before, date_str in row_pattern:
+            bank = bank.strip()
+            if not bank or bank.lower() in ("bank", "country"):
+                continue
+            try:
+                rates[bank] = {
+                    "rate": float(rate.replace(",", ".")),
+                    "before": float(before.replace(",", ".")),
+                    "date": date_str.strip(),
+                }
+            except ValueError:
+                continue
+    except Exception:
+        return {}
+
+    return rates
+
+
+def get_rate_context_for_pair(pair: str) -> dict:
+    """
+    Ambil konteks suku bunga relevan untuk pair yang sedang dianalisis.
+    Untuk pair forex (EURUSD dsb), bandingkan rate base currency vs quote currency
+    → hasilkan rate differential yang jadi salah satu input Scoring Engine.
+    """
+    rates = fetch_central_bank_rates()
+    if not rates:
+        return {"available": False}
+
+    base_currency = pair[:3] if len(pair) >= 6 else pair
+    quote_currency = pair[3:6] if len(pair) >= 6 else "USD"
+
+    base_label = CURRENCY_TO_BANK_LABEL.get(base_currency)
+    quote_label = CURRENCY_TO_BANK_LABEL.get(quote_currency)
+
+    base_rate = rates.get(base_label, {}).get("rate") if base_label else None
+    quote_rate = rates.get(quote_label, {}).get("rate") if quote_label else None
+
+    if base_rate is None and quote_rate is None:
+        return {"available": False}
+
+    differential = None
+    if base_rate is not None and quote_rate is not None:
+        differential = round(base_rate - quote_rate, 2)
+
+    return {
+        "available": True,
+        "base_currency": base_currency, "base_rate": base_rate,
+        "quote_currency": quote_currency, "quote_rate": quote_rate,
+        "differential": differential,
+    }
 
 # ──────────────────────────────────────────────────────────────────────────────────────────────
 # A. MARKET DATA ENGINE — murni ambil & bersihkan data, tidak ada perhitungan analitis
@@ -1016,17 +1132,54 @@ def risk_engine(market: dict, quant: dict, inst: dict, pair: str) -> dict:
 # ──────────────────────────────────────────────────────────────────────────────────────────────
 # SCORING ENGINE — gabungkan semua skor jadi Institutional Score akhir
 # ──────────────────────────────────────────────────────────────────────────────────────────────
-def scoring_engine(quant: dict, inst: dict, risk: dict) -> dict:
-    weights = {"trend":0.25, "momentum":0.15, "volume":0.10, "smc":0.30, "volatility":0.10, "risk":0.10}
+def scoring_engine(quant: dict, inst: dict, risk: dict, mct_d1: dict = None, rate_ctx: dict = None) -> dict:
+    """
+    Scoring Engine v5 — menggabungkan seluruh sinyal jadi satu Composite Rating.
+    MCT D1 dan Rate Differential sekarang ikut menentukan skor (bukan cuma info tampilan),
+    dengan bobot dikurangi dari komponen lain secara proporsional agar total tetap 100%.
+    """
+    has_mct = mct_d1 is not None
+    has_rate = rate_ctx is not None and rate_ctx.get("available", False)
+
+    if has_mct and has_rate:
+        weights = {"trend":0.20, "momentum":0.12, "volume":0.08, "smc":0.25,
+                   "volatility":0.08, "risk":0.10, "mct_d1":0.12, "rate":0.05}
+    elif has_mct:
+        weights = {"trend":0.22, "momentum":0.13, "volume":0.09, "smc":0.27,
+                   "volatility":0.09, "risk":0.10, "mct_d1":0.10, "rate":0.0}
+    else:
+        weights = {"trend":0.25, "momentum":0.15, "volume":0.10, "smc":0.30,
+                   "volatility":0.10, "risk":0.10, "mct_d1":0.0, "rate":0.0}
+
     risk_component = float(np.clip(risk["probability"], 0, 100))
+
     final_score = (
-        quant["trend_score"]      * weights["trend"] +
-        quant["momentum_score"]   * weights["momentum"] +
-        quant["volume_score"]     * weights["volume"] +
-        inst["institutional_score"]* weights["smc"] +
-        quant["volatility_score"] * weights["volatility"] +
-        risk_component             * weights["risk"]
+        quant["trend_score"]        * weights["trend"] +
+        quant["momentum_score"]     * weights["momentum"] +
+        quant["volume_score"]       * weights["volume"] +
+        inst["institutional_score"] * weights["smc"] +
+        quant["volatility_score"]   * weights["volatility"] +
+        risk_component               * weights["risk"]
     )
+
+    # MCT D1 bias — searah dengan risk direction menambah skor, berlawanan mengurangi
+    mct_alignment_note = "TIDAK TERSEDIA"
+    if has_mct:
+        mct_score_0_100 = (mct_d1["current"] + 100) / 2  # normalisasi -100..100 → 0..100
+        final_score += mct_score_0_100 * weights["mct_d1"]
+        aligned = (mct_d1["bias"] == risk["direction"])
+        mct_alignment_note = "SEARAH" if aligned else ("NETRAL" if mct_d1["bias"] == "NEUTRAL" else "BERLAWANAN")
+
+    # Rate differential — favor currency dengan rate lebih tinggi (carry trade logic sederhana)
+    rate_alignment_note = "TIDAK TERSEDIA"
+    if has_rate and rate_ctx.get("differential") is not None:
+        diff = rate_ctx["differential"]
+        # differential positif = base currency rate lebih tinggi → mendukung BUY base currency
+        rate_score_0_100 = float(np.clip(50 + diff * 15, 0, 100))
+        final_score += rate_score_0_100 * weights["rate"]
+        implied_bias = "BUY" if diff > 0 else ("SELL" if diff < 0 else "NEUTRAL")
+        rate_alignment_note = "SEARAH" if implied_bias == risk["direction"] else ("NETRAL" if implied_bias == "NEUTRAL" else "BERLAWANAN")
+
     final_score = float(np.clip(final_score, 0, 100))
 
     if final_score >= 80: conviction = "HIGH CONVICTION"
@@ -1034,7 +1187,13 @@ def scoring_engine(quant: dict, inst: dict, risk: dict) -> dict:
     elif final_score >= 40: conviction = "LOW CONVICTION"
     else: conviction = "NO TRADE SETUP"
 
-    return {"composite_rating": round(final_score, 1), "conviction": conviction, "weights": weights}
+    return {
+        "composite_rating": round(final_score, 1),
+        "conviction": conviction,
+        "weights": weights,
+        "mct_alignment": mct_alignment_note,
+        "rate_alignment": rate_alignment_note,
+    }
 
 # ──────────────────────────────────────────────────────────────────────────────────────────────
 # E. AI INTERPRETATION ENGINE (Groq — llama-3.3-70b-versatile)
@@ -1070,7 +1229,8 @@ def call_groq_llm(system_prompt: str, user_prompt: str, max_tokens: int = 500) -
         return "__AI_UNAVAILABLE__"
 
 
-def ai_interpret_pair(market: dict, quant: dict, inst: dict, risk: dict, score: dict) -> str:
+def ai_interpret_pair(market: dict, quant: dict, inst: dict, risk: dict, score: dict,
+                       mct_d1: dict = None, rate_ctx: dict = None) -> str:
     system_prompt = (
         "Kamu adalah AI Interpretation Engine pada terminal trading institusional bernama "
         "AEROVULPIS TERMINAL, khusus modul analisis teknikal & struktur pasar (Smart Money Concept). "
@@ -1078,15 +1238,39 @@ def ai_interpret_pair(market: dict, quant: dict, inst: dict, risk: dict, score: 
         "narasi analisis yang mendalam, tajam, dan dalam Bahasa Indonesia formal ala trading desk "
         "institusi (gaya riset teknikal Bloomberg/Reuters). Kamu TIDAK BOLEH menghitung ulang "
         "indikator apapun — semua angka sudah final, tugasmu murni menginterpretasikan maknanya. "
-        "Tulis narasi sepanjang 3 paragraf (total sekitar 9-12 kalimat), TANPA heading, TANPA "
+        "Tulis narasi sepanjang 4 paragraf (total sekitar 12-16 kalimat), TANPA heading, TANPA "
         "bullet point, TANPA markdown — paragraf mengalir seperti catatan analis profesional:\n"
         "Paragraf 1: kondisi pasar saat ini secara umum (trend, momentum, volatilitas) dan apa "
         "artinya bagi arah harga.\n"
         "Paragraf 2: pembacaan struktur pasar institusional (BOS, CHoCH, order block, liquidity, "
         "zona premium/discount) dan bagaimana ini memperkuat atau melemahkan bias arah.\n"
-        "Paragraf 3: kesimpulan rekomendasi eksekusi — mengapa level entry/SL/TP masuk akal secara "
+        "Paragraf 3: konfirmasi lintas-timeframe dari indikator MCT (Market Core Thermometer) pada "
+        "chart Daily, dan jika tersedia, konteks selisih suku bunga bank sentral — jelaskan apakah "
+        "keduanya SEARAH memperkuat keyakinan, atau BERLAWANAN sehingga perlu kehati-hatian ekstra.\n"
+        "Paragraf 4: kesimpulan rekomendasi eksekusi — mengapa level entry/SL/TP masuk akal secara "
         "risk management, serta kondisi apa yang bisa membatalkan skenario ini."
     )
+
+    mct_block = "MCT Daily (D1): tidak tersedia"
+    if mct_d1:
+        mct_block = (
+            f"MCT Daily (D1) — Market Core Thermometer, dihitung dari candle Harian terlepas dari "
+            f"timeframe chart yang aktif:\n"
+            f"Nilai MCT D1: {mct_d1['current']:+.1f} (skala -100 s/d +100)\n"
+            f"Regime MCT D1: {mct_d1['regime']}\n"
+            f"Bias tersirat MCT D1: {mct_d1['bias']}\n"
+            f"Kesesuaian dengan sinyal Risk Engine: {score.get('mct_alignment', 'TIDAK TERSEDIA')}"
+        )
+
+    rate_block = "Selisih suku bunga bank sentral: tidak tersedia"
+    if rate_ctx and rate_ctx.get("available"):
+        rate_block = (
+            f"Suku bunga {rate_ctx['base_currency']}: {rate_ctx['base_rate']}% | "
+            f"Suku bunga {rate_ctx['quote_currency']}: {rate_ctx['quote_rate']}%\n"
+            f"Selisih (differential): {rate_ctx['differential']:+.2f}%\n"
+            f"Kesesuaian dengan sinyal Risk Engine: {score.get('rate_alignment', 'TIDAK TERSEDIA')}"
+        )
+
     user_prompt = f"""
 Data hasil perhitungan kuantitatif untuk {market['pair']} timeframe {market['timeframe']}:
 
@@ -1105,6 +1289,10 @@ Premium/Discount Zone: {inst['pd_zone']}
 Order Block Valid: {inst['order_block_valid']}
 FVG Aktif: {inst['fvg_active']}
 
+{mct_block}
+
+{rate_block}
+
 Risk Engine:
 Direction: {risk['direction']}
 Entry: {_fmt_price(risk['entry'], market['pair'])}
@@ -1118,16 +1306,16 @@ Composite Rating: {score['composite_rating']}/100
 Conviction Level: {score['conviction']}
 Sesi pasar saat ini: {market['session']}
 
-Tulis narasi analisis pasar 3 paragraf sesuai instruksi sistem, dalam Bahasa Indonesia formal,
+Tulis narasi analisis pasar 4 paragraf sesuai instruksi sistem, dalam Bahasa Indonesia formal,
 berdasarkan data di atas untuk bias arah {risk['direction']}.
 """
-    result = call_groq_llm(system_prompt, user_prompt, max_tokens=650)
+    result = call_groq_llm(system_prompt, user_prompt, max_tokens=800)
     if result == "__AI_UNAVAILABLE__":
-        return _fallback_narrative_pair(market, quant, inst, risk, score)
+        return _fallback_narrative_pair(market, quant, inst, risk, score, mct_d1, rate_ctx)
     return result
 
 
-def _fallback_narrative_pair(market, quant, inst, risk, score) -> str:
+def _fallback_narrative_pair(market, quant, inst, risk, score, mct_d1=None, rate_ctx=None) -> str:
     """Narasi cadangan berbasis rule Python — dipakai saat lapisan interpretasi AI sedang tidak tersedia."""
     arah = "penguatan" if risk["direction"] == "BUY" else "pelemahan"
     p1 = (
@@ -1144,14 +1332,26 @@ def _fallback_narrative_pair(market, quant, inst, risk, score) -> str:
         f"secara historis menjadi area di mana pelaku pasar institusional cenderung membuka atau "
         f"menutup posisi besar."
     )
-    p3 = (
+    if mct_d1:
+        mct_align = score.get("mct_alignment", "TIDAK TERSEDIA")
+        p3 = (
+            f"Indikator MCT (Market Core Thermometer) pada chart Daily mencatat nilai "
+            f"{mct_d1['current']:+.1f} dengan regime {mct_d1['regime'].lower()}, memberikan bias "
+            f"jangka lebih panjang berupa {mct_d1['bias']}. Konfirmasi lintas-timeframe ini "
+            f"{mct_align.lower()} dengan sinyal dari Risk Engine, "
+            + ("memperkuat keyakinan terhadap skenario yang diambil." if mct_align == "SEARAH"
+               else "sehingga kehati-hatian ekstra tetap disarankan sebelum eksekusi.")
+        )
+    else:
+        p3 = "Data MCT Daily belum tersedia untuk konfirmasi lintas-timeframe pada analisis ini."
+    p4 = (
         f"Rating komposit sistem tercatat {score['composite_rating']}/100 dengan klasifikasi "
         f"{score['conviction'].lower()}, memberikan probabilitas eksekusi sebesar {risk['probability']:.0f}% "
         f"untuk skenario {risk['direction']}. Rasio risk/reward 1:{risk['rr_ratio']} pada level ATR "
         f"{risk['atr_risk'].lower()} menjadikan setup ini layak dipertimbangkan dengan manajemen risiko "
         f"yang disiplin, mengingat skenario ini dapat berubah apabila struktur pasar mengalami reversal."
     )
-    return f"{p1}\n\n{p2}\n\n{p3}"
+    return f"{p1}\n\n{p2}\n\n{p3}\n\n{p4}"
 
 
 def ai_interpret_news(news_summary: dict, sample_titles: list = None) -> str:
@@ -1236,8 +1436,324 @@ def _fallback_narrative_news(summary: dict) -> str:
     )
     return f"{p1}\n\n{p2}\n\n{p3}"
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# ECONOMIC CALENDAR ENGINE (v5) — pilihan negara, bukan input teks bebas
+# Sumber: Trading Economics guest API (data resmi, gratis, terstruktur)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+COUNTRY_OPTIONS = [
+    {"code": "US", "flag": "🇺🇸", "label": "US",  "te_name": "united states", "currency": "USD"},
+    {"code": "EU", "flag": "🇪🇺", "label": "EUR", "te_name": "euro area",     "currency": "EUR"},
+    {"code": "GB", "flag": "🇬🇧", "label": "GBP", "te_name": "united kingdom","currency": "GBP"},
+    {"code": "JP", "flag": "🇯🇵", "label": "JPY", "te_name": "japan",         "currency": "JPY"},
+    {"code": "AU", "flag": "🇦🇺", "label": "AUD", "te_name": "australia",     "currency": "AUD"},
+    {"code": "CH", "flag": "🇨🇭", "label": "CHF", "te_name": "switzerland",   "currency": "CHF"},
+    {"code": "CA", "flag": "🇨🇦", "label": "CAD", "te_name": "canada",        "currency": "CAD"},
+    {"code": "CN", "flag": "🇨🇳", "label": "CNY", "te_name": "china",         "currency": "CNY"},
+]
+COUNTRY_MAP = {c["code"]: c for c in COUNTRY_OPTIONS}
+
+# Kamus judul event Trading Economics (Inggris) → judul Bahasa Indonesia + penjelasan singkat.
+# Dicocokkan via substring match pada nama event; fallback tetap tampil dalam bahasa aslinya
+# dengan penjelasan generik agar sistem tidak pernah gagal total untuk event yang belum dipetakan.
+ECONOMIC_EVENT_ID = {
+    "non farm payrolls": (
+        "Data Tenaga Kerja Non-Pertanian (NFP)",
+        "Mengukur jumlah lapangan kerja baru di sektor non-pertanian AS. Angka di atas ekspektasi "
+        "biasanya memperkuat USD karena mengindikasikan ekonomi yang kuat dan potensi kebijakan "
+        "moneter lebih ketat."
+    ),
+    "unemployment rate": (
+        "Tingkat Pengangguran",
+        "Persentase angkatan kerja yang tidak memiliki pekerjaan. Angka yang menurun menunjukkan "
+        "pasar tenaga kerja yang sehat dan cenderung positif bagi mata uang terkait."
+    ),
+    "inflation rate": (
+        "Tingkat Inflasi",
+        "Mengukur laju kenaikan harga barang dan jasa secara umum (YoY). Inflasi tinggi dapat memicu "
+        "bank sentral menaikkan suku bunga, yang umumnya menguatkan mata uang domestik."
+    ),
+    "cpi": (
+        "Indeks Harga Konsumen (CPI)",
+        "Indikator inflasi utama yang dipantau bank sentral. Kenaikan CPI di atas ekspektasi "
+        "meningkatkan kemungkinan kebijakan hawkish dan penguatan mata uang."
+    ),
+    "gdp growth rate": (
+        "Pertumbuhan PDB",
+        "Mengukur laju pertumbuhan ekonomi suatu negara. Pertumbuhan yang lebih tinggi dari "
+        "perkiraan umumnya positif bagi mata uang dan pasar saham negara tersebut."
+    ),
+    "interest rate decision": (
+        "Keputusan Suku Bunga Bank Sentral",
+        "Pengumuman resmi level suku bunga acuan. Kenaikan suku bunga umumnya memperkuat mata uang "
+        "karena menarik arus modal asing yang mencari imbal hasil lebih tinggi."
+    ),
+    "retail sales": (
+        "Penjualan Ritel",
+        "Mengukur total penjualan barang konsumen. Data yang kuat mengindikasikan belanja konsumen "
+        "yang sehat dan mendukung pertumbuhan ekonomi serta mata uang terkait."
+    ),
+    "manufacturing pmi": (
+        "PMI Manufaktur",
+        "Indeks yang mengukur aktivitas sektor manufaktur. Angka di atas 50 menunjukkan ekspansi, "
+        "di bawah 50 menunjukkan kontraksi sektor industri."
+    ),
+    "services pmi": (
+        "PMI Jasa",
+        "Indeks yang mengukur aktivitas sektor jasa. Angka di atas 50 menunjukkan ekspansi sektor "
+        "jasa yang mendominasi sebagian besar ekonomi negara maju."
+    ),
+    "trade balance": (
+        "Neraca Perdagangan",
+        "Selisih antara nilai ekspor dan impor suatu negara. Surplus yang membesar umumnya positif "
+        "bagi mata uang domestik."
+    ),
+    "consumer confidence": (
+        "Indeks Kepercayaan Konsumen",
+        "Mengukur optimisme rumah tangga terhadap kondisi ekonomi. Kepercayaan tinggi biasanya "
+        "berkorelasi dengan belanja konsumen yang lebih besar ke depan."
+    ),
+    "balance of trade": (
+        "Neraca Perdagangan",
+        "Selisih nilai ekspor dan impor suatu negara pada periode tertentu, indikator penting "
+        "kesehatan sektor eksternal ekonomi."
+    ),
+    "initial jobless claims": (
+        "Klaim Pengangguran Mingguan",
+        "Jumlah warga yang baru mengajukan klaim tunjangan pengangguran. Angka rendah menunjukkan "
+        "pasar tenaga kerja yang solid."
+    ),
+    "core inflation": (
+        "Inflasi Inti",
+        "Inflasi yang mengecualikan komponen volatil seperti makanan dan energi, dipantau ketat "
+        "oleh bank sentral sebagai indikator tekanan harga jangka panjang."
+    ),
+    "ppi": (
+        "Indeks Harga Produsen (PPI)",
+        "Mengukur perubahan harga di tingkat produsen/grosir, sering menjadi indikator dini bagi "
+        "arah inflasi konsumen (CPI) ke depan."
+    ),
+    "industrial production": (
+        "Produksi Industri",
+        "Mengukur output sektor industri, pertambangan, dan utilitas. Pertumbuhan yang kuat "
+        "mengindikasikan ekspansi ekonomi."
+    ),
+    "housing starts": (
+        "Housing Starts",
+        "Jumlah unit rumah baru yang mulai dibangun, indikator kesehatan sektor properti dan "
+        "kepercayaan konsumen jangka menengah."
+    ),
+    "durable goods orders": (
+        "Pesanan Barang Tahan Lama",
+        "Mengukur nilai pesanan barang dengan usia pakai lebih dari 3 tahun, mencerminkan tingkat "
+        "investasi bisnis dan permintaan konsumen jangka panjang."
+    ),
+}
+
+def _translate_event_name(event_name: str) -> tuple:
+    """Cocokkan nama event Trading Economics dengan kamus ID. Return (judul_id, penjelasan_id)."""
+    name_lower = event_name.lower()
+    for key, (title_id, desc_id) in ECONOMIC_EVENT_ID.items():
+        if key in name_lower:
+            return title_id, desc_id
+    # Fallback: tidak ada di kamus — tetap tampilkan nama asli dengan penjelasan generik
+    return event_name, (
+        "Rilis data ekonomi resmi yang dipantau pelaku pasar untuk menilai kondisi kesehatan "
+        "ekonomi negara terkait dan potensi dampaknya terhadap kebijakan moneter serta mata uang."
+    )
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_economic_calendar(country_te_name: str) -> list:
+    """
+    Ambil economic calendar terstruktur dari Trading Economics guest API untuk satu negara.
+    Rentang: 3 hari ke belakang s/d 4 hari ke depan (agar event yang baru rilis & akan rilis
+    sama-sama terlihat). Dibatasi ke 4 event teratas per negara sesuai kebutuhan tampilan.
+    """
+    try:
+        today = datetime.now(timezone.utc).date()
+        start = (today - pd.Timedelta(days=3)).strftime("%Y-%m-%d")
+        end   = (today + pd.Timedelta(days=4)).strftime("%Y-%m-%d")
+        country_q = _url_quote(country_te_name)
+        url = f"https://api.tradingeconomics.com/calendar/country/{country_q}/{start}/{end}?c=guest:guest&f=json"
+        r = requests.get(url, timeout=12)
+        if r.status_code != 200:
+            return []
+        data = r.json()
+        if not isinstance(data, list):
+            return []
+    except Exception:
+        return []
+
+    events = []
+    for item in data:
+        try:
+            importance = int(item.get("Importance", 1))
+            event_name = item.get("Event", "").strip()
+            if not event_name:
+                continue
+            events.append({
+                "event": event_name,
+                "date": item.get("Date", ""),
+                "actual": item.get("Actual", "") or "—",
+                "forecast": item.get("Forecast", "") or "—",
+                "previous": item.get("Previous", "") or "—",
+                "importance": importance,  # 1=Low, 2=Medium, 3=High
+                "unit": item.get("Unit", ""),
+            })
+        except Exception:
+            continue
+
+    # Prioritaskan importance tinggi dulu, lalu urut berdasar tanggal terbaru
+    events.sort(key=lambda e: (-e["importance"], e["date"]), reverse=False)
+    return events[:4]
+
+
+def get_impact_badge(importance: int) -> dict:
+    """Konversi level importance TE (1-3) jadi badge warna sesuai instruksi: hijau/kuning/merah."""
+    if importance >= 3:
+        return {"label": "TINGGI", "color": "#FF3D71", "bg": "rgba(255,61,113,0.12)"}
+    elif importance == 2:
+        return {"label": "MENENGAH", "color": "#FFB020", "bg": "rgba(255,176,32,0.12)"}
+    else:
+        return {"label": "RENDAH", "color": "#00E1FF", "bg": "rgba(0,225,255,0.12)"}
+
+
+def calendar_event_setup_engine(event: dict, country_currency: str) -> dict:
+    """
+    Python menentukan 'Setup' — bias arah tersirat dari perbandingan Actual vs Forecast,
+    murni deterministik, tanpa AI. Dipakai sebagai salah satu titik data untuk AI Interpretation.
+    """
+    actual, forecast = event.get("actual", "—"), event.get("forecast", "—")
+
+    def _to_float(s):
+        try:
+            return float(re.sub(r"[^\d.\-]", "", s))
+        except (ValueError, TypeError):
+            return None
+
+    a_val, f_val = _to_float(actual), _to_float(forecast)
+
+    if a_val is None or f_val is None:
+        return {"setup": "MENUNGGU RILIS" if a_val is None else "TIDAK DAPAT DIBANDINGKAN",
+                "surprise": None, "bias_currency": "NETRAL"}
+
+    surprise = round(a_val - f_val, 3)
+    if surprise > 0:
+        bias = "PENGUATAN"
+    elif surprise < 0:
+        bias = "PELEMAHAN"
+    else:
+        bias = "NETRAL"
+
+    return {"setup": f"ACTUAL {'>' if surprise>0 else ('<' if surprise<0 else '=')} FORECAST",
+            "surprise": surprise, "bias_currency": bias}
+
+
+def ai_interpret_calendar_event(event: dict, setup: dict, country_label: str,
+                                  currency: str, mct_d1: dict = None,
+                                  related_pair: str = None) -> str:
+    """
+    AI Interpretation Engine khusus Economic Calendar — menerima satu event terstruktur
+    (judul Indonesia + Aktual/Perkiraan/Sebelumnya + setup dari Python), dan jika tersedia,
+    konteks MCT D1 dari pair yang sedang aktif di Analisis Pair untuk cross-check keterhubungan
+    antar dua modul analisis. AI TIDAK BOLEH mengubah angka, hanya menerjemahkan maknanya.
+    """
+    title_id, desc_id = _translate_event_name(event["event"])
+
+    system_prompt = (
+        "Kamu adalah AI Interpretation Engine pada terminal trading institusional bernama "
+        "AEROVULPIS TERMINAL, khusus modul Economic Calendar Intelligence. Tugasmu menjelaskan "
+        "satu rilis data ekonomi kepada trader ritel Indonesia dengan bahasa yang jelas, formal, "
+        "dan mudah dipahami — gaya jurnalis riset makro profesional. Kamu TIDAK BOLEH mengubah "
+        "angka Aktual/Perkiraan/Sebelumnya yang diberikan, hanya menjelaskan maknanya. "
+        "Tulis narasi sepanjang 3 paragraf (total sekitar 8-11 kalimat), TANPA heading, TANPA "
+        "bullet point, TANPA markdown:\n"
+        "Paragraf 1: apa itu data ini dan mengapa pasar memperhatikannya.\n"
+        "Paragraf 2: baca hasil Aktual vs Perkiraan — apakah ini kejutan positif/negatif bagi "
+        "mata uang terkait, dan jika belum rilis (Aktual masih '—'), jelaskan apa yang perlu "
+        "diwaspadai trader menjelang rilis.\n"
+        "Paragraf 3: jika data MCT Daily untuk pair terkait tersedia, jelaskan apakah bias dari "
+        "rilis data ini SEARAH atau BERLAWANAN dengan bias MCT — dan apa artinya bagi trader; "
+        "jika tidak tersedia, tutup dengan catatan risk management umum untuk trading di sekitar "
+        "rilis data berdampak tinggi."
+    )
+
+    mct_block = "MCT Daily untuk pair terkait: tidak tersedia (tidak ada pair aktif yang match currency ini)."
+    if mct_d1 and related_pair:
+        mct_block = (
+            f"Pair aktif yang terhubung dengan currency {currency}: {related_pair}\n"
+            f"Nilai MCT Daily pair ini: {mct_d1['current']:+.1f} — regime {mct_d1['regime']}, "
+            f"bias tersirat {mct_d1['bias']}"
+        )
+
+    user_prompt = f"""
+Negara: {country_label} ({currency})
+Nama event (asli): {event['event']}
+Judul Indonesia: {title_id}
+Penjelasan dasar: {desc_id}
+
+Tanggal rilis: {event['date']}
+Aktual: {event['actual']}
+Perkiraan (Forecast): {event['forecast']}
+Sebelumnya (Previous): {event['previous']}
+Tingkat dampak: {event['importance']} (1=Rendah, 2=Menengah, 3=Tinggi)
+
+Setup dari Python (deterministik, jangan diubah):
+{setup['setup']}
+Bias tersirat: {setup['bias_currency']}
+
+{mct_block}
+
+Tulis narasi 3 paragraf sesuai instruksi sistem dalam Bahasa Indonesia formal.
+"""
+    result = call_groq_llm(system_prompt, user_prompt, max_tokens=650)
+    if result == "__AI_UNAVAILABLE__":
+        return _fallback_narrative_calendar_event(event, setup, title_id, desc_id, currency, mct_d1, related_pair)
+    return result
+
+
+def _fallback_narrative_calendar_event(event, setup, title_id, desc_id, currency, mct_d1=None, related_pair=None) -> str:
+    """Narasi cadangan berbasis rule Python untuk satu event kalender, dipakai saat AI tidak tersedia."""
+    p1 = f"{title_id} merupakan salah satu indikator ekonomi yang dipantau pasar untuk {currency}. {desc_id}"
+
+    if event["actual"] == "—":
+        p2 = (
+            f"Data ini belum dirilis — nilai Perkiraan (Forecast) saat ini berada di {event['forecast']}, "
+            f"dibandingkan rilis sebelumnya sebesar {event['previous']}. Trader disarankan memantau jam "
+            f"rilis resmi karena volatilitas pasar {currency} berpotensi meningkat signifikan di sekitar "
+            f"waktu tersebut, terutama untuk event dengan tingkat dampak tinggi."
+        )
+    else:
+        p2 = (
+            f"Hasil aktual tercatat {event['actual']} dibandingkan perkiraan pasar {event['forecast']} "
+            f"dan rilis sebelumnya {event['previous']}. Setup Python mencatat kondisi "
+            f"{setup['setup'].lower()}, mengindikasikan bias {setup['bias_currency'].lower()} "
+            f"bagi mata uang {currency} dalam jangka pendek."
+        )
+
+    if mct_d1 and related_pair:
+        aligned = (mct_d1["bias"] != "NEUTRAL" and (
+            (setup["bias_currency"] == "PENGUATAN" and mct_d1["bias"] == "BUY") or
+            (setup["bias_currency"] == "PELEMAHAN" and mct_d1["bias"] == "SELL")
+        ))
+        p3 = (
+            f"Pada pair {related_pair} yang terhubung dengan {currency}, indikator MCT Daily mencatat "
+            f"regime {mct_d1['regime'].lower()} dengan bias {mct_d1['bias']}. Kondisi ini "
+            + ("selaras dengan arah data ekonomi di atas, memperkuat keyakinan analisis." if aligned
+               else "perlu dicermati lebih lanjut karena arahnya belum tentu selaras dengan bias data "
+                    "ekonomi ini, sehingga konfirmasi tambahan sebelum eksekusi tetap disarankan.")
+        )
+    else:
+        p3 = (
+            "Sebagai catatan manajemen risiko umum, trader disarankan memperhatikan lebar spread dan "
+            "potensi slippage yang meningkat di sekitar waktu rilis data berdampak tinggi, serta "
+            "mempertimbangkan ukuran posisi yang sesuai dengan tingkat volatilitas yang diharapkan."
+        )
+    return f"{p1}\n\n{p2}\n\n{p3}"
+
 # ──────────────────────────────────────────────────────────────────────────────────────────────
-# NEWS PIPELINE — News Engine → Validation → Fundamental → Macro → Sentiment → Impact
+# NEWS PIPELINE (LEGACY, dipertahankan untuk fallback internal — tidak lagi dipakai UI utama)
 # ──────────────────────────────────────────────────────────────────────────────────────────────
 
 CURRENCY_KEYWORDS = {
@@ -1528,16 +2044,41 @@ def run_news_pipeline(query: str) -> dict:
 # ──────────────────────────────────────────────────────────────────────────────────────────────
 # REPORT RENDERER — render hasil pipeline jadi tampilan Market Intelligence Report cybertech
 # ──────────────────────────────────────────────────────────────────────────────────────────────
-def render_pair_report(market, quant, inst, risk, score, narrative, pair):
+def render_pair_report(market, quant, inst, risk, score, narrative, pair, mct_d1=None, rate_ctx=None):
     now_str = market["timestamp"]
     bias_cls = "buy" if risk["direction"] == "BUY" else "sell"
     narrative_html = narrative.replace("\n\n", "<br><br>").replace("\n", " ")
+
+    mct_section = ""
+    if mct_d1:
+        mct_color = "buy" if mct_d1["bias"] == "BUY" else ("sell" if mct_d1["bias"] == "SELL" else "")
+        align_color = "#00E1FF" if score.get("mct_alignment") == "SEARAH" else "#FF3D71"
+        mct_section = f"""
+        <div class="av-report-section-title">MCT DAILY (D1) — LINTAS TIMEFRAME</div>
+        <div class="av-report-row"><span class="av-report-k">Nilai MCT D1</span><span class="av-report-v {mct_color}">{mct_d1['current']:+.1f}</span></div>
+        <div class="av-report-row"><span class="av-report-k">Regime</span><span class="av-report-v">{mct_d1['regime']}</span></div>
+        <div class="av-report-row"><span class="av-report-k">Bias Tersirat</span><span class="av-report-v {mct_color}">{mct_d1['bias']}</span></div>
+        <div class="av-report-row"><span class="av-report-k">Kesesuaian dengan Setup</span><span class="av-report-v" style="color:{align_color}">{score.get('mct_alignment','—')}</span></div>
+        """
+
+    rate_section = ""
+    if rate_ctx and rate_ctx.get("available"):
+        rate_align_color = "#00E1FF" if score.get("rate_alignment") == "SEARAH" else "#FF3D71"
+        diff = rate_ctx.get("differential")
+        diff_str = f"{diff:+.2f}%" if diff is not None else "—"
+        rate_section = f"""
+        <div class="av-report-section-title">SUKU BUNGA BANK SENTRAL</div>
+        <div class="av-report-row"><span class="av-report-k">{rate_ctx['base_currency']}</span><span class="av-report-v">{rate_ctx['base_rate']}%</span></div>
+        <div class="av-report-row"><span class="av-report-k">{rate_ctx['quote_currency']}</span><span class="av-report-v">{rate_ctx['quote_rate']}%</span></div>
+        <div class="av-report-row"><span class="av-report-k">Selisih (Differential)</span><span class="av-report-v">{diff_str}</span></div>
+        <div class="av-report-row"><span class="av-report-k">Kesesuaian dengan Setup</span><span class="av-report-v" style="color:{rate_align_color}">{score.get('rate_alignment','—')}</span></div>
+        """
 
     html = f"""
     <div class="av-report-wrap">
       <div class="av-report-header">
         <span class="av-report-title">◈ MARKET INTELLIGENCE REPORT</span>
-        <span class="av-report-badge">AEROVULPIS v4.1</span>
+        <span class="av-report-badge">AEROVULPIS v5.0</span>
       </div>
       <div class="av-report-body">
 
@@ -1568,7 +2109,8 @@ def render_pair_report(market, quant, inst, risk, score, narrative, pair):
         <div class="av-report-row"><span class="av-report-k">Fair Value Gap</span><span class="av-report-v">{'AKTIF' if inst['fvg_active'] else 'TIDAK ADA'}</span></div>
         <div class="av-report-row"><span class="av-report-k">Liquidity</span><span class="av-report-v">{inst['liquidity_side']}</span></div>
         <div class="av-report-row"><span class="av-report-k">Zona Harga</span><span class="av-report-v">{inst['pd_zone']}</span></div>
-
+        {mct_section}
+        {rate_section}
         <div class="av-report-section-title">RENCANA EKSEKUSI UTAMA — {risk['direction']}</div>
         <div class="av-report-row"><span class="av-report-k">Zona Eksekusi</span><span class="av-report-v">{_fmt_price(risk['entry'], pair)}</span></div>
         <div class="av-report-row"><span class="av-report-k">Stop Loss</span><span class="av-report-v sell">{_fmt_price(risk['sl'], pair)}</span></div>
@@ -1598,6 +2140,77 @@ def render_pair_report(market, quant, inst, risk, score, narrative, pair):
     </div>
     """
     # Strip indentasi tiap baris — mencegah Markdown mendeteksinya sebagai code block
+    html = "\n".join(line.strip() for line in html.split("\n"))
+    return html
+
+
+def render_calendar_event_report(event, setup, title_id, country_label, currency,
+                                   narrative, mct_d1=None, related_pair=None):
+    """Render hasil Analisis News (berbasis 1 event kalender) — gaya card cybertech."""
+    narrative_html = narrative.replace("\n\n", "<br><br>").replace("\n", " ")
+    badge = get_impact_badge(event["importance"])
+
+    bias_color = "#00E1FF" if setup["bias_currency"] == "PENGUATAN" else (
+        "#FF3D71" if setup["bias_currency"] == "PELEMAHAN" else "#A855F7"
+    )
+
+    mct_section = ""
+    if mct_d1 and related_pair:
+        mct_color = "#00E1FF" if mct_d1["bias"] == "BUY" else ("#FF3D71" if mct_d1["bias"] == "SELL" else "#A855F7")
+        mct_section = f"""
+        <div class="av-report-section-title">KETERHUBUNGAN DENGAN ANALISIS PAIR</div>
+        <div class="av-report-row"><span class="av-report-k">Pair Terhubung</span><span class="av-report-v">{related_pair}</span></div>
+        <div class="av-report-row"><span class="av-report-k">MCT Daily (D1)</span><span class="av-report-v" style="color:{mct_color}">{mct_d1['current']:+.1f}</span></div>
+        <div class="av-report-row"><span class="av-report-k">Regime MCT D1</span><span class="av-report-v">{mct_d1['regime']}</span></div>
+        <div class="av-report-row"><span class="av-report-k">Bias MCT D1</span><span class="av-report-v" style="color:{mct_color}">{mct_d1['bias']}</span></div>
+        """
+
+    html = f"""
+    <div class="av-report-wrap">
+      <div class="av-report-header">
+        <span class="av-report-title">◈ ECONOMIC CALENDAR INTELLIGENCE</span>
+        <span class="av-report-badge">AEROVULPIS v5.0</span>
+      </div>
+      <div class="av-report-body">
+
+        <div class="av-report-section-title">DETAIL EVENT</div>
+        <div style="color:#C8D8F0;font-size:12px;font-weight:700;margin-bottom:8px">{title_id}</div>
+        <div class="av-report-row"><span class="av-report-k">Negara</span><span class="av-report-v">{country_label} ({currency})</span></div>
+        <div class="av-report-row"><span class="av-report-k">Tanggal Rilis</span><span class="av-report-v">{event['date'][:10] if event['date'] else '—'}</span></div>
+        <div class="av-report-row"><span class="av-report-k">Tingkat Dampak</span><span class="av-report-v" style="color:{badge['color']}">{badge['label']}</span></div>
+
+        <div style="display:flex;justify-content:space-around;margin:14px 0;text-align:center">
+          <div>
+            <div style="font-size:7px;color:#3A5070;letter-spacing:1px;margin-bottom:3px">AKTUAL</div>
+            <div style="font-size:15px;font-weight:700;color:#E8F1FF">{event['actual']}</div>
+          </div>
+          <div>
+            <div style="font-size:7px;color:#3A5070;letter-spacing:1px;margin-bottom:3px">PERKIRAAN</div>
+            <div style="font-size:15px;font-weight:700;color:#8BA0C0">{event['forecast']}</div>
+          </div>
+          <div>
+            <div style="font-size:7px;color:#3A5070;letter-spacing:1px;margin-bottom:3px">SEBELUMNYA</div>
+            <div style="font-size:15px;font-weight:700;color:#8BA0C0">{event['previous']}</div>
+          </div>
+        </div>
+
+        <div class="av-report-section-title">SETUP SISTEM</div>
+        <div class="av-report-row"><span class="av-report-k">Perbandingan</span><span class="av-report-v">{setup['setup']}</span></div>
+        <div class="av-report-row"><span class="av-report-k">Bias Tersirat</span><span class="av-report-v" style="color:{bias_color}">{setup['bias_currency']}</span></div>
+        {mct_section}
+        <div class="av-report-section-title">INTERPRETASI AI</div>
+        <div class="av-report-narrative">{narrative_html}</div>
+
+        <div class="av-report-section-title" style="margin-top:18px;font-size:7px;color:#2A3A5A">DISCLAIMER</div>
+        <div style="font-size:8px;color:#3A4A60;line-height:1.7">
+          Data ekonomi bersumber dari Trading Economics. Interpretasi bersifat probabilistik dan
+          bukan jaminan hasil pasar. Selalu validasi terhadap kondisi pasar terkini sebelum
+          mengambil keputusan trading.
+        </div>
+
+      </div>
+    </div>
+    """
     html = "\n".join(line.strip() for line in html.split("\n"))
     return html
 
@@ -1936,38 +2549,56 @@ with ga_col:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# ROW 3 — MINI CHARTS × 3 (filter sesuai instrumen aktif)
+# ROW 3 — MINI CHARTS × 3 (independen — tiap kolom bisa pilih class sendiri)
 # ==============================================================================
 st.markdown('<div class="av-sec">// MULTI-PAIR MONITOR</div>', unsafe_allow_html=True)
 
-# Ambil options sesuai instrumen yang dipilih user
-active_mini_opts  = MINI_OPTIONS[st.session_state.instr_class]
-active_mini_labels = [m[0] for m in active_mini_opts]
-active_mini_map    = {m[0]: m[1] for m in active_mini_opts}
+MINI_CLASS_OPTIONS = ["FOREX", "CRYPTO", "COMMODITIES"]
 
-# Reset mini state jika instrumen berubah dan nilai lama tidak ada di list baru
-for sk, default_idx in [("mini_a", 0), ("mini_b", 1), ("mini_c", 2)]:
-    cur = st.session_state.get(sk, active_mini_labels[default_idx])
-    if cur not in active_mini_labels:
-        st.session_state[sk] = active_mini_labels[min(default_idx, len(active_mini_labels)-1)]
+# Default class per kolom mini chart — independen dari instr_class atas
+_MINI_DEFAULTS = {
+    "mini_a_class": "FOREX", "mini_a": "GBPUSD",
+    "mini_b_class": "FOREX", "mini_b": "USDJPY",
+    "mini_c_class": "CRYPTO", "mini_c": "BTCUSD",
+}
+for _k, _v in _MINI_DEFAULTS.items():
+    if _k not in st.session_state:
+        st.session_state[_k] = _v
 
 m1, m2, m3 = st.columns(3)
 
-for col, state_key, sel_key, def_idx in [
-    (m1, "mini_a", "sel_ma", 0),
-    (m2, "mini_b", "sel_mb", 1),
-    (m3, "mini_c", "sel_mc", 2),
+for col, class_key, sel_class_key, state_key, sel_key, def_idx in [
+    (m1, "mini_a_class", "sel_mac", "mini_a", "sel_ma", 0),
+    (m2, "mini_b_class", "sel_mbc", "mini_b", "sel_mb", 1),
+    (m3, "mini_c_class", "sel_mcc", "mini_c", "sel_mc", 2),
 ]:
     with col:
         st.markdown('<div class="av-panel">', unsafe_allow_html=True)
-        cur_val = st.session_state.get(state_key, active_mini_labels[def_idx])
-        if cur_val not in active_mini_labels:
-            cur_val = active_mini_labels[def_idx]
-        chosen = av_select("", sel_key, active_mini_labels, cur_val)
+
+        # Selector class (FOREX/CRYPTO/COMMODITIES) — independen per kolom
+        cur_class = st.session_state.get(class_key, "FOREX")
+        chosen_class = av_select("", sel_class_key, MINI_CLASS_OPTIONS, cur_class)
+        if chosen_class != st.session_state.get(class_key):
+            st.session_state[class_key] = chosen_class
+            # Reset pilihan pair ke default pertama dari class baru
+            new_opts = MINI_OPTIONS[chosen_class]
+            st.session_state[state_key] = new_opts[0][0]
+            st.rerun()
+
+        opts_for_class  = MINI_OPTIONS[st.session_state[class_key]]
+        labels_for_class = [m[0] for m in opts_for_class]
+        map_for_class     = {m[0]: m[1] for m in opts_for_class}
+
+        cur_val = st.session_state.get(state_key, labels_for_class[0])
+        if cur_val not in labels_for_class:
+            cur_val = labels_for_class[0]
+
+        chosen = av_select("", sel_key, labels_for_class, cur_val)
         if chosen != st.session_state.get(state_key):
             st.session_state[state_key] = chosen
             st.rerun()
-        components.html(tv_mini_chart(active_mini_map[chosen]), height=215, scrolling=False)
+
+        components.html(tv_mini_chart(map_for_class[chosen]), height=215, scrolling=False)
         st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
@@ -1985,10 +2616,18 @@ with sc_col:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
-# ROW 5 — AI ANALYSIS (Pipeline Institusional: Python menghitung, AI menerjemahkan)
+# ROW 5 — AI ANALYSIS (Pipeline Institusional v5: Python menghitung, AI menerjemahkan)
 # ==============================================================================
 st.markdown('<div class="av-sec">// AI INTELLIGENCE ENGINE</div>', unsafe_allow_html=True)
 st.markdown('<div class="av-panel">', unsafe_allow_html=True)
+
+# Init state khusus Analisis News (pilihan negara/event, bukan input teks)
+if "news_selected_country" not in st.session_state:
+    st.session_state.news_selected_country = None
+if "news_selected_event_idx" not in st.session_state:
+    st.session_state.news_selected_event_idx = None
+if "news_calendar_cache" not in st.session_state:
+    st.session_state.news_calendar_cache = None
 
 # Tombol mode berdekatan di satu row — kolom diperlebar agar teks tidak wrap
 btn_row_l, btn_row_r, _ = st.columns([1.3, 1.3, 2.4])
@@ -2000,10 +2639,12 @@ with btn_row_r:
     if st.button("◈ ANALISIS NEWS", key="btn_news", use_container_width=True):
         st.session_state.ai_mode = "news"
         st.session_state.ai_result = None
+        st.session_state.news_selected_country = None
+        st.session_state.news_selected_event_idx = None
 
 # Mode indicator
 mode_color = "#00E1FF" if st.session_state.ai_mode == "pair" else "#A855F7"
-mode_label = "PAIR MODE — TEKNIKAL & SMC" if st.session_state.ai_mode == "pair" else "NEWS MODE — FUNDAMENTAL & SENTIMEN"
+mode_label = "PAIR MODE — TEKNIKAL & SMC" if st.session_state.ai_mode == "pair" else "NEWS MODE — ECONOMIC CALENDAR"
 st.markdown(f"""
 <div style="font-size:8px;letter-spacing:1px;color:{mode_color};
             font-family:'Share Tech Mono',monospace;margin:4px 0 8px;
@@ -2011,36 +2652,16 @@ st.markdown(f"""
     {mode_label}
 </div>""", unsafe_allow_html=True)
 
-if st.session_state.ai_mode == "news":
-    # ── ANALISIS NEWS: kolom input topik singkat, maksimal 30 karakter ──
-    ni, nr = st.columns([5, 1])
-    with ni:
-        news_text = st.text_input(
-            "n", placeholder="TOPIK BERITA (MAKS 30 HURUF)...",
-            key="news_inp", max_chars=30,
-        )
-    with nr:
-        run_news_clicked = st.button("RUN", key="btn_run_n")
-
-    if run_news_clicked and news_text.strip():
-        with st.spinner("◈ Menyisir jaringan sumber intelijen pasar global..."):
-            news_summary = run_news_pipeline(news_text.strip())
-            narrative = ai_interpret_news(news_summary, news_summary.get("sample_titles"))
-            st.session_state.ai_result = render_news_report(news_summary, narrative)
-    elif run_news_clicked and not news_text.strip():
-        st.markdown(
-            '<div style="font-size:9px;color:#FF3D71;font-family:\'Share Tech Mono\',monospace;margin-top:4px">'
-            'Masukkan topik berita terlebih dahulu.</div>', unsafe_allow_html=True
-        )
-
-else:
-    # ── ANALISIS PAIR: TIDAK ADA kolom input, langsung pakai pair aktif dari selector atas ──
+# ══════════════════════════════════════════════════════════════════════════════
+# MODE: ANALISIS PAIR
+# ══════════════════════════════════════════════════════════════════════════════
+if st.session_state.ai_mode == "pair":
     st.markdown(f"""
     <div style="font-size:9px;color:#4A6080;font-family:'Share Tech Mono',monospace;
                 margin-bottom:8px">
         Instrumen aktif: <span style="color:#00E1FF;font-weight:700">{active_label}</span>
         · Timeframe <span style="color:#00E1FF;font-weight:700">{tf}</span>
-        — diambil otomatis dari selector di atas.
+        · MCT selalu D1 — diambil otomatis dari selector di atas.
     </div>""", unsafe_allow_html=True)
 
     rc, _ = st.columns([0.7, 5])
@@ -2048,7 +2669,7 @@ else:
         run_pair_clicked = st.button("RUN", key="btn_run_p")
 
     if run_pair_clicked:
-        with st.spinner("◈ Memindai struktur pasar & menghitung model kuantitatif..."):
+        with st.spinner("◈ Memindai struktur pasar, MCT Daily & suku bunga bank sentral..."):
             pair_df = fetch_twelvedata(active_td, TD_INTERVAL[tf], outputsize=300)
             if pair_df.empty:
                 pair_df = _make_dummy_df(f"{active_label}-{tf}")
@@ -2057,15 +2678,177 @@ else:
             q_data  = quantitative_engine(pair_df)
             i_data  = institutional_engine(pair_df)
             r_data  = risk_engine(m_data, q_data, i_data, active_label)
-            s_data  = scoring_engine(q_data, i_data, r_data)
-            narrative = ai_interpret_pair(m_data, q_data, i_data, r_data, s_data)
+
+            # MCT D1 — selalu Daily, terlepas dari timeframe UI aktif
+            mct_d1_data = get_mct_d1(active_label, active_td)
+
+            # Rate context — selisih suku bunga base vs quote currency
+            rate_data = get_rate_context_for_pair(active_label)
+
+            s_data  = scoring_engine(q_data, i_data, r_data, mct_d1_data, rate_data)
+            narrative = ai_interpret_pair(m_data, q_data, i_data, r_data, s_data, mct_d1_data, rate_data)
 
             st.session_state.ai_result = render_pair_report(
-                m_data, q_data, i_data, r_data, s_data, narrative, active_label
+                m_data, q_data, i_data, r_data, s_data, narrative, active_label,
+                mct_d1_data, rate_data
             )
 
-if st.session_state.ai_result:
-    st.markdown(st.session_state.ai_result, unsafe_allow_html=True)
+    if st.session_state.ai_result:
+        st.markdown(st.session_state.ai_result, unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MODE: ANALISIS NEWS — pilih negara → pilih event → detail + tombol Analisis
+# ══════════════════════════════════════════════════════════════════════════════
+else:
+    st.markdown("""
+    <div style="font-size:9px;color:#4A6080;font-family:'Share Tech Mono',monospace;
+                margin-bottom:8px">
+        Pilih negara untuk melihat kalender ekonomi terkini.
+    </div>""", unsafe_allow_html=True)
+
+    # ── Pilihan negara (flag buttons) — 2 baris x 4 kolom, mobile-friendly ──
+    row1_countries = COUNTRY_OPTIONS[:4]
+    row2_countries = COUNTRY_OPTIONS[4:]
+
+    row1_cols = st.columns(4)
+    for c_col, country in zip(row1_cols, row1_countries):
+        with c_col:
+            btn_label = f"{country['flag']} {country['label']}"
+            if st.button(btn_label, key=f"country_{country['code']}", use_container_width=True):
+                st.session_state.news_selected_country = country["code"]
+                st.session_state.news_selected_event_idx = None
+                st.session_state.ai_result = None
+                st.session_state.news_calendar_cache = None
+                st.rerun()
+
+    row2_cols = st.columns(4)
+    for c_col, country in zip(row2_cols, row2_countries):
+        with c_col:
+            btn_label = f"{country['flag']} {country['label']}"
+            if st.button(btn_label, key=f"country_{country['code']}", use_container_width=True):
+                st.session_state.news_selected_country = country["code"]
+                st.session_state.news_selected_event_idx = None
+                st.session_state.ai_result = None
+                st.session_state.news_calendar_cache = None
+                st.rerun()
+
+    # ── Setelah negara dipilih: tampilkan daftar event (maks 4) ──
+    if st.session_state.news_selected_country:
+        country_info = COUNTRY_MAP[st.session_state.news_selected_country]
+
+        if st.session_state.news_calendar_cache is None:
+            with st.spinner(f"◈ Mengambil kalender ekonomi {country_info['label']}..."):
+                st.session_state.news_calendar_cache = fetch_economic_calendar(country_info["te_name"])
+
+        events = st.session_state.news_calendar_cache
+
+        st.markdown(f"""
+        <div style="font-size:8px;letter-spacing:1.5px;color:#2A4060;
+                    font-family:'Share Tech Mono',monospace;margin:10px 0 6px">
+            KALENDER EKONOMI — {country_info['flag']} {country_info['label']}
+        </div>""", unsafe_allow_html=True)
+
+        if not events:
+            st.markdown(f"""
+            <div style="background:#07101C;border:1px solid #1A2540;border-radius:5px;
+                        padding:14px;text-align:center;margin-top:6px">
+                <span style="font-size:10px;color:#4A6080;font-family:'Share Tech Mono',monospace">
+                    Tidak ada kalender ekonomi untuk {country_info['label']} saat ini.
+                </span>
+            </div>""", unsafe_allow_html=True)
+        else:
+            for idx, ev in enumerate(events):
+                title_id, _ = _translate_event_name(ev["event"])
+                badge = get_impact_badge(ev["importance"])
+                is_active = st.session_state.news_selected_event_idx == idx
+
+                ev_col1, ev_col2 = st.columns([5, 1])
+                with ev_col1:
+                    date_short = ev["date"][:10] if ev["date"] else "—"
+                    st.markdown(f"""
+                    <div style="display:flex;align-items:center;gap:8px;padding:7px 0;
+                                border-bottom:1px solid #0E1422">
+                        <span style="background:{badge['bg']};color:{badge['color']};
+                                     font-size:7px;letter-spacing:1px;padding:2px 6px;
+                                     border-radius:3px;font-family:'Share Tech Mono',monospace;
+                                     white-space:nowrap">{badge['label']}</span>
+                        <span style="font-size:10px;color:#C8D8F0;font-family:'Share Tech Mono',monospace">
+                            {title_id}
+                        </span>
+                        <span style="font-size:8px;color:#3A5070;margin-left:auto;
+                                     font-family:'Share Tech Mono',monospace">{date_short}</span>
+                    </div>""", unsafe_allow_html=True)
+                with ev_col2:
+                    if st.button("Lihat", key=f"ev_btn_{idx}", use_container_width=True):
+                        st.session_state.news_selected_event_idx = idx
+                        st.session_state.ai_result = None
+                        st.rerun()
+
+        # ── Setelah event dipilih: tampilkan detail + Aktual/Perkiraan/Sebelumnya + tombol Analisis ──
+        if events and st.session_state.news_selected_event_idx is not None:
+            sel_event = events[st.session_state.news_selected_event_idx]
+            title_id, desc_id = _translate_event_name(sel_event["event"])
+            badge = get_impact_badge(sel_event["importance"])
+
+            st.markdown(f"""
+            <div style="background:#07101C;border:1px solid rgba(0,225,255,0.25);
+                        border-radius:6px;padding:14px;margin-top:10px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <span style="font-size:11px;font-weight:700;color:#E8F1FF;
+                                 font-family:'Share Tech Mono',monospace">{title_id}</span>
+                    <span style="background:{badge['bg']};color:{badge['color']};
+                                 font-size:7px;letter-spacing:1px;padding:3px 7px;
+                                 border-radius:3px;font-family:'Share Tech Mono',monospace">
+                        DAMPAK {badge['label']}
+                    </span>
+                </div>
+                <div style="font-size:9px;color:#8BA0C0;line-height:1.7;margin-bottom:12px;
+                            font-family:'Share Tech Mono',monospace">{desc_id}</div>
+                <div style="display:flex;justify-content:space-around;text-align:center;
+                            padding:10px 0;border-top:1px solid #1A2540;border-bottom:1px solid #1A2540">
+                    <div>
+                        <div style="font-size:7px;color:#3A5070;letter-spacing:1px;margin-bottom:3px">AKTUAL</div>
+                        <div style="font-size:14px;font-weight:700;color:#E8F1FF">{sel_event['actual']}</div>
+                    </div>
+                    <div>
+                        <div style="font-size:7px;color:#3A5070;letter-spacing:1px;margin-bottom:3px">PERKIRAAN</div>
+                        <div style="font-size:14px;font-weight:700;color:#8BA0C0">{sel_event['forecast']}</div>
+                    </div>
+                    <div>
+                        <div style="font-size:7px;color:#3A5070;letter-spacing:1px;margin-bottom:3px">SEBELUMNYA</div>
+                        <div style="font-size:14px;font-weight:700;color:#8BA0C0">{sel_event['previous']}</div>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            ac1, _ = st.columns([1, 4])
+            with ac1:
+                run_calendar_clicked = st.button("Analyze Now", key="btn_run_calendar", use_container_width=True)
+
+            if run_calendar_clicked:
+                with st.spinner("◈ Memindai keterhubungan data ekonomi dengan struktur pasar..."):
+                    setup = calendar_event_setup_engine(sel_event, country_info["currency"])
+
+                    # Cari pair aktif yang currency-nya match dengan negara yang dipilih
+                    # (mis. pilih US → cek apakah instrumen aktif mengandung USD)
+                    related_pair, mct_for_event = None, None
+                    if country_info["currency"] in active_label:
+                        related_pair = active_label
+                        mct_for_event = get_mct_d1(active_label, active_td)
+
+                    narrative = ai_interpret_calendar_event(
+                        sel_event, setup, country_info["label"], country_info["currency"],
+                        mct_for_event, related_pair,
+                    )
+                    title_id2, _ = _translate_event_name(sel_event["event"])
+                    st.session_state.ai_result = render_calendar_event_report(
+                        sel_event, setup, title_id2, country_info["label"], country_info["currency"],
+                        narrative, mct_for_event, related_pair,
+                    )
+
+    if st.session_state.ai_result:
+        st.markdown(st.session_state.ai_result, unsafe_allow_html=True)
 
 st.markdown('</div>', unsafe_allow_html=True)
 
