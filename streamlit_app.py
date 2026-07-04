@@ -62,7 +62,7 @@ div[data-testid="stIFrame"] { margin:0 !important; padding:0 !important; }
 .element-container { margin:0 !important; }
 
 /* ── BRAND compact — rapat ke ticker ── */
-.av-brand-wrap { padding:2px 0 0; margin-bottom:0; }
+.av-brand-wrap { padding:10px 0 0; margin-bottom:0; }
 .av-brand-line { display:flex; align-items:baseline; gap:8px; }
 .av-title {
     font-size:16px; letter-spacing:3px; color:#E8F1FF;
@@ -629,7 +629,25 @@ def factor_bars_html(r: dict) -> str:
             </div>
             <div class="av-factor-v" style="color:{c}">{sgn}{v:.0f}</div>
         </div>"""
-    return f'<div class="av-factor-wrap">{items}</div>'
+
+    # Baris terpisah di bawah RSI/MACD/VOL — MCT full-width, bukan sejajar
+    mct_cur = float(r["current"])
+    mct_c   = "#00E1FF" if mct_cur >= 0 else "#FF3D71"
+    mct_sgn = "+" if mct_cur >= 0 else ""
+    mct_row = f"""
+    <div style="display:flex;justify-content:space-between;align-items:center;
+                background:#0A0E18;border:1px solid rgba(0,225,255,0.25);
+                border-radius:4px;padding:5px 10px;margin-top:4px">
+        <span style="font-size:7.5px;color:#00E1FF;letter-spacing:1px;
+                     font-family:'Share Tech Mono',monospace">MCT COMPOSITE</span>
+        <span style="font-size:15px;font-weight:700;color:{mct_c};
+                     font-family:'Share Tech Mono',monospace;
+                     text-shadow:0 0 8px {mct_c}66">
+            {mct_sgn}{mct_cur:.1f}
+        </span>
+    </div>"""
+
+    return f'<div class="av-factor-wrap">{items}</div>{mct_row}'
 
 # ==============================================================================
 # TV WIDGET HELPERS
@@ -2469,18 +2487,11 @@ with mct_col:
         data_src = "LIVE · TWELVE DATA"
 
     mct = calculate_mct(df)
-    cur = mct["current"]
-    clr = "#00E1FF" if cur >= 0 else "#FF3D71"
-    sgn = "+" if cur >= 0 else ""
 
     st.markdown(f"""
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-      <div style="font-size:8px;color:#2A3A5A;letter-spacing:1px;font-family:'Share Tech Mono',monospace">
+    <div style="font-size:8px;color:#2A3A5A;letter-spacing:1px;
+                font-family:'Share Tech Mono',monospace;margin-bottom:4px">
         {data_src} · {active_label} · {tf}
-      </div>
-      <div style="font-size:24px;font-weight:700;color:{clr};font-family:'Share Tech Mono',monospace;line-height:1">
-        {sgn}{cur:.2f}
-      </div>
     </div>""", unsafe_allow_html=True)
 
     st.plotly_chart(render_mct(mct), use_container_width=True,
@@ -2731,9 +2742,9 @@ with btn_row_r:
 mode_color = "#00E1FF" if st.session_state.ai_mode == "pair" else "#A855F7"
 mode_label = "PAIR MODE — TEKNIKAL & SMC" if st.session_state.ai_mode == "pair" else "NEWS MODE — ECONOMIC CALENDAR"
 st.markdown(f"""
-<div style="font-size:8px;letter-spacing:1px;color:{mode_color};
-            font-family:'Share Tech Mono',monospace;margin:4px 0 8px;
-            border-left:2px solid {mode_color};padding-left:8px">
+<div style="clear:both;position:relative;font-size:8px;letter-spacing:1px;color:{mode_color};
+            font-family:'Share Tech Mono',monospace;margin:8px 0 10px;
+            border-left:2px solid {mode_color};padding:3px 0 3px 8px;line-height:1.6">
     {mode_label}
 </div>""", unsafe_allow_html=True)
 
@@ -2742,8 +2753,9 @@ st.markdown(f"""
 # ══════════════════════════════════════════════════════════════════════════════
 if st.session_state.ai_mode == "pair":
     st.markdown(f"""
-    <div style="font-size:9px;color:#4A6080;font-family:'Share Tech Mono',monospace;
-                margin-bottom:8px">
+    <div style="clear:both;position:relative;font-size:9px;color:#4A6080;
+                font-family:'Share Tech Mono',monospace;margin-bottom:10px;
+                line-height:1.7;padding:2px 0">
         Instrumen aktif: <span style="color:#00E1FF;font-weight:700">{active_label}</span>
         · Timeframe <span style="color:#00E1FF;font-weight:700">{tf}</span>
         · MCT selalu D1 — diambil otomatis dari selector di atas.
@@ -2786,8 +2798,9 @@ if st.session_state.ai_mode == "pair":
 # ══════════════════════════════════════════════════════════════════════════════
 else:
     st.markdown("""
-    <div style="font-size:9px;color:#4A6080;font-family:'Share Tech Mono',monospace;
-                margin-bottom:8px">
+    <div style="clear:both;position:relative;font-size:9px;color:#4A6080;
+                font-family:'Share Tech Mono',monospace;margin-bottom:10px;
+                line-height:1.7;padding:2px 0">
         Pilih negara untuk melihat kalender ekonomi terkini.
     </div>""", unsafe_allow_html=True)
 
