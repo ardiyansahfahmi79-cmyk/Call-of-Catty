@@ -49,27 +49,28 @@ footer { display:none !important; }
         radial-gradient(ellipse 50% 30% at 90% 5%,rgba(168,85,247,0.05),transparent) !important;
 }
 
-div.block-container { padding:0 1rem 1.5rem !important; max-width:100% !important; }
+div.block-container { padding:0 1rem 1rem !important; max-width:100% !important; }
 [data-testid="stVerticalBlock"] > div { gap:0 !important; }
+[data-testid="stVerticalBlock"] { gap:0 !important; }
 [data-testid="column"] { padding:0 4px !important; }
 div[data-testid="stVerticalBlockBorderWrapper"] { padding:0 !important; }
 .stMarkdown { margin:0 !important; padding:0 !important; }
 div[data-testid="stHorizontalBlock"] { gap:8px !important; }
+div[data-testid="stElementContainer"] { margin:0 !important; padding:0 !important; }
+div[data-testid="stElementContainer"] iframe { display:block; margin:0 !important; }
+div[data-testid="stIFrame"] { margin:0 !important; padding:0 !important; }
+.element-container { margin:0 !important; }
 
 /* ── BRAND compact — rapat ke ticker ── */
-.av-brand-wrap { padding:4px 0 0; margin-bottom:0; }
+.av-brand-wrap { padding:2px 0 0; margin-bottom:0; }
 .av-brand-line { display:flex; align-items:baseline; gap:8px; }
-.av-prefix {
-    font-size:7px; letter-spacing:3px; color:#1A3A5A;
-    border:1px solid #1A3A5A; padding:1px 5px; border-radius:2px;
-}
 .av-title {
     font-size:16px; letter-spacing:3px; color:#E8F1FF;
     font-weight:700; font-family:'Share Tech Mono',monospace; line-height:1.2;
 }
 .av-title .acc { color:#00E1FF; }
 .av-ver { font-size:7px; letter-spacing:2px; color:#2A4060; }
-.av-tagline { font-size:6px; letter-spacing:2px; color:#1A3A5A; margin-top:1px; margin-bottom:0; }
+.av-tagline { font-size:6px; letter-spacing:2px; color:#1A3A5A; margin-top:0; margin-bottom:0; }
 
 /* Zero gap antara semua elemen atas */
 div.block-container > div > div > div { margin-bottom:0 !important; }
@@ -78,14 +79,14 @@ iframe { display:block; margin:0 !important; }
 /* ── SECTION LABEL ── */
 .av-sec {
     font-size:7px; letter-spacing:2px; color:#1A3060;
-    padding:4px 0 2px; font-family:'Share Tech Mono',monospace;
+    padding:3px 0 1px; font-family:'Share Tech Mono',monospace;
     margin:0;
 }
 
 /* ── PANEL ── */
 .av-panel {
     background:#09111E; border:1px solid #111827; border-radius:8px;
-    padding:12px; position:relative; overflow:hidden; margin-bottom:8px;
+    padding:12px; position:relative; overflow:hidden; margin-bottom:6px;
 }
 .av-panel::before {
     content:""; position:absolute; top:0; left:0; right:0; height:1px;
@@ -806,6 +807,20 @@ CURRENCY_TO_BANK_LABEL = {
     "USD": "US", "EUR": "Euro Zone", "GBP": "UK", "JPY": "Japan",
     "AUD": "Australia", "CHF": "Swiss", "CAD": "Canada", "CNY": "China",
     "XAU": "US", "XAG": "US",  # emas/perak korelasi utama ke kebijakan USD
+}
+
+# Pemetaan currency → pair representatif untuk MCT D1 di Analisis News.
+# Dipakai agar News SELALU punya konteks MCT walau pair aktif di grafik atas
+# berbeda currency dengan negara yang dipilih user di News.
+CURRENCY_REPRESENTATIVE_PAIR = {
+    "USD": ("EURUSD", "OANDA:EURUSD"),
+    "EUR": ("EURUSD", "OANDA:EURUSD"),
+    "GBP": ("GBPUSD", "OANDA:GBPUSD"),
+    "JPY": ("USDJPY", "OANDA:USDJPY"),
+    "AUD": ("AUDUSD", "OANDA:AUDUSD"),
+    "CHF": ("USDCHF", "OANDA:USDCHF"),
+    "CAD": ("USDCAD", "OANDA:USDCAD"),
+    "CNY": ("USDCNH", "OANDA:USDCNH"),
 }
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -1600,12 +1615,13 @@ def _translate_event_name(event_name: str) -> tuple:
 
 
 @st.cache_data(ttl=900, show_spinner=False)
-def fetch_economic_calendar(country_fmp_name: str) -> list:
+def fetch_economic_calendar(currency: str, country_code: str) -> list:
     """
-    Ambil economic calendar terstruktur dari Financial Modeling Prep (FMP) untuk satu negara.
-    FMP mengembalikan semua negara sekaligus dalam satu response, jadi kita filter manual
-    berdasarkan field 'country'. Rentang: 3 hari ke belakang s/d 5 hari ke depan.
-    Dibatasi ke 4 event teratas per negara sesuai kebutuhan tampilan, prioritas importance tinggi.
+    Ambil economic calendar terstruktur dari Financial Modeling Prep (FMP).
+    FMP mengembalikan semua negara sekaligus dalam satu response — field 'country' pada
+    response FMP menggunakan kode ISO pendek (mis. "US", "EU", "GB"), BUKAN nama panjang.
+    Matching dilakukan via currency code (ISO 4217, paling konsisten) dengan fallback ke
+    country code ISO 2-huruf. Rentang: 3 hari ke belakang s/d 5 hari ke depan.
     """
     try:
         api_key = st.secrets["FMP_API_KEY"]
@@ -1629,17 +1645,20 @@ def fetch_economic_calendar(country_fmp_name: str) -> list:
     except Exception:
         return []
 
-    # FMP importance biasanya string "Low"/"Medium"/"High" — normalisasi ke skala 1-3
     IMPORTANCE_MAP = {"low": 1, "medium": 2, "high": 3}
 
     events = []
-    country_name_lower = country_fmp_name.lower()
+    currency_upper = currency.upper()
+    country_upper  = country_code.upper()
+
     for item in data:
         try:
-            item_country = (item.get("country") or "").strip().lower()
-            # Cocokkan nama negara secara fleksibel (FMP kadang pakai kode ISO, kadang nama penuh)
-            if country_name_lower not in item_country and item_country not in country_name_lower:
-                # Coba juga cocokkan currency sebagai fallback (mis. "EUR" match "Euro Area")
+            item_currency = str(item.get("currency", "")).strip().upper()
+            item_country  = str(item.get("country", "")).strip().upper()
+
+            # Matching utama: currency code (paling reliable lintas-provider)
+            # Fallback: country code ISO 2-huruf
+            if item_currency != currency_upper and item_country != country_upper:
                 continue
 
             event_name = (item.get("event") or "").strip()
@@ -1653,62 +1672,6 @@ def fetch_economic_calendar(country_fmp_name: str) -> list:
             forecast = item.get("estimate")
             previous = item.get("previous")
 
-            events.append({
-                "event": event_name,
-                "date": item.get("date", ""),
-                "actual": str(actual) if actual not in (None, "") else "—",
-                "forecast": str(forecast) if forecast not in (None, "") else "—",
-                "previous": str(previous) if previous not in (None, "") else "—",
-                "importance": importance,
-                "unit": item.get("unit", "") or "",
-            })
-        except Exception:
-            continue
-
-    events.sort(key=lambda e: (-e["importance"], e["date"]))
-    return events[:4]
-
-
-def fetch_economic_calendar_by_currency(currency: str, fallback_country_name: str) -> list:
-    """
-    Fallback kedua: filter berdasarkan currency langsung jika filter nama negara di atas
-    tidak menemukan hasil (menangani inkonsistensi penamaan negara di response FMP).
-    """
-    try:
-        api_key = st.secrets["FMP_API_KEY"]
-    except Exception:
-        return []
-
-    try:
-        today = datetime.now(timezone.utc).date()
-        start = (today - pd.Timedelta(days=3)).strftime("%Y-%m-%d")
-        end   = (today + pd.Timedelta(days=5)).strftime("%Y-%m-%d")
-        url = (
-            f"https://financialmodelingprep.com/stable/economic-calendar"
-            f"?from={start}&to={end}&apikey={api_key}"
-        )
-        r = requests.get(url, timeout=12)
-        if r.status_code != 200:
-            return []
-        data = r.json()
-        if not isinstance(data, list):
-            return []
-    except Exception:
-        return []
-
-    IMPORTANCE_MAP = {"low": 1, "medium": 2, "high": 3}
-    events = []
-    for item in data:
-        try:
-            item_currency = (item.get("currency") or "").strip().upper()
-            if item_currency != currency.upper():
-                continue
-            event_name = (item.get("event") or "").strip()
-            if not event_name:
-                continue
-            imp_raw = str(item.get("impact", "Low")).strip().lower()
-            importance = IMPORTANCE_MAP.get(imp_raw, 1)
-            actual, forecast, previous = item.get("actual"), item.get("estimate"), item.get("previous")
             events.append({
                 "event": event_name,
                 "date": item.get("date", ""),
@@ -2433,9 +2396,8 @@ def render_news_report(summary, narrative):
 st.markdown("""
 <div class="av-brand-wrap">
   <div class="av-brand-line">
-    <span class="av-prefix">SYS</span>
     <span class="av-title">AERO<span class="acc">VULPIS</span>&nbsp;TERMINAL</span>
-    <span class="av-ver">v4.1</span>
+    <span class="av-ver">v6.0</span>
   </div>
   <div class="av-tagline">QUANTITATIVE MARKET INTELLIGENCE SYSTEM · PROTOTYPE BUILD</div>
 </div>
@@ -2861,12 +2823,9 @@ else:
 
         if st.session_state.news_calendar_cache is None:
             with st.spinner(f"◈ Mengambil kalender ekonomi {country_info['label']}..."):
-                found = fetch_economic_calendar(country_info["fmp_name"])
-                if not found:
-                    found = fetch_economic_calendar_by_currency(
-                        country_info["currency"], country_info["fmp_name"]
-                    )
-                st.session_state.news_calendar_cache = found
+                st.session_state.news_calendar_cache = fetch_economic_calendar(
+                    country_info["currency"], country_info["code"]
+                )
 
         events = st.session_state.news_calendar_cache
 
@@ -2877,11 +2836,16 @@ else:
         </div>""", unsafe_allow_html=True)
 
         if not events:
+            try:
+                _ = st.secrets["FMP_API_KEY"]
+                empty_reason = f"Tidak ada kalender ekonomi untuk {country_info['label']} pada rentang tanggal saat ini."
+            except Exception:
+                empty_reason = "FMP_API_KEY belum diset di secrets — kalender ekonomi tidak dapat dimuat."
             st.markdown(f"""
             <div style="background:#07101C;border:1px solid #1A2540;border-radius:5px;
                         padding:14px;text-align:center;margin-top:6px">
                 <span style="font-size:10px;color:#4A6080;font-family:'Share Tech Mono',monospace">
-                    Tidak ada kalender ekonomi untuk {country_info['label']} saat ini.
+                    {empty_reason}
                 </span>
             </div>""", unsafe_allow_html=True)
         else:
@@ -2955,15 +2919,23 @@ else:
                 run_calendar_clicked = st.button("Analyze Now", key="btn_run_calendar", use_container_width=True)
 
             if run_calendar_clicked:
-                with st.spinner("◈ Memindai keterhubungan data ekonomi dengan struktur pasar..."):
+                with st.spinner("◈ Memindai keterhubungan data ekonomi dengan struktur pasar & MCT..."):
                     setup = calendar_event_setup_engine(sel_event, country_info["currency"])
 
-                    # Cari pair aktif yang currency-nya match dengan negara yang dipilih
-                    # (mis. pilih US → cek apakah instrumen aktif mengandung USD)
-                    related_pair, mct_for_event = None, None
+                    # Prioritas 1: pakai pair aktif di grafik atas jika currency-nya match
+                    # (lebih relevan buat user karena itu yang sedang dia pantau).
+                    # Prioritas 2: fallback ke pair representatif currency ini, agar MCT D1
+                    # SELALU tersedia di Analisis News — tidak tergantung pilihan grafik atas.
                     if country_info["currency"] in active_label:
-                        related_pair = active_label
-                        mct_for_event = get_mct_d1(active_label, active_td)
+                        related_pair, related_td = active_label, active_td
+                    else:
+                        related_pair, related_td = CURRENCY_REPRESENTATIVE_PAIR.get(
+                            country_info["currency"], (None, None)
+                        )
+
+                    mct_for_event = None
+                    if related_pair and related_td:
+                        mct_for_event = get_mct_d1(related_pair, related_td)
 
                     narrative = ai_interpret_calendar_event(
                         sel_event, setup, country_info["label"], country_info["currency"],
