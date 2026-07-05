@@ -441,14 +441,20 @@ for _k, _v in _DEFAULTS.items():
 # ==============================================================================
 @st.cache_data(ttl=60, show_spinner=False)
 def fetch_twelvedata(symbol: str, interval: str, outputsize: int = 300) -> pd.DataFrame:
-    """Fetch OHLCV from Twelve Data. Keyed by symbol+interval so each TF gets fresh data."""
+    """
+    Fetch OHLCV from Twelve Data. Keyed by symbol+interval so each TF gets fresh data.
+    Symbol WAJIB di-URL-encode (mis. "EUR/USD" → "EUR%2FUSD") karena karakter '/' mentah
+    di query string bisa gagal diparsing dengan benar — ini penyebab utama kegagalan fetch
+    sebelumnya walau simbol dan API key sudah benar.
+    """
     try:
         api_key = st.secrets["TWELVE_DATA_API_KEY"]
     except Exception:
         return pd.DataFrame()
+    symbol_enc = _url_quote(symbol, safe="")
     url = (
         f"https://api.twelvedata.com/time_series"
-        f"?symbol={symbol}&interval={interval}&outputsize={outputsize}&apikey={api_key}"
+        f"?symbol={symbol_enc}&interval={interval}&outputsize={outputsize}&apikey={api_key}"
     )
     try:
         r = requests.get(url, timeout=10).json()
@@ -473,13 +479,15 @@ def get_anchor_price(td_symbol: str) -> float:
     dummy data punya harga acak yang jauh melenceng dari harga live sungguhan
     (mis. Entry 1.17 padahal harga live 1.14). Coba endpoint /price Twelve Data
     yang jauh lebih ringan/reliable dibanding /time_series untuk data intraday.
+    Symbol di-URL-encode sama seperti fetch_twelvedata (lihat catatan di atas).
     """
     try:
         api_key = st.secrets["TWELVE_DATA_API_KEY"]
     except Exception:
         return 0.0
     try:
-        url = f"https://api.twelvedata.com/price?symbol={td_symbol}&apikey={api_key}"
+        symbol_enc = _url_quote(td_symbol, safe="")
+        url = f"https://api.twelvedata.com/price?symbol={symbol_enc}&apikey={api_key}"
         r = requests.get(url, timeout=8).json()
         price = r.get("price")
         return float(price) if price else 0.0
@@ -677,7 +685,7 @@ def render_mct(result: dict) -> go.Figure:
     return fig
 
 
-def factor_bars_html(r: dict) -> str:
+def factor_bars_html(r: dict, tf_label: str = "") -> str:
     factors = [
         ("RSI",   r["rsi_score"]),
         ("MACD",  r["macd_score"]),
@@ -705,12 +713,13 @@ def factor_bars_html(r: dict) -> str:
     regime   = r.get("regime", "NEUTRAL")
     momentum = r.get("momentum", 0.0)
     mom_sym  = "▲" if momentum >= 0 else "▼"
+    tf_suffix = f" · {tf_label}" if tf_label else ""
     mct_row = f"""
     <div style="background:#0A0E18;border:1px solid rgba(0,225,255,0.25);
                 border-radius:4px;padding:6px 10px;margin-top:4px">
         <div style="display:flex;justify-content:space-between;align-items:center">
             <span style="font-size:7.5px;color:#00E1FF;letter-spacing:1px;
-                         font-family:'Share Tech Mono',monospace">MCT COMPOSITE</span>
+                         font-family:'Share Tech Mono',monospace">MCT COMPOSITE{tf_suffix}</span>
             <span style="font-size:15px;font-weight:700;color:{mct_c};
                          font-family:'Share Tech Mono',monospace;
                          text-shadow:0 0 8px {mct_c}66">
@@ -1634,369 +1643,242 @@ def _fallback_narrative_news(summary: dict) -> str:
     )
     return f"{p1}\n\n{p2}\n\n{p3}"
 
+
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-# ECONOMIC CALENDAR ENGINE (v7) — pilihan negara, bukan input teks bebas
-# Sumber: Apify — actor pintostudio/economic-calendar-data-investing-com
-# Free plan Apify: $5 kredit/bulan permanen, ~$0.75/1000 event → jauh lebih dari cukup
-# untuk kebutuhan 5 negara × 3 event/hari.
+# NEWS ENGINE v11 — widget seputarforex (judul + link), lalu fetch tiap artikel untuk
+# tanggal/jam publikasi + ringkasan konten. AI membaca konten lengkap untuk interpretasi.
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 
-# Hanya 5 negara/kawasan ekonomi besar, sesuai permintaan — bukan 8 seperti sebelumnya
-COUNTRY_OPTIONS = [
-    {"code": "US", "flag": "🇺🇸", "label": "US",  "investing_name": "United States", "currency": "USD"},
-    {"code": "EU", "flag": "🇪🇺", "label": "EUR", "investing_name": "Euro Zone",     "currency": "EUR"},
-    {"code": "GB", "flag": "🇬🇧", "label": "GBP", "investing_name": "United Kingdom","currency": "GBP"},
-    {"code": "JP", "flag": "🇯🇵", "label": "JPY", "investing_name": "Japan",         "currency": "JPY"},
-    {"code": "AU", "flag": "🇦🇺", "label": "AUD", "investing_name": "Australia",     "currency": "AUD"},
-]
-COUNTRY_MAP = {c["code"]: c for c in COUNTRY_OPTIONS}
+SEPUTARFOREX_WIDGET_URL = "https://www.seputarforex.org/widget/berita_dan_analisa_forex_js.php"
 
-# Kamus judul event Trading Economics (Inggris) → judul Bahasa Indonesia + penjelasan singkat.
-# Dicocokkan via substring match pada nama event; fallback tetap tampil dalam bahasa aslinya
-# dengan penjelasan generik agar sistem tidak pernah gagal total untuk event yang belum dipetakan.
-ECONOMIC_EVENT_ID = {
-    "non farm payrolls": (
-        "Data Tenaga Kerja Non-Pertanian (NFP)",
-        "Mengukur jumlah lapangan kerja baru di sektor non-pertanian AS. Angka di atas ekspektasi "
-        "biasanya memperkuat USD karena mengindikasikan ekonomi yang kuat dan potensi kebijakan "
-        "moneter lebih ketat."
-    ),
-    "unemployment rate": (
-        "Tingkat Pengangguran",
-        "Persentase angkatan kerja yang tidak memiliki pekerjaan. Angka yang menurun menunjukkan "
-        "pasar tenaga kerja yang sehat dan cenderung positif bagi mata uang terkait."
-    ),
-    "inflation rate": (
-        "Tingkat Inflasi",
-        "Mengukur laju kenaikan harga barang dan jasa secara umum (YoY). Inflasi tinggi dapat memicu "
-        "bank sentral menaikkan suku bunga, yang umumnya menguatkan mata uang domestik."
-    ),
-    "cpi": (
-        "Indeks Harga Konsumen (CPI)",
-        "Indikator inflasi utama yang dipantau bank sentral. Kenaikan CPI di atas ekspektasi "
-        "meningkatkan kemungkinan kebijakan hawkish dan penguatan mata uang."
-    ),
-    "gdp growth rate": (
-        "Pertumbuhan PDB",
-        "Mengukur laju pertumbuhan ekonomi suatu negara. Pertumbuhan yang lebih tinggi dari "
-        "perkiraan umumnya positif bagi mata uang dan pasar saham negara tersebut."
-    ),
-    "interest rate decision": (
-        "Keputusan Suku Bunga Bank Sentral",
-        "Pengumuman resmi level suku bunga acuan. Kenaikan suku bunga umumnya memperkuat mata uang "
-        "karena menarik arus modal asing yang mencari imbal hasil lebih tinggi."
-    ),
-    "retail sales": (
-        "Penjualan Ritel",
-        "Mengukur total penjualan barang konsumen. Data yang kuat mengindikasikan belanja konsumen "
-        "yang sehat dan mendukung pertumbuhan ekonomi serta mata uang terkait."
-    ),
-    "manufacturing pmi": (
-        "PMI Manufaktur",
-        "Indeks yang mengukur aktivitas sektor manufaktur. Angka di atas 50 menunjukkan ekspansi, "
-        "di bawah 50 menunjukkan kontraksi sektor industri."
-    ),
-    "services pmi": (
-        "PMI Jasa",
-        "Indeks yang mengukur aktivitas sektor jasa. Angka di atas 50 menunjukkan ekspansi sektor "
-        "jasa yang mendominasi sebagian besar ekonomi negara maju."
-    ),
-    "trade balance": (
-        "Neraca Perdagangan",
-        "Selisih antara nilai ekspor dan impor suatu negara. Surplus yang membesar umumnya positif "
-        "bagi mata uang domestik."
-    ),
-    "consumer confidence": (
-        "Indeks Kepercayaan Konsumen",
-        "Mengukur optimisme rumah tangga terhadap kondisi ekonomi. Kepercayaan tinggi biasanya "
-        "berkorelasi dengan belanja konsumen yang lebih besar ke depan."
-    ),
-    "balance of trade": (
-        "Neraca Perdagangan",
-        "Selisih nilai ekspor dan impor suatu negara pada periode tertentu, indikator penting "
-        "kesehatan sektor eksternal ekonomi."
-    ),
-    "initial jobless claims": (
-        "Klaim Pengangguran Mingguan",
-        "Jumlah warga yang baru mengajukan klaim tunjangan pengangguran. Angka rendah menunjukkan "
-        "pasar tenaga kerja yang solid."
-    ),
-    "core inflation": (
-        "Inflasi Inti",
-        "Inflasi yang mengecualikan komponen volatil seperti makanan dan energi, dipantau ketat "
-        "oleh bank sentral sebagai indikator tekanan harga jangka panjang."
-    ),
-    "ppi": (
-        "Indeks Harga Produsen (PPI)",
-        "Mengukur perubahan harga di tingkat produsen/grosir, sering menjadi indikator dini bagi "
-        "arah inflasi konsumen (CPI) ke depan."
-    ),
-    "industrial production": (
-        "Produksi Industri",
-        "Mengukur output sektor industri, pertambangan, dan utilitas. Pertumbuhan yang kuat "
-        "mengindikasikan ekspansi ekonomi."
-    ),
-    "housing starts": (
-        "Housing Starts",
-        "Jumlah unit rumah baru yang mulai dibangun, indikator kesehatan sektor properti dan "
-        "kepercayaan konsumen jangka menengah."
-    ),
-    "durable goods orders": (
-        "Pesanan Barang Tahan Lama",
-        "Mengukur nilai pesanan barang dengan usia pakai lebih dari 3 tahun, mencerminkan tingkat "
-        "investasi bisnis dan permintaan konsumen jangka panjang."
-    ),
-}
-
-def _translate_event_name(event_name: str) -> tuple:
-    """Cocokkan nama event Trading Economics dengan kamus ID. Return (judul_id, penjelasan_id)."""
-    name_lower = event_name.lower()
-    for key, (title_id, desc_id) in ECONOMIC_EVENT_ID.items():
-        if key in name_lower:
-            return title_id, desc_id
-    # Fallback: tidak ada di kamus — tetap tampilkan nama asli dengan penjelasan generik
-    return event_name, (
-        "Rilis data ekonomi resmi yang dipantau pelaku pasar untuk menilai kondisi kesehatan "
-        "ekonomi negara terkait dan potensi dampaknya terhadap kebijakan moneter serta mata uang."
-    )
-
-
-@st.cache_data(ttl=900, show_spinner=False)
-def _pick_field(item: dict, *candidates, default=None):
-    """Ambil field pertama yang match dari beberapa kemungkinan nama (case-insensitive) —
-    lapisan defensif karena field naming exact dari actor Apify tidak selalu terdokumentasi
-    lengkap; ini mencegah sistem patah total kalau ada perbedaan casing/nama minor."""
-    lower_map = {str(k).lower(): v for k, v in item.items()}
-    for c in candidates:
-        if c.lower() in lower_map and lower_map[c.lower()] not in (None, ""):
-            return lower_map[c.lower()]
-    return default
-
-
-@st.cache_data(ttl=1800, show_spinner=False)
-def fetch_economic_calendar(currency: str, country_name: str) -> list:
+@st.cache_data(ttl=600, show_spinner=False)
+def fetch_seputarforex_headlines(max_items: int = 6) -> list:
     """
-    Ambil economic calendar terstruktur via Apify actor
-    'pintostudio/economic-calendar-data-investing-com' (scrape Investing.com).
-    Hanya negara besar (US/EUR/GBP/JPY/AUD), skip importance Low, maksimal 3 event/hari
-    per negara sesuai kebutuhan tampilan (hemat kuota Apify — actor ini pay-per-event).
-    Rentang: hari ini saja (00:00-23:59 UTC) — "ambil setiap hari" sesuai instruksi;
-    kalau tidak ada event hari ini, list kosong dan UI menampilkan pesan yang jelas.
+    Ambil daftar judul + link berita terbaru dari widget JS seputarforex.
+    Widget ini mengembalikan JS berisi document.write(...) dengan markdown/HTML link,
+    sehingga di-parse pakai regex untuk ekstrak [judul](url).
     """
     try:
-        api_token = st.secrets["APIFY_API_KEY"]
+        r = requests.get(SEPUTARFOREX_WIDGET_URL, timeout=10,
+                          headers={"User-Agent": "Mozilla/5.0 (compatible; AerovulpisTerminal/6.0)"})
+        raw = r.text
     except Exception:
         return []
 
-    try:
-        today = datetime.now(timezone.utc).date()
-        date_from = today.strftime("%Y-%m-%d")
-        date_to   = today.strftime("%Y-%m-%d")
+    # Cari pola link markdown [judul](url) atau anchor HTML <a href="url">judul</a>
+    items = []
+    seen_urls = set()
 
-        run_input = {
-            "dateFrom": date_from,
-            "dateTo": date_to,
-            "countries": [country_name],
-            "importance": ["medium", "high"],  # skip Low sesuai instruksi
-            "timeZone": "UTC",
-        }
-        url = (
-            "https://api.apify.com/v2/acts/pintostudio~economic-calendar-data-investing-com"
-            f"/run-sync-get-dataset-items?token={api_token}"
-        )
-        r = requests.post(url, json=run_input, timeout=60)
-        if r.status_code != 200:
-            return []
-        data = r.json()
-        if not isinstance(data, list):
-            return []
-    except Exception:
-        return []
-
-    IMPORTANCE_MAP = {"low": 1, "medium": 2, "high": 3, "1": 1, "2": 2, "3": 3}
-
-    events = []
-    for item in data:
-        try:
-            if not isinstance(item, dict):
-                continue
-
-            event_name = _pick_field(item, "event", "title", "name", default="")
-            event_name = str(event_name).strip()
-            if not event_name:
-                continue
-
-            imp_raw = str(_pick_field(item, "importance", "impact", default="low")).strip().lower()
-            importance = IMPORTANCE_MAP.get(imp_raw, 1)
-            if importance < 2:
-                continue  # skip Low — sudah difilter di request tapi dijaga dua lapis
-
-            actual   = _pick_field(item, "actual")
-            forecast = _pick_field(item, "forecast", "estimate", "consensus")
-            previous = _pick_field(item, "previous", "prior")
-            date_val = _pick_field(item, "date", "datetime", "timestamp", default="")
-            time_val = _pick_field(item, "time", default="")
-
-            events.append({
-                "event": event_name,
-                "date": str(date_val),
-                "time": str(time_val),
-                "actual": str(actual) if actual not in (None, "") else "—",
-                "forecast": str(forecast) if forecast not in (None, "") else "—",
-                "previous": str(previous) if previous not in (None, "") else "—",
-                "importance": importance,
-                "unit": str(_pick_field(item, "unit", default="") or ""),
-            })
-        except Exception:
+    md_pattern = re.findall(r"\[([^\]]{10,150})\]\((https://www\.seputarforex\.org/[^\)]+)\)", raw)
+    for title, url in md_pattern:
+        title = title.strip()
+        url = url.strip()
+        if not title or url in seen_urls:
             continue
+        if "newsletter" in url or "subscribe" in url.lower():
+            continue
+        seen_urls.add(url)
+        items.append({"title": title, "url": url})
 
-    # Prioritas importance tinggi dulu, maksimal 3 per negara sesuai instruksi hemat kuota
-    events.sort(key=lambda e: -e["importance"])
-    return events[:3]
+    if not items:
+        html_pattern = re.findall(
+            r'<a[^>]+href="(https://www\.seputarforex\.org/[^"]+)"[^>]*>([^<]{10,150})</a>',
+            raw,
+        )
+        for url, title in html_pattern:
+            title = title.strip()
+            if not title or url in seen_urls:
+                continue
+            seen_urls.add(url)
+            items.append({"title": title, "url": url})
+
+    return items[:max_items]
 
 
-def get_impact_badge(importance: int) -> dict:
-    """Konversi level importance TE (1-3) jadi badge warna sesuai instruksi: hijau/kuning/merah."""
-    if importance >= 3:
-        return {"label": "TINGGI", "color": "#FF3D71", "bg": "rgba(255,61,113,0.12)"}
-    elif importance == 2:
-        return {"label": "MENENGAH", "color": "#FFB020", "bg": "rgba(255,176,32,0.12)"}
-    else:
-        return {"label": "RENDAH", "color": "#00E1FF", "bg": "rgba(0,225,255,0.12)"}
-
-
-def calendar_event_setup_engine(event: dict, country_currency: str) -> dict:
+@st.cache_data(ttl=600, show_spinner=False)
+def fetch_seputarforex_article_detail(url: str) -> dict:
     """
-    Python menentukan 'Setup' — bias arah tersirat dari perbandingan Actual vs Forecast,
-    murni deterministik, tanpa AI. Dipakai sebagai salah satu titik data untuk AI Interpretation.
+    Fetch halaman artikel individual untuk ambil tanggal/jam publikasi ("Published: ...")
+    dan ringkasan konten (meta-description + beberapa paragraf pertama).
     """
-    actual, forecast = event.get("actual", "—"), event.get("forecast", "—")
+    try:
+        r = requests.get(url, timeout=12,
+                          headers={"User-Agent": "Mozilla/5.0 (compatible; AerovulpisTerminal/6.0)"})
+        html = r.text
+    except Exception:
+        return {"published": "", "summary": "", "content": ""}
 
-    def _to_float(s):
-        try:
-            return float(re.sub(r"[^\d.\-]", "", s))
-        except (ValueError, TypeError):
-            return None
+    published = ""
+    date_match = re.search(r"Published:\s*(\d{1,2}\s+\w+\s+\d{4}\s+\d{1,2}:\d{2})", html)
+    if date_match:
+        published = date_match.group(1).strip()
 
-    a_val, f_val = _to_float(actual), _to_float(forecast)
+    summary = ""
+    desc_match = re.search(r'meta-description:\s*(.+)', html)
+    if desc_match:
+        summary = desc_match.group(1).strip().split("\n")[0]
 
-    if a_val is None or f_val is None:
-        return {"setup": "MENUNGGU RILIS" if a_val is None else "TIDAK DAPAT DIBANDINGKAN",
-                "surprise": None, "bias_currency": "NETRAL"}
+    # Ambil beberapa paragraf konten pertama sebagai konteks untuk AI (dibatasi ~800 karakter)
+    content = ""
+    para_matches = re.findall(r'\n([A-Z][^\n]{40,400})\n', html)
+    if para_matches:
+        content = " ".join(para_matches[:4])[:800]
 
-    surprise = round(a_val - f_val, 3)
-    if surprise > 0:
-        bias = "PENGUATAN"
-    elif surprise < 0:
-        bias = "PELEMAHAN"
-    else:
-        bias = "NETRAL"
-
-    return {"setup": f"ACTUAL {'>' if surprise>0 else ('<' if surprise<0 else '=')} FORECAST",
-            "surprise": surprise, "bias_currency": bias}
+    return {"published": published, "summary": summary, "content": content}
 
 
-def ai_interpret_calendar_event(event: dict, setup: dict, country_label: str,
-                                  currency: str, mct_d1: dict = None,
-                                  related_pair: str = None) -> str:
+def parse_seputarforex_datetime(published_str: str) -> tuple:
+    """Pecah 'Published: 02 Jul 2026 22:43' jadi (tanggal, jam) terpisah untuk tampilan."""
+    if not published_str:
+        return "—", "—"
+    parts = published_str.strip().rsplit(" ", 1)
+    if len(parts) == 2:
+        return parts[0], parts[1]
+    return published_str, "—"
+
+
+def run_news_widget_pipeline(max_items: int = 6) -> list:
     """
-    AI Interpretation Engine khusus Economic Calendar — menerima satu event terstruktur
-    (judul Indonesia + Aktual/Perkiraan/Sebelumnya + setup dari Python), dan jika tersedia,
-    konteks MCT D1 dari pair yang sedang aktif di Analisis Pair untuk cross-check keterhubungan
-    antar dua modul analisis. AI TIDAK BOLEH mengubah angka, hanya menerjemahkan maknanya.
+    Pipeline lengkap: ambil headline dari widget → untuk tiap headline, fetch detail
+    (tanggal/jam + ringkasan). Dikembalikan sebagai list siap tampil di UI.
     """
-    title_id, desc_id = _translate_event_name(event["event"])
+    headlines = fetch_seputarforex_headlines(max_items=max_items)
+    results = []
+    for h in headlines:
+        detail = fetch_seputarforex_article_detail(h["url"])
+        date_str, time_str = parse_seputarforex_datetime(detail["published"])
+        results.append({
+            "title": h["title"],
+            "url": h["url"],
+            "date": date_str,
+            "time": time_str,
+            "summary": detail["summary"],
+            "content": detail["content"],
+        })
+    return results
 
+
+def ai_interpret_news_article(article: dict, mct_d1: dict = None, related_pair: str = None) -> str:
+    """
+    AI Interpretation Engine untuk satu artikel berita seputarforex. AI membaca judul +
+    ringkasan + cuplikan konten (Bahasa Indonesia asli, tidak perlu diterjemahkan lagi karena
+    seputarforex sudah berbahasa Indonesia), lalu menyusun interpretasi analisis pasar.
+    """
     system_prompt = (
         "Kamu adalah AI Interpretation Engine pada terminal trading institusional bernama "
-        "AEROVULPIS TERMINAL, khusus modul Economic Calendar Intelligence. Tugasmu menjelaskan "
-        "satu rilis data ekonomi kepada trader ritel Indonesia dengan bahasa yang jelas, formal, "
-        "dan mudah dipahami — gaya jurnalis riset makro profesional. Kamu TIDAK BOLEH mengubah "
-        "angka Aktual/Perkiraan/Sebelumnya yang diberikan, hanya menjelaskan maknanya. "
-        "Tulis narasi sepanjang 3 paragraf (total sekitar 8-11 kalimat), TANPA heading, TANPA "
-        "bullet point, TANPA markdown:\n"
-        "Paragraf 1: apa itu data ini dan mengapa pasar memperhatikannya.\n"
-        "Paragraf 2: baca hasil Aktual vs Perkiraan — apakah ini kejutan positif/negatif bagi "
-        "mata uang terkait, dan jika belum rilis (Aktual masih '—'), jelaskan apa yang perlu "
-        "diwaspadai trader menjelang rilis.\n"
-        "Paragraf 3: jika data MCT Daily untuk pair terkait tersedia, jelaskan apakah bias dari "
-        "rilis data ini SEARAH atau BERLAWANAN dengan bias MCT — dan apa artinya bagi trader; "
-        "jika tidak tersedia, tutup dengan catatan risk management umum untuk trading di sekitar "
-        "rilis data berdampak tinggi."
+        "AEROVULPIS TERMINAL, khusus modul News Intelligence. Kamu menerima satu artikel berita "
+        "forex berbahasa Indonesia dari sumber terpercaya. Tugasmu adalah membaca artikel ini dan "
+        "menyusun interpretasi analisis pasar yang tajam dan actionable untuk trader ritel, gaya "
+        "riset institusi profesional. Tulis narasi 3 paragraf (total sekitar 8-11 kalimat), TANPA "
+        "heading, TANPA bullet, TANPA markdown:\n"
+        "Paragraf 1: ringkasan inti dari berita ini dan mengapa pasar bereaksi.\n"
+        "Paragraf 2: implikasi terhadap mata uang/aset yang disebutkan dalam berita.\n"
+        "Paragraf 3: jika data MCT Daily untuk pair terkait tersedia, jelaskan apakah arah berita "
+        "ini SEARAH atau BERLAWANAN dengan bias MCT; jika tidak tersedia, tutup dengan catatan "
+        "risk management umum terkait volatilitas pasca berita ini."
     )
 
-    mct_block = "MCT Daily untuk pair terkait: tidak tersedia (tidak ada pair aktif yang match currency ini)."
+    mct_block = "MCT Daily untuk pair terkait: tidak tersedia."
     if mct_d1 and related_pair:
         mct_block = (
-            f"Pair aktif yang terhubung dengan currency {currency}: {related_pair}\n"
-            f"Nilai MCT Daily pair ini: {mct_d1['current']:+.1f} — regime {mct_d1['regime']}, "
+            f"Pair terhubung: {related_pair}\n"
+            f"Nilai MCT Daily: {mct_d1['current']:+.1f} — regime {mct_d1['regime']}, "
             f"bias tersirat {mct_d1['bias']}"
         )
 
     user_prompt = f"""
-Negara: {country_label} ({currency})
-Nama event (asli): {event['event']}
-Judul Indonesia: {title_id}
-Penjelasan dasar: {desc_id}
-
-Tanggal rilis: {event['date']}
-Aktual: {event['actual']}
-Perkiraan (Forecast): {event['forecast']}
-Sebelumnya (Previous): {event['previous']}
-Tingkat dampak: {event['importance']} (1=Rendah, 2=Menengah, 3=Tinggi)
-
-Setup dari Python (deterministik, jangan diubah):
-{setup['setup']}
-Bias tersirat: {setup['bias_currency']}
+Judul: {article['title']}
+Tanggal/Jam Publikasi: {article['date']} {article['time']}
+Ringkasan: {article.get('summary', '') or '(tidak tersedia)'}
+Cuplikan konten: {article.get('content', '') or '(tidak tersedia)'}
 
 {mct_block}
 
-Tulis narasi 3 paragraf sesuai instruksi sistem dalam Bahasa Indonesia formal.
+Tulis narasi interpretasi pasar 3 paragraf sesuai instruksi sistem dalam Bahasa Indonesia formal.
 """
     result = call_groq_llm(system_prompt, user_prompt, max_tokens=650)
     if result == "__AI_UNAVAILABLE__":
-        return _fallback_narrative_calendar_event(event, setup, title_id, desc_id, currency, mct_d1, related_pair)
+        return _fallback_narrative_news_article(article, mct_d1, related_pair)
     return result
 
 
-def _fallback_narrative_calendar_event(event, setup, title_id, desc_id, currency, mct_d1=None, related_pair=None) -> str:
-    """Narasi cadangan berbasis rule Python untuk satu event kalender, dipakai saat AI tidak tersedia."""
-    p1 = f"{title_id} merupakan salah satu indikator ekonomi yang dipantau pasar untuk {currency}. {desc_id}"
-
-    if event["actual"] == "—":
-        p2 = (
-            f"Data ini belum dirilis — nilai Perkiraan (Forecast) saat ini berada di {event['forecast']}, "
-            f"dibandingkan rilis sebelumnya sebesar {event['previous']}. Trader disarankan memantau jam "
-            f"rilis resmi karena volatilitas pasar {currency} berpotensi meningkat signifikan di sekitar "
-            f"waktu tersebut, terutama untuk event dengan tingkat dampak tinggi."
-        )
-    else:
-        p2 = (
-            f"Hasil aktual tercatat {event['actual']} dibandingkan perkiraan pasar {event['forecast']} "
-            f"dan rilis sebelumnya {event['previous']}. Setup Python mencatat kondisi "
-            f"{setup['setup'].lower()}, mengindikasikan bias {setup['bias_currency'].lower()} "
-            f"bagi mata uang {currency} dalam jangka pendek."
-        )
-
+def _fallback_narrative_news_article(article: dict, mct_d1=None, related_pair=None) -> str:
+    """Narasi cadangan berbasis rule Python — dipakai saat lapisan interpretasi AI tidak tersedia."""
+    p1 = (
+        f"Berita berjudul \"{article['title']}\" dipublikasikan pada {article['date']} pukul "
+        f"{article['time']}. {article.get('summary', 'Berita ini membahas perkembangan terkini di pasar forex.')}"
+    )
+    p2 = (
+        "Perkembangan ini berpotensi memengaruhi sentimen pasar dalam waktu dekat, terutama bagi "
+        "instrumen yang disebutkan secara langsung dalam pemberitaan. Trader disarankan memantau "
+        "reaksi harga pada jam-jam perdagangan berikutnya untuk konfirmasi arah pergerakan."
+    )
     if mct_d1 and related_pair:
-        aligned = (mct_d1["bias"] != "NEUTRAL" and (
-            (setup["bias_currency"] == "PENGUATAN" and mct_d1["bias"] == "BUY") or
-            (setup["bias_currency"] == "PELEMAHAN" and mct_d1["bias"] == "SELL")
-        ))
         p3 = (
-            f"Pada pair {related_pair} yang terhubung dengan {currency}, indikator MCT Daily mencatat "
-            f"regime {mct_d1['regime'].lower()} dengan bias {mct_d1['bias']}. Kondisi ini "
-            + ("selaras dengan arah data ekonomi di atas, memperkuat keyakinan analisis." if aligned
-               else "perlu dicermati lebih lanjut karena arahnya belum tentu selaras dengan bias data "
-                    "ekonomi ini, sehingga konfirmasi tambahan sebelum eksekusi tetap disarankan.")
+            f"Pada pair {related_pair}, indikator MCT Daily saat ini mencatat regime "
+            f"{mct_d1['regime'].lower()} dengan bias {mct_d1['bias']}. Konfirmasi tambahan dari "
+            f"struktur teknikal tetap disarankan sebelum mengambil keputusan trading berdasarkan "
+            f"berita ini semata."
         )
     else:
         p3 = (
-            "Sebagai catatan manajemen risiko umum, trader disarankan memperhatikan lebar spread dan "
-            "potensi slippage yang meningkat di sekitar waktu rilis data berdampak tinggi, serta "
-            "mempertimbangkan ukuran posisi yang sesuai dengan tingkat volatilitas yang diharapkan."
+            "Sebagai catatan manajemen risiko umum, volatilitas pasar dapat meningkat pasca "
+            "publikasi berita semacam ini — pertimbangkan ukuran posisi yang sesuai dan pantau "
+            "level support/resistance kunci sebelum eksekusi."
         )
     return f"{p1}\n\n{p2}\n\n{p3}"
+
+
+def render_news_article_report(article: dict, narrative: str, mct_d1=None, related_pair=None) -> str:
+    """Render hasil Analisis News (berbasis artikel seputarforex) — gaya card cybertech."""
+    narrative_html = narrative.replace("\n\n", "<br><br>").replace("\n", " ")
+
+    mct_section = ""
+    if mct_d1 and related_pair:
+        mct_color = "#00E1FF" if mct_d1["bias"] == "BUY" else ("#FF3D71" if mct_d1["bias"] == "SELL" else "#A855F7")
+        mct_section = f"""
+        <div class="av-report-section-title">KETERHUBUNGAN DENGAN ANALISIS PAIR</div>
+        <div class="av-report-row"><span class="av-report-k">Pair Terhubung</span><span class="av-report-v">{related_pair}</span></div>
+        <div class="av-report-row"><span class="av-report-k">MCT Daily (D1)</span><span class="av-report-v" style="color:{mct_color}">{mct_d1['current']:+.1f}</span></div>
+        <div class="av-report-row"><span class="av-report-k">Regime MCT D1</span><span class="av-report-v">{mct_d1['regime']}</span></div>
+        <div class="av-report-row"><span class="av-report-k">Bias MCT D1</span><span class="av-report-v" style="color:{mct_color}">{mct_d1['bias']}</span></div>
+        """
+
+    html = f"""
+    <div class="av-report-wrap">
+      <div class="av-report-header">
+        <span class="av-report-title">◈ NEWS INTELLIGENCE REPORT</span>
+        <span class="av-report-badge">AEROVULPIS v6.0</span>
+      </div>
+      <div class="av-report-body">
+
+        <div class="av-report-section-title">DETAIL BERITA</div>
+        <div style="color:#C8D8F0;font-size:11px;font-weight:700;margin-bottom:8px;line-height:1.5">{article['title']}</div>
+        <div class="av-report-row"><span class="av-report-k">Tanggal</span><span class="av-report-v">{article['date']}</span></div>
+        <div class="av-report-row"><span class="av-report-k">Jam Publikasi</span><span class="av-report-v">{article['time']}</span></div>
+        <div class="av-report-row"><span class="av-report-k">Sumber</span><span class="av-report-v">Seputarforex</span></div>
+        {mct_section}
+        <div class="av-report-section-title">INTERPRETASI AI</div>
+        <div class="av-report-narrative">{narrative_html}</div>
+
+        <div class="av-save-note">
+          💾 SIMPAN HASIL ANALISIS INI KE CATATAN ATAU APLIKASI FAVORITMU SEBELUM BERPINDAH BERITA
+        </div>
+
+        <div class="av-disclaimer-box">
+          <div class="av-disclaimer-title">⚠ DISCLAIMER</div>
+          Berita bersumber dari Seputarforex. Interpretasi bersifat probabilistik dan sistem AI
+          dapat sesekali salah membaca atau salah menyimpulkan suatu setup — jangan mengandalkan
+          hasil ini 100%, selalu gabungkan dengan analisis dan penilaian tradingmu sendiri sebelum
+          mengambil keputusan.
+        </div>
+
+      </div>
+    </div>
+    """
+    html = "\n".join(line.strip() for line in html.split("\n"))
+    return html
+
 
 # ──────────────────────────────────────────────────────────────────────────────────────────────
 # NEWS PIPELINE (LEGACY, dipertahankan untuk fallback internal — tidak lagi dipakai UI utama)
@@ -2416,83 +2298,6 @@ def render_pair_report(market, quant, inst, risk, score, narrative, pair, mct_d1
     html = "\n".join(line.strip() for line in html.split("\n"))
     return html
 
-
-def render_calendar_event_report(event, setup, title_id, country_label, currency,
-                                   narrative, mct_d1=None, related_pair=None):
-    """Render hasil Analisis News (berbasis 1 event kalender) — gaya card cybertech."""
-    narrative_html = narrative.replace("\n\n", "<br><br>").replace("\n", " ")
-    badge = get_impact_badge(event["importance"])
-
-    bias_color = "#00E1FF" if setup["bias_currency"] == "PENGUATAN" else (
-        "#FF3D71" if setup["bias_currency"] == "PELEMAHAN" else "#A855F7"
-    )
-
-    mct_section = ""
-    if mct_d1 and related_pair:
-        mct_color = "#00E1FF" if mct_d1["bias"] == "BUY" else ("#FF3D71" if mct_d1["bias"] == "SELL" else "#A855F7")
-        mct_section = f"""
-        <div class="av-report-section-title">KETERHUBUNGAN DENGAN ANALISIS PAIR</div>
-        <div class="av-report-row"><span class="av-report-k">Pair Terhubung</span><span class="av-report-v">{related_pair}</span></div>
-        <div class="av-report-row"><span class="av-report-k">MCT Daily (D1)</span><span class="av-report-v" style="color:{mct_color}">{mct_d1['current']:+.1f}</span></div>
-        <div class="av-report-row"><span class="av-report-k">Regime MCT D1</span><span class="av-report-v">{mct_d1['regime']}</span></div>
-        <div class="av-report-row"><span class="av-report-k">Bias MCT D1</span><span class="av-report-v" style="color:{mct_color}">{mct_d1['bias']}</span></div>
-        """
-
-    html = f"""
-    <div class="av-report-wrap">
-      <div class="av-report-header">
-        <span class="av-report-title">◈ ECONOMIC CALENDAR INTELLIGENCE</span>
-        <span class="av-report-badge">AEROVULPIS v5.0</span>
-      </div>
-      <div class="av-report-body">
-
-        <div class="av-report-section-title">DETAIL EVENT</div>
-        <div style="color:#C8D8F0;font-size:12px;font-weight:700;margin-bottom:8px">{title_id}</div>
-        <div class="av-report-row"><span class="av-report-k">Negara</span><span class="av-report-v">{country_label} ({currency})</span></div>
-        <div class="av-report-row"><span class="av-report-k">Tanggal Rilis</span><span class="av-report-v">{event['date'][:10] if event['date'] else '—'}</span></div>
-        <div class="av-report-row"><span class="av-report-k">Tingkat Dampak</span><span class="av-report-v" style="color:{badge['color']}">{badge['label']}</span></div>
-
-        <div style="display:flex;justify-content:space-around;margin:14px 0;text-align:center">
-          <div>
-            <div style="font-size:7px;color:#3A5070;letter-spacing:1px;margin-bottom:3px">AKTUAL</div>
-            <div style="font-size:15px;font-weight:700;color:#E8F1FF">{event['actual']}</div>
-          </div>
-          <div>
-            <div style="font-size:7px;color:#3A5070;letter-spacing:1px;margin-bottom:3px">PERKIRAAN</div>
-            <div style="font-size:15px;font-weight:700;color:#8BA0C0">{event['forecast']}</div>
-          </div>
-          <div>
-            <div style="font-size:7px;color:#3A5070;letter-spacing:1px;margin-bottom:3px">SEBELUMNYA</div>
-            <div style="font-size:15px;font-weight:700;color:#8BA0C0">{event['previous']}</div>
-          </div>
-        </div>
-
-        <div class="av-report-section-title">SETUP SISTEM</div>
-        <div class="av-report-row"><span class="av-report-k">Perbandingan</span><span class="av-report-v">{setup['setup']}</span></div>
-        <div class="av-report-row"><span class="av-report-k">Bias Tersirat</span><span class="av-report-v" style="color:{bias_color}">{setup['bias_currency']}</span></div>
-        {mct_section}
-        <div class="av-report-section-title">INTERPRETASI AI</div>
-        <div class="av-report-narrative">{narrative_html}</div>
-
-        <div class="av-save-note">
-          💾 SIMPAN HASIL ANALISIS INI KE CATATAN ATAU APLIKASI FAVORITMU SEBELUM BERPINDAH EVENT
-        </div>
-
-        <div class="av-disclaimer-box">
-          <div class="av-disclaimer-title">⚠ DISCLAIMER</div>
-          Data ekonomi bersumber dari Investing.com. Interpretasi bersifat probabilistik
-          dan sistem AI dapat sesekali salah membaca atau salah menyimpulkan suatu setup — jangan
-          mengandalkan hasil ini 100%, selalu gabungkan dengan analisis dan penilaian tradingmu
-          sendiri sebelum mengambil keputusan.
-        </div>
-
-      </div>
-    </div>
-    """
-    html = "\n".join(line.strip() for line in html.split("\n"))
-    return html
-
-
 def render_news_report(summary, narrative):
     bull_cls = "buy" if summary["bullish_pct"] >= summary["bearish_pct"] else "sell"
     now_str = datetime.now(timezone.utc).strftime("%d %b %Y")
@@ -2655,7 +2460,7 @@ with mct_col:
     st.plotly_chart(render_mct(mct), use_container_width=True,
                     config={"displayModeBar":False, "scrollZoom":False,
                             "doubleClick":False, "showTips":False})
-    st.markdown(factor_bars_html(mct), unsafe_allow_html=True)
+    st.markdown(factor_bars_html(mct, tf_label=tf), unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 with ov_col:
@@ -2875,13 +2680,11 @@ with sc_col:
 st.markdown('<div class="av-sec">// AI INTELLIGENCE ENGINE</div>', unsafe_allow_html=True)
 st.markdown('<div class="av-panel">', unsafe_allow_html=True)
 
-# Init state khusus Analisis News (pilihan negara/event, bukan input teks)
-if "news_selected_country" not in st.session_state:
-    st.session_state.news_selected_country = None
-if "news_selected_event_idx" not in st.session_state:
-    st.session_state.news_selected_event_idx = None
-if "news_calendar_cache" not in st.session_state:
-    st.session_state.news_calendar_cache = None
+# Init state khusus Analisis News (widget seputarforex — pilih artikel, bukan negara)
+if "news_articles_cache" not in st.session_state:
+    st.session_state.news_articles_cache = None
+if "news_selected_article_idx" not in st.session_state:
+    st.session_state.news_selected_article_idx = None
 
 # Tombol mode berdekatan di satu row — kolom diperlebar agar teks tidak wrap
 btn_row_l, btn_row_r, _ = st.columns([1.3, 1.3, 2.4])
@@ -2893,12 +2696,11 @@ with btn_row_r:
     if st.button("◈ ANALISIS NEWS", key="btn_news", use_container_width=True):
         st.session_state.ai_mode = "news"
         st.session_state.ai_result = None
-        st.session_state.news_selected_country = None
-        st.session_state.news_selected_event_idx = None
+        st.session_state.news_selected_article_idx = None
 
 # Mode indicator
 mode_color = "#00E1FF" if st.session_state.ai_mode == "pair" else "#A855F7"
-mode_label = "PAIR MODE — TEKNIKAL & SMC" if st.session_state.ai_mode == "pair" else "NEWS MODE — ECONOMIC CALENDAR"
+mode_label = "PAIR MODE — TEKNIKAL & SMC" if st.session_state.ai_mode == "pair" else "NEWS MODE — MARKET HEADLINES"
 st.markdown(f"""
 <div style="clear:both;position:relative;font-size:8px;letter-spacing:1px;color:{mode_color};
             font-family:'Share Tech Mono',monospace;margin:8px 0 10px;
@@ -2932,7 +2734,7 @@ if st.session_state.ai_mode == "pair":
             "Menyelaraskan Multi-Timeframe...",
             "Sinkronisasi MCT Daily...",
             "Memvalidasi & Menyusun Laporan...",
-        ], step_delay=0.4)
+        ], step_delay=0.67)
 
         pair_df = fetch_twelvedata(active_td, TD_INTERVAL[tf], outputsize=300)
         is_simulated = pair_df.empty
@@ -2963,188 +2765,93 @@ if st.session_state.ai_mode == "pair":
         st.markdown(st.session_state.ai_result, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# MODE: ANALISIS NEWS — pilih negara → pilih event → detail + tombol Analisis
+# MODE: ANALISIS NEWS — widget seputarforex: pilih judul → detail + tombol Analisis
 # ══════════════════════════════════════════════════════════════════════════════
 else:
     st.markdown("""
     <div style="clear:both;position:relative;font-size:9px;color:#4A6080;
                 font-family:'Share Tech Mono',monospace;margin-bottom:10px;
                 line-height:1.7;padding:2px 0">
-        Pilih negara untuk melihat kalender ekonomi terkini.
+        Headline pasar terkini — pilih satu berita untuk melihat detail dan analisisnya.
     </div>""", unsafe_allow_html=True)
 
-    # ── Pilihan negara (flag buttons) — 2 baris x 4 kolom, mobile-friendly ──
-    row1_countries = COUNTRY_OPTIONS[:4]
-    row2_countries = COUNTRY_OPTIONS[4:]
+    if st.session_state.news_articles_cache is None:
+        with st.spinner("◈ Mengambil headline pasar terkini..."):
+            st.session_state.news_articles_cache = run_news_widget_pipeline(max_items=6)
 
-    row1_cols = st.columns(4)
-    for c_col, country in zip(row1_cols, row1_countries):
-        with c_col:
-            btn_label = f"{country['flag']} {country['label']}"
-            if st.button(btn_label, key=f"country_{country['code']}", use_container_width=True):
-                st.session_state.news_selected_country = country["code"]
-                st.session_state.news_selected_event_idx = None
-                st.session_state.ai_result = None
-                st.session_state.news_calendar_cache = None
-                st.rerun()
+    articles = st.session_state.news_articles_cache
 
-    row2_cols = st.columns(4)
-    for c_col, country in zip(row2_cols, row2_countries):
-        with c_col:
-            btn_label = f"{country['flag']} {country['label']}"
-            if st.button(btn_label, key=f"country_{country['code']}", use_container_width=True):
-                st.session_state.news_selected_country = country["code"]
-                st.session_state.news_selected_event_idx = None
-                st.session_state.ai_result = None
-                st.session_state.news_calendar_cache = None
-                st.rerun()
-
-    # ── Setelah negara dipilih: tampilkan daftar event (maks 3, khusus hari ini) ──
-    if st.session_state.news_selected_country:
-        country_info = COUNTRY_MAP[st.session_state.news_selected_country]
-
-        if st.session_state.news_calendar_cache is None:
-            with st.spinner(f"◈ Mengambil kalender ekonomi {country_info['label']} hari ini..."):
-                st.session_state.news_calendar_cache = fetch_economic_calendar(
-                    country_info["currency"], country_info["investing_name"]
-                )
-
-        events = st.session_state.news_calendar_cache
-        today_str = datetime.now(timezone.utc).strftime("%d %b %Y")
-
-        st.markdown(f"""
-        <div style="font-size:8px;letter-spacing:1.5px;color:#2A4060;
-                    font-family:'Share Tech Mono',monospace;margin:10px 0 6px">
-            KALENDER EKONOMI — {country_info['flag']} {country_info['label']} · {today_str}
+    if not articles:
+        st.markdown("""
+        <div style="background:#07101C;border:1px solid #1A2540;border-radius:5px;
+                    padding:14px;text-align:center;margin-top:6px">
+            <span style="font-size:10px;color:#4A6080;font-family:'Share Tech Mono',monospace">
+                Tidak ada berita tersedia saat ini.
+            </span>
         </div>""", unsafe_allow_html=True)
+    else:
+        for idx, art in enumerate(articles):
+            a_col1, a_col2 = st.columns([5, 1])
+            with a_col1:
+                st.markdown(f"""
+                <div style="padding:7px 0;border-bottom:1px solid #0E1422">
+                    <div style="font-size:10px;color:#C8D8F0;font-family:'Share Tech Mono',monospace;
+                                line-height:1.5">{art['title']}</div>
+                    <div style="font-size:7.5px;color:#3A5070;margin-top:3px;
+                                font-family:'Share Tech Mono',monospace">
+                        {art['date']} · {art['time']}
+                    </div>
+                </div>""", unsafe_allow_html=True)
+            with a_col2:
+                if st.button("Lihat", key=f"news_art_btn_{idx}", use_container_width=True):
+                    st.session_state.news_selected_article_idx = idx
+                    st.session_state.ai_result = None
+                    st.rerun()
 
-        if not events:
-            try:
-                _ = st.secrets["APIFY_API_KEY"]
-                empty_reason = f"Tidak ada kalender ekonomi untuk {country_info['label']} hari ini."
-            except Exception:
-                empty_reason = "APIFY_API_KEY belum diset di secrets — kalender ekonomi tidak dapat dimuat."
-            st.markdown(f"""
-            <div style="background:#07101C;border:1px solid #1A2540;border-radius:5px;
-                        padding:14px;text-align:center;margin-top:6px">
-                <span style="font-size:10px;color:#4A6080;font-family:'Share Tech Mono',monospace">
-                    {empty_reason}
-                </span>
-            </div>""", unsafe_allow_html=True)
-        else:
-            for idx, ev in enumerate(events):
-                title_id, _ = _translate_event_name(ev["event"])
-                badge = get_impact_badge(ev["importance"])
-                is_active = st.session_state.news_selected_event_idx == idx
-
-                ev_col1, ev_col2 = st.columns([5, 1])
-                with ev_col1:
-                    date_short = ev["date"][:10] if ev["date"] else "—"
-                    time_short = ev.get("time", "").strip()
-                    date_time_display = f"{date_short} {time_short}".strip() if time_short else date_short
-                    st.markdown(f"""
-                    <div style="display:flex;align-items:center;gap:8px;padding:7px 0;
-                                border-bottom:1px solid #0E1422">
-                        <span style="background:{badge['bg']};color:{badge['color']};
-                                     font-size:7px;letter-spacing:1px;padding:2px 6px;
-                                     border-radius:3px;font-family:'Share Tech Mono',monospace;
-                                     white-space:nowrap">{badge['label']}</span>
-                        <span style="font-size:10px;color:#C8D8F0;font-family:'Share Tech Mono',monospace">
-                            {title_id}
-                        </span>
-                        <span style="font-size:8px;color:#3A5070;margin-left:auto;
-                                     font-family:'Share Tech Mono',monospace;white-space:nowrap">{date_time_display}</span>
-                    </div>""", unsafe_allow_html=True)
-                with ev_col2:
-                    if st.button("Lihat", key=f"ev_btn_{idx}", use_container_width=True):
-                        st.session_state.news_selected_event_idx = idx
-                        st.session_state.ai_result = None
-                        st.rerun()
-
-        # ── Setelah event dipilih: tampilkan detail + Aktual/Perkiraan/Sebelumnya + tombol Analisis ──
-        if events and st.session_state.news_selected_event_idx is not None:
-            sel_event = events[st.session_state.news_selected_event_idx]
-            title_id, desc_id = _translate_event_name(sel_event["event"])
-            badge = get_impact_badge(sel_event["importance"])
-            ev_date = sel_event["date"][:10] if sel_event["date"] else "—"
-            ev_time = sel_event.get("time", "").strip() or "—"
+        # ── Setelah artikel dipilih: tampilkan detail + tombol Analisis Now ──
+        if st.session_state.news_selected_article_idx is not None:
+            sel_article = articles[st.session_state.news_selected_article_idx]
 
             st.markdown(f"""
             <div style="background:#07101C;border:1px solid rgba(0,225,255,0.25);
                         border-radius:6px;padding:14px;margin-top:10px">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                    <span style="font-size:11px;font-weight:700;color:#E8F1FF;
-                                 font-family:'Share Tech Mono',monospace">{title_id}</span>
-                    <span style="background:{badge['bg']};color:{badge['color']};
-                                 font-size:7px;letter-spacing:1px;padding:3px 7px;
-                                 border-radius:3px;font-family:'Share Tech Mono',monospace">
-                        DAMPAK {badge['label']}
-                    </span>
-                </div>
+                <div style="font-size:11px;font-weight:700;color:#E8F1FF;
+                            font-family:'Share Tech Mono',monospace;line-height:1.5;
+                            margin-bottom:6px">{sel_article['title']}</div>
                 <div style="font-size:8px;color:#3A5070;letter-spacing:0.5px;margin-bottom:10px;
                             font-family:'Share Tech Mono',monospace">
-                    Rilis: {ev_date} · {ev_time}
+                    Publikasi: {sel_article['date']} · {sel_article['time']}
                 </div>
-                <div style="font-size:9px;color:#8BA0C0;line-height:1.7;margin-bottom:12px;
-                            font-family:'Share Tech Mono',monospace">{desc_id}</div>
-                <div style="display:flex;justify-content:space-around;text-align:center;
-                            padding:10px 0;border-top:1px solid #1A2540;border-bottom:1px solid #1A2540">
-                    <div>
-                        <div style="font-size:7px;color:#3A5070;letter-spacing:1px;margin-bottom:3px">AKTUAL</div>
-                        <div style="font-size:14px;font-weight:700;color:#E8F1FF">{sel_event['actual']}</div>
-                    </div>
-                    <div>
-                        <div style="font-size:7px;color:#3A5070;letter-spacing:1px;margin-bottom:3px">PERKIRAAN</div>
-                        <div style="font-size:14px;font-weight:700;color:#8BA0C0">{sel_event['forecast']}</div>
-                    </div>
-                    <div>
-                        <div style="font-size:7px;color:#3A5070;letter-spacing:1px;margin-bottom:3px">SEBELUMNYA</div>
-                        <div style="font-size:14px;font-weight:700;color:#8BA0C0">{sel_event['previous']}</div>
-                    </div>
+                <div style="font-size:9px;color:#8BA0C0;line-height:1.7;
+                            font-family:'Share Tech Mono',monospace">
+                    {sel_article.get('summary','') or 'Ringkasan tidak tersedia — klik Analyze Now untuk interpretasi AI.'}
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
             ac1, _ = st.columns([1, 4])
             with ac1:
-                run_calendar_clicked = st.button("Analyze Now", key="btn_run_calendar", use_container_width=True)
+                run_news_clicked = st.button("Analyze Now", key="btn_run_news_article", use_container_width=True)
 
-            if run_calendar_clicked:
+            if run_news_clicked:
                 engine_placeholder2 = st.empty()
                 run_engine_animation(engine_placeholder2, [
-                    "Menghubungkan Data Ekonomi...",
-                    "Memvalidasi Rilis Data...",
+                    "Menghubungkan Data Berita...",
+                    "Memvalidasi Konten Artikel...",
                     "Menganalisis Dampak Fundamental...",
                     "Menyelaraskan dengan Struktur Pasar...",
                     "Sinkronisasi MCT Daily...",
                     "Menyusun Interpretasi AI...",
-                ], step_delay=0.4)
+                ], step_delay=0.67)
 
-                setup = calendar_event_setup_engine(sel_event, country_info["currency"])
+                # Cari pair aktif yang mengandung currency yang mungkin disebut di judul berita
+                # (deteksi sederhana: cek currency umum dalam judul, fallback ke pair aktif di atas)
+                related_pair, related_td = active_label, active_td
+                mct_for_news = get_mct_d1(related_pair, related_td)
 
-                # Prioritas 1: pakai pair aktif di grafik atas jika currency-nya match
-                # (lebih relevan buat user karena itu yang sedang dia pantau).
-                # Prioritas 2: fallback ke pair representatif currency ini, agar MCT D1
-                # SELALU tersedia di Analisis News — tidak tergantung pilihan grafik atas.
-                if country_info["currency"] in active_label:
-                    related_pair, related_td = active_label, active_td
-                else:
-                    related_pair, related_td = CURRENCY_REPRESENTATIVE_PAIR.get(
-                        country_info["currency"], (None, None)
-                    )
-
-                mct_for_event = None
-                if related_pair and related_td:
-                    mct_for_event = get_mct_d1(related_pair, related_td)
-
-                narrative = ai_interpret_calendar_event(
-                    sel_event, setup, country_info["label"], country_info["currency"],
-                    mct_for_event, related_pair,
-                )
-                title_id2, _ = _translate_event_name(sel_event["event"])
-                st.session_state.ai_result = render_calendar_event_report(
-                    sel_event, setup, title_id2, country_info["label"], country_info["currency"],
-                    narrative, mct_for_event, related_pair,
+                narrative = ai_interpret_news_article(sel_article, mct_for_news, related_pair)
+                st.session_state.ai_result = render_news_article_report(
+                    sel_article, narrative, mct_for_news, related_pair
                 )
 
     if st.session_state.ai_result:
