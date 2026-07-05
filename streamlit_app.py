@@ -438,11 +438,41 @@ def fetch_twelvedata(symbol: str, interval: str, outputsize: int = 300) -> pd.Da
         return pd.DataFrame()
 
 
-def _make_dummy_df(seed_str: str, n: int = 300) -> pd.DataFrame:
-    """Deterministic OHLCV — differs per pair+timeframe combination."""
+@st.cache_data(ttl=120, show_spinner=False)
+def get_anchor_price(td_symbol: str) -> float:
+    """
+    Ambil satu titik harga live approx sebagai anchor untuk dummy data — mencegah
+    dummy data punya harga acak yang jauh melenceng dari harga live sungguhan
+    (mis. Entry 1.17 padahal harga live 1.14). Coba endpoint /price Twelve Data
+    yang jauh lebih ringan/reliable dibanding /time_series untuk data intraday.
+    """
+    try:
+        api_key = st.secrets["TWELVE_DATA_API_KEY"]
+    except Exception:
+        return 0.0
+    try:
+        url = f"https://api.twelvedata.com/price?symbol={td_symbol}&apikey={api_key}"
+        r = requests.get(url, timeout=8).json()
+        price = r.get("price")
+        return float(price) if price else 0.0
+    except Exception:
+        return 0.0
+
+
+def _make_dummy_df(seed_str: str, n: int = 300, anchor_price: float = None) -> pd.DataFrame:
+    """
+    Deterministic OHLCV — differs per pair+timeframe combination.
+    Jika anchor_price tersedia (harga live approx dari get_anchor_price), data disimulasikan
+    di SEKITAR harga itu — bukan angka acak sembarangan yang bisa jauh melenceng dari harga
+    live sungguhan (bug lama: Entry 1.17 padahal harga live EURUSD 1.14).
+    """
     rng   = np.random.default_rng(abs(hash(seed_str)) % 2**32)
     price = np.cumprod(1 + rng.normal(0.0002, 0.004, n))
-    price = price / price[0] * 1.15
+    if anchor_price and anchor_price > 0:
+        # Normalisasi random walk agar candle TERAKHIR persis di sekitar harga live
+        price = price / price[-1] * anchor_price
+    else:
+        price = price / price[0] * 1.15
     vol   = rng.uniform(300, 2500, n)
     freq_map = {"15m":"15min","30m":"30min","1h":"1h","4h":"4h","1D":"1D"}
     freq  = freq_map.get(seed_str.split("-")[-1], "15min")
@@ -505,12 +535,24 @@ def calculate_mct(df: pd.DataFrame) -> dict:
     wl = max(wl, 5)
     smoothed = np.clip(savgol_filter(raw, window_length=wl, polyorder=3, mode="interp"), -100, 100)
 
+    current = float(smoothed[-1])
+    prev    = float(smoothed[max(0, len(smoothed)-6)])
+    momentum = current - prev
+
+    if   current >  60: regime = "STRONG BULL"
+    elif current >  25: regime = "BULL"
+    elif current < -60: regime = "STRONG BEAR"
+    elif current < -25: regime = "BEAR"
+    else:               regime = "NEUTRAL"
+
     return {
         "values":     smoothed,
-        "current":    float(smoothed[-1]),
+        "current":    current,
         "rsi_score":  rsi_score,
         "macd_score": macd_score,
         "vol_score":  vol_score,
+        "regime":     regime,
+        "momentum":   momentum,
     }
 
 
@@ -524,7 +566,8 @@ def get_mct_d1(pair_label: str, td_symbol: str) -> dict:
     """
     df_d1 = fetch_twelvedata(td_symbol, "1day", outputsize=300)
     if df_d1.empty:
-        df_d1 = _make_dummy_df(f"{pair_label}-1D")
+        anchor = get_anchor_price(td_symbol)
+        df_d1 = _make_dummy_df(f"{pair_label}-1D", anchor_price=anchor)
 
     mct = calculate_mct(df_d1)
     cur = mct["current"]
@@ -590,11 +633,8 @@ def render_mct(result: dict) -> go.Figure:
                 showarrow=False, font=dict(size=7, color=fc, family="Share Tech Mono,monospace"),
                 xanchor="left", yanchor="bottom")
 
-    sym = "▲" if momentum >= 0 else "▼"
-    fig.add_annotation(x=1, y=0.97, xref="paper", yref="paper",
-        text=f"{regime}  {sym} {abs(momentum):.1f}", showarrow=False,
-        font=dict(size=9, color=dot_c, family="Share Tech Mono,monospace"),
-        xanchor="right", yanchor="top")
+    # Regime & momentum TIDAK ditampilkan di dalam chart lagi — dipindah ke box
+    # MCT COMPOSITE di bawah bersama RSI/MACD/VOL (lihat factor_bars_html).
 
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
@@ -631,20 +671,28 @@ def factor_bars_html(r: dict) -> str:
         </div>"""
 
     # Baris terpisah di bawah RSI/MACD/VOL — MCT full-width, bukan sejajar
-    mct_cur = float(r["current"])
-    mct_c   = "#00E1FF" if mct_cur >= 0 else "#FF3D71"
-    mct_sgn = "+" if mct_cur >= 0 else ""
+    mct_cur  = float(r["current"])
+    mct_c    = "#00E1FF" if mct_cur >= 0 else "#FF3D71"
+    mct_sgn  = "+" if mct_cur >= 0 else ""
+    regime   = r.get("regime", "NEUTRAL")
+    momentum = r.get("momentum", 0.0)
+    mom_sym  = "▲" if momentum >= 0 else "▼"
     mct_row = f"""
-    <div style="display:flex;justify-content:space-between;align-items:center;
-                background:#0A0E18;border:1px solid rgba(0,225,255,0.25);
-                border-radius:4px;padding:5px 10px;margin-top:4px">
-        <span style="font-size:7.5px;color:#00E1FF;letter-spacing:1px;
-                     font-family:'Share Tech Mono',monospace">MCT COMPOSITE</span>
-        <span style="font-size:15px;font-weight:700;color:{mct_c};
-                     font-family:'Share Tech Mono',monospace;
-                     text-shadow:0 0 8px {mct_c}66">
-            {mct_sgn}{mct_cur:.1f}
-        </span>
+    <div style="background:#0A0E18;border:1px solid rgba(0,225,255,0.25);
+                border-radius:4px;padding:6px 10px;margin-top:4px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:7.5px;color:#00E1FF;letter-spacing:1px;
+                         font-family:'Share Tech Mono',monospace">MCT COMPOSITE</span>
+            <span style="font-size:15px;font-weight:700;color:{mct_c};
+                         font-family:'Share Tech Mono',monospace;
+                         text-shadow:0 0 8px {mct_c}66">
+                {mct_sgn}{mct_cur:.1f}
+            </span>
+        </div>
+        <div style="font-size:8px;color:{mct_c};letter-spacing:0.5px;margin-top:2px;
+                    font-family:'Share Tech Mono',monospace">
+            {regime} {mom_sym} {abs(momentum):.1f}
+        </div>
     </div>"""
 
     return f'<div class="av-factor-wrap">{items}</div>{mct_row}'
@@ -1506,19 +1554,19 @@ def _fallback_narrative_news(summary: dict) -> str:
     return f"{p1}\n\n{p2}\n\n{p3}"
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-# ECONOMIC CALENDAR ENGINE (v6) — pilihan negara, bukan input teks bebas
-# Sumber: Financial Modeling Prep (FMP) — API key gratis, 250 request/hari, data terstruktur resmi
+# ECONOMIC CALENDAR ENGINE (v7) — pilihan negara, bukan input teks bebas
+# Sumber: Apify — actor pintostudio/economic-calendar-data-investing-com
+# Free plan Apify: $5 kredit/bulan permanen, ~$0.75/1000 event → jauh lebih dari cukup
+# untuk kebutuhan 5 negara × 3 event/hari.
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 
+# Hanya 5 negara/kawasan ekonomi besar, sesuai permintaan — bukan 8 seperti sebelumnya
 COUNTRY_OPTIONS = [
-    {"code": "US", "flag": "🇺🇸", "label": "US",  "fmp_name": "United States", "currency": "USD"},
-    {"code": "EU", "flag": "🇪🇺", "label": "EUR", "fmp_name": "Euro Area",     "currency": "EUR"},
-    {"code": "GB", "flag": "🇬🇧", "label": "GBP", "fmp_name": "United Kingdom","currency": "GBP"},
-    {"code": "JP", "flag": "🇯🇵", "label": "JPY", "fmp_name": "Japan",         "currency": "JPY"},
-    {"code": "AU", "flag": "🇦🇺", "label": "AUD", "fmp_name": "Australia",     "currency": "AUD"},
-    {"code": "CH", "flag": "🇨🇭", "label": "CHF", "fmp_name": "Switzerland",   "currency": "CHF"},
-    {"code": "CA", "flag": "🇨🇦", "label": "CAD", "fmp_name": "Canada",        "currency": "CAD"},
-    {"code": "CN", "flag": "🇨🇳", "label": "CNY", "fmp_name": "China",         "currency": "CNY"},
+    {"code": "US", "flag": "🇺🇸", "label": "US",  "investing_name": "United States", "currency": "USD"},
+    {"code": "EU", "flag": "🇪🇺", "label": "EUR", "investing_name": "Euro Zone",     "currency": "EUR"},
+    {"code": "GB", "flag": "🇬🇧", "label": "GBP", "investing_name": "United Kingdom","currency": "GBP"},
+    {"code": "JP", "flag": "🇯🇵", "label": "JPY", "investing_name": "Japan",         "currency": "JPY"},
+    {"code": "AU", "flag": "🇦🇺", "label": "AUD", "investing_name": "Australia",     "currency": "AUD"},
 ]
 COUNTRY_MAP = {c["code"]: c for c in COUNTRY_OPTIONS}
 
@@ -1633,28 +1681,49 @@ def _translate_event_name(event_name: str) -> tuple:
 
 
 @st.cache_data(ttl=900, show_spinner=False)
-def fetch_economic_calendar(currency: str, country_code: str) -> list:
+def _pick_field(item: dict, *candidates, default=None):
+    """Ambil field pertama yang match dari beberapa kemungkinan nama (case-insensitive) —
+    lapisan defensif karena field naming exact dari actor Apify tidak selalu terdokumentasi
+    lengkap; ini mencegah sistem patah total kalau ada perbedaan casing/nama minor."""
+    lower_map = {str(k).lower(): v for k, v in item.items()}
+    for c in candidates:
+        if c.lower() in lower_map and lower_map[c.lower()] not in (None, ""):
+            return lower_map[c.lower()]
+    return default
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_economic_calendar(currency: str, country_name: str) -> list:
     """
-    Ambil economic calendar terstruktur dari Financial Modeling Prep (FMP).
-    FMP mengembalikan semua negara sekaligus dalam satu response — field 'country' pada
-    response FMP menggunakan kode ISO pendek (mis. "US", "EU", "GB"), BUKAN nama panjang.
-    Matching dilakukan via currency code (ISO 4217, paling konsisten) dengan fallback ke
-    country code ISO 2-huruf. Rentang: 3 hari ke belakang s/d 5 hari ke depan.
+    Ambil economic calendar terstruktur via Apify actor
+    'pintostudio/economic-calendar-data-investing-com' (scrape Investing.com).
+    Hanya negara besar (US/EUR/GBP/JPY/AUD), skip importance Low, maksimal 3 event/hari
+    per negara sesuai kebutuhan tampilan (hemat kuota Apify — actor ini pay-per-event).
+    Rentang: hari ini saja (00:00-23:59 UTC) — "ambil setiap hari" sesuai instruksi;
+    kalau tidak ada event hari ini, list kosong dan UI menampilkan pesan yang jelas.
     """
     try:
-        api_key = st.secrets["FMP_API_KEY"]
+        api_token = st.secrets["APIFY_API_KEY"]
     except Exception:
         return []
 
     try:
         today = datetime.now(timezone.utc).date()
-        start = (today - pd.Timedelta(days=3)).strftime("%Y-%m-%d")
-        end   = (today + pd.Timedelta(days=5)).strftime("%Y-%m-%d")
+        date_from = today.strftime("%Y-%m-%d")
+        date_to   = today.strftime("%Y-%m-%d")
+
+        run_input = {
+            "dateFrom": date_from,
+            "dateTo": date_to,
+            "countries": [country_name],
+            "importance": ["medium", "high"],  # skip Low sesuai instruksi
+            "timeZone": "UTC",
+        }
         url = (
-            f"https://financialmodelingprep.com/stable/economic-calendar"
-            f"?from={start}&to={end}&apikey={api_key}"
+            "https://api.apify.com/v2/acts/pintostudio~economic-calendar-data-investing-com"
+            f"/run-sync-get-dataset-items?token={api_token}"
         )
-        r = requests.get(url, timeout=12)
+        r = requests.post(url, json=run_input, timeout=60)
         if r.status_code != 200:
             return []
         data = r.json()
@@ -1663,47 +1732,46 @@ def fetch_economic_calendar(currency: str, country_code: str) -> list:
     except Exception:
         return []
 
-    IMPORTANCE_MAP = {"low": 1, "medium": 2, "high": 3}
+    IMPORTANCE_MAP = {"low": 1, "medium": 2, "high": 3, "1": 1, "2": 2, "3": 3}
 
     events = []
-    currency_upper = currency.upper()
-    country_upper  = country_code.upper()
-
     for item in data:
         try:
-            item_currency = str(item.get("currency", "")).strip().upper()
-            item_country  = str(item.get("country", "")).strip().upper()
-
-            # Matching utama: currency code (paling reliable lintas-provider)
-            # Fallback: country code ISO 2-huruf
-            if item_currency != currency_upper and item_country != country_upper:
+            if not isinstance(item, dict):
                 continue
 
-            event_name = (item.get("event") or "").strip()
+            event_name = _pick_field(item, "event", "title", "name", default="")
+            event_name = str(event_name).strip()
             if not event_name:
                 continue
 
-            imp_raw = str(item.get("impact", "Low")).strip().lower()
+            imp_raw = str(_pick_field(item, "importance", "impact", default="low")).strip().lower()
             importance = IMPORTANCE_MAP.get(imp_raw, 1)
+            if importance < 2:
+                continue  # skip Low — sudah difilter di request tapi dijaga dua lapis
 
-            actual   = item.get("actual")
-            forecast = item.get("estimate")
-            previous = item.get("previous")
+            actual   = _pick_field(item, "actual")
+            forecast = _pick_field(item, "forecast", "estimate", "consensus")
+            previous = _pick_field(item, "previous", "prior")
+            date_val = _pick_field(item, "date", "datetime", "timestamp", default="")
+            time_val = _pick_field(item, "time", default="")
 
             events.append({
                 "event": event_name,
-                "date": item.get("date", ""),
+                "date": str(date_val),
+                "time": str(time_val),
                 "actual": str(actual) if actual not in (None, "") else "—",
                 "forecast": str(forecast) if forecast not in (None, "") else "—",
                 "previous": str(previous) if previous not in (None, "") else "—",
                 "importance": importance,
-                "unit": item.get("unit", "") or "",
+                "unit": str(_pick_field(item, "unit", default="") or ""),
             })
         except Exception:
             continue
 
-    events.sort(key=lambda e: (-e["importance"], e["date"]))
-    return events[:4]
+    # Prioritas importance tinggi dulu, maksimal 3 per negara sesuai instruksi hemat kuota
+    events.sort(key=lambda e: -e["importance"])
+    return events[:3]
 
 
 def get_impact_badge(importance: int) -> dict:
@@ -2141,10 +2209,20 @@ def run_news_pipeline(query: str) -> dict:
 # ──────────────────────────────────────────────────────────────────────────────────────────────
 # REPORT RENDERER — render hasil pipeline jadi tampilan Market Intelligence Report cybertech
 # ──────────────────────────────────────────────────────────────────────────────────────────────
-def render_pair_report(market, quant, inst, risk, score, narrative, pair, mct_d1=None, rate_ctx=None):
+def render_pair_report(market, quant, inst, risk, score, narrative, pair, mct_d1=None, rate_ctx=None, is_simulated=False):
     now_str = market["timestamp"]
     bias_cls = "buy" if risk["direction"] == "BUY" else "sell"
     narrative_html = narrative.replace("\n\n", "<br><br>").replace("\n", " ")
+
+    sim_warning = ""
+    if is_simulated:
+        sim_warning = """
+        <div style="background:rgba(255,176,32,0.08);border:1px solid rgba(255,176,32,0.35);
+                    border-radius:4px;padding:8px 12px;margin-bottom:10px;font-size:9px;
+                    color:#FFB020;font-family:'Share Tech Mono',monospace;line-height:1.6">
+            ⚠ DATA LIVE TIDAK TERSEDIA SAAT INI — hasil di bawah memakai data simulasi yang
+            di-anchor ke harga terakhir yang diketahui. Level Entry/SL/TP mungkin kurang presisi.
+        </div>"""
 
     mct_section = ""
     if mct_d1:
@@ -2189,7 +2267,7 @@ def render_pair_report(market, quant, inst, risk, score, narrative, pair, mct_d1
         <span class="av-report-badge">AEROVULPIS v5.0</span>
       </div>
       <div class="av-report-body">
-
+        {sim_warning}
         <div class="av-report-section-title">RINGKASAN EKSEKUTIF</div>
         <div class="av-report-row"><span class="av-report-k">Instrumen</span><span class="av-report-v">{pair}</span></div>
         <div class="av-report-row"><span class="av-report-k">Timeframe</span><span class="av-report-v">{market['timeframe']}</span></div>
@@ -2323,7 +2401,7 @@ def render_calendar_event_report(event, setup, title_id, country_label, currency
 
         <div class="av-report-section-title" style="margin-top:14px;font-size:7px;color:#2A3A5A">DISCLAIMER</div>
         <div style="font-size:8px;color:#3A4A60;line-height:1.7">
-          Data ekonomi bersumber dari Financial Modeling Prep. Interpretasi bersifat probabilistik
+          Data ekonomi bersumber dari Investing.com. Interpretasi bersifat probabilistik
           dan sistem AI dapat sesekali salah membaca atau salah menyimpulkan suatu setup — jangan
           mengandalkan hasil ini 100%, selalu gabungkan dengan analisis dan penilaian tradingmu
           sendiri sebelum mengambil keputusan.
@@ -2481,8 +2559,9 @@ with mct_col:
     seed_str = f"{active_label}-{tf}"
     df = fetch_twelvedata(active_td, TD_INTERVAL[tf], outputsize=300)
     if df.empty:
-        df = _make_dummy_df(seed_str)
-        data_src = "SIMULATION MODE"
+        anchor = get_anchor_price(active_td)
+        df = _make_dummy_df(seed_str, anchor_price=anchor)
+        data_src = "SIMULATION MODE" if not anchor else "SIMULATION MODE (anchored to live)"
     else:
         data_src = "LIVE · TWELVE DATA"
 
@@ -2768,8 +2847,10 @@ if st.session_state.ai_mode == "pair":
     if run_pair_clicked:
         with st.spinner("◈ Memindai struktur pasar, MCT Daily & suku bunga bank sentral..."):
             pair_df = fetch_twelvedata(active_td, TD_INTERVAL[tf], outputsize=300)
-            if pair_df.empty:
-                pair_df = _make_dummy_df(f"{active_label}-{tf}")
+            is_simulated = pair_df.empty
+            if is_simulated:
+                anchor = get_anchor_price(active_td)
+                pair_df = _make_dummy_df(f"{active_label}-{tf}", anchor_price=anchor)
 
             m_data  = market_data_engine(pair_df, active_label, tf)
             q_data  = quantitative_engine(pair_df)
@@ -2787,7 +2868,7 @@ if st.session_state.ai_mode == "pair":
 
             st.session_state.ai_result = render_pair_report(
                 m_data, q_data, i_data, r_data, s_data, narrative, active_label,
-                mct_d1_data, rate_data
+                mct_d1_data, rate_data, is_simulated=is_simulated
             )
 
     if st.session_state.ai_result:
@@ -2830,30 +2911,31 @@ else:
                 st.session_state.news_calendar_cache = None
                 st.rerun()
 
-    # ── Setelah negara dipilih: tampilkan daftar event (maks 4) ──
+    # ── Setelah negara dipilih: tampilkan daftar event (maks 3, khusus hari ini) ──
     if st.session_state.news_selected_country:
         country_info = COUNTRY_MAP[st.session_state.news_selected_country]
 
         if st.session_state.news_calendar_cache is None:
-            with st.spinner(f"◈ Mengambil kalender ekonomi {country_info['label']}..."):
+            with st.spinner(f"◈ Mengambil kalender ekonomi {country_info['label']} hari ini..."):
                 st.session_state.news_calendar_cache = fetch_economic_calendar(
-                    country_info["currency"], country_info["code"]
+                    country_info["currency"], country_info["investing_name"]
                 )
 
         events = st.session_state.news_calendar_cache
+        today_str = datetime.now(timezone.utc).strftime("%d %b %Y")
 
         st.markdown(f"""
         <div style="font-size:8px;letter-spacing:1.5px;color:#2A4060;
                     font-family:'Share Tech Mono',monospace;margin:10px 0 6px">
-            KALENDER EKONOMI — {country_info['flag']} {country_info['label']}
+            KALENDER EKONOMI — {country_info['flag']} {country_info['label']} · {today_str}
         </div>""", unsafe_allow_html=True)
 
         if not events:
             try:
-                _ = st.secrets["FMP_API_KEY"]
-                empty_reason = f"Tidak ada kalender ekonomi untuk {country_info['label']} pada rentang tanggal saat ini."
+                _ = st.secrets["APIFY_API_KEY"]
+                empty_reason = f"Tidak ada kalender ekonomi untuk {country_info['label']} hari ini."
             except Exception:
-                empty_reason = "FMP_API_KEY belum diset di secrets — kalender ekonomi tidak dapat dimuat."
+                empty_reason = "APIFY_API_KEY belum diset di secrets — kalender ekonomi tidak dapat dimuat."
             st.markdown(f"""
             <div style="background:#07101C;border:1px solid #1A2540;border-radius:5px;
                         padding:14px;text-align:center;margin-top:6px">
@@ -2870,6 +2952,8 @@ else:
                 ev_col1, ev_col2 = st.columns([5, 1])
                 with ev_col1:
                     date_short = ev["date"][:10] if ev["date"] else "—"
+                    time_short = ev.get("time", "").strip()
+                    date_time_display = f"{date_short} {time_short}".strip() if time_short else date_short
                     st.markdown(f"""
                     <div style="display:flex;align-items:center;gap:8px;padding:7px 0;
                                 border-bottom:1px solid #0E1422">
@@ -2881,7 +2965,7 @@ else:
                             {title_id}
                         </span>
                         <span style="font-size:8px;color:#3A5070;margin-left:auto;
-                                     font-family:'Share Tech Mono',monospace">{date_short}</span>
+                                     font-family:'Share Tech Mono',monospace;white-space:nowrap">{date_time_display}</span>
                     </div>""", unsafe_allow_html=True)
                 with ev_col2:
                     if st.button("Lihat", key=f"ev_btn_{idx}", use_container_width=True):
@@ -2894,11 +2978,13 @@ else:
             sel_event = events[st.session_state.news_selected_event_idx]
             title_id, desc_id = _translate_event_name(sel_event["event"])
             badge = get_impact_badge(sel_event["importance"])
+            ev_date = sel_event["date"][:10] if sel_event["date"] else "—"
+            ev_time = sel_event.get("time", "").strip() or "—"
 
             st.markdown(f"""
             <div style="background:#07101C;border:1px solid rgba(0,225,255,0.25);
                         border-radius:6px;padding:14px;margin-top:10px">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
                     <span style="font-size:11px;font-weight:700;color:#E8F1FF;
                                  font-family:'Share Tech Mono',monospace">{title_id}</span>
                     <span style="background:{badge['bg']};color:{badge['color']};
@@ -2906,6 +2992,10 @@ else:
                                  border-radius:3px;font-family:'Share Tech Mono',monospace">
                         DAMPAK {badge['label']}
                     </span>
+                </div>
+                <div style="font-size:8px;color:#3A5070;letter-spacing:0.5px;margin-bottom:10px;
+                            font-family:'Share Tech Mono',monospace">
+                    Rilis: {ev_date} · {ev_time}
                 </div>
                 <div style="font-size:9px;color:#8BA0C0;line-height:1.7;margin-bottom:12px;
                             font-family:'Share Tech Mono',monospace">{desc_id}</div>
