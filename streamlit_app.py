@@ -292,6 +292,34 @@ div[data-testid="column"] [data-testid="stButton"] > button {
     display:flex; justify-content:space-between; align-items:center;
     padding:4px 0; border-bottom:1px solid #0E1422;
 }
+
+/* ── SAVE NOTE — neon cyan box, konsep cybertech ── */
+.av-save-note {
+    margin-top:16px; padding:8px 12px;
+    background:rgba(0,225,255,0.06);
+    border:1px solid rgba(0,225,255,0.35);
+    border-radius:5px;
+    font-size:8.5px; letter-spacing:0.5px; text-align:center;
+    color:#00E1FF; font-family:'Share Tech Mono',monospace;
+    text-shadow:0 0 6px rgba(0,225,255,0.4);
+    box-shadow:0 0 12px rgba(0,225,255,0.08), inset 0 0 8px rgba(0,225,255,0.04);
+}
+
+/* ── DISCLAIMER — neon amber box, tegas tapi tetap cybertech ── */
+.av-disclaimer-box {
+    margin-top:10px; padding:10px 12px;
+    background:rgba(255,176,32,0.05);
+    border:1px solid rgba(255,176,32,0.35);
+    border-left:3px solid #FFB020;
+    border-radius:5px;
+    font-size:8.5px; line-height:1.7;
+    color:#C9A876; font-family:'Share Tech Mono',monospace;
+    box-shadow:0 0 12px rgba(255,176,32,0.06);
+}
+.av-disclaimer-title {
+    font-size:8px; letter-spacing:2px; color:#FFB020; font-weight:700;
+    margin-bottom:5px; text-shadow:0 0 6px rgba(255,176,32,0.4);
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -310,8 +338,8 @@ INSTRUMENTS = {
         ("XAUUSD","XAU/USD","OANDA:XAUUSD"),
         ("XAGUSD","XAG/USD","OANDA:XAGUSD"),
         ("WTIUSD","WTI/USD","TVC:USOIL"),
-        ("BRENT", "BRENT",  "TVC:UKOIL"),
-        ("NATGAS","NATGAS", "TVC:NATURALGAS"),
+        ("BRENT", "XBR/USD","TVC:UKOIL"),      # simbol TD resmi Brent adalah XBR/USD, bukan "BRENT" polos
+        ("NATGAS","XNG/USD","TVC:NATURALGAS"), # simbol TD resmi Nat Gas adalah XNG/USD, bukan "NATGAS" polos
     ],
     "US STOCKS": [
         ("AAPL","AAPL","NASDAQ:AAPL"),
@@ -324,7 +352,7 @@ INSTRUMENTS = {
         ("BTCUSD","BTC/USD","COINBASE:BTCUSD"),
         ("ETHUSD","ETH/USD","COINBASE:ETHUSD"),
         ("SOLUSD","SOL/USD","COINBASE:SOLUSD"),
-        ("BNBUSD","BNB/USDT","BINANCE:BNBUSDT"),
+        ("BNBUSD","BNB/USD","BINANCE:BNBUSDT"),  # TD tidak listing BNB/USDT — pakai BNB/USD yang valid
         ("XRPUSD","XRP/USD","COINBASE:XRPUSD"),
     ],
 }
@@ -843,6 +871,59 @@ def av_select(label_text: str, key: str, options: list, current: str) -> str:
         st.markdown(f'<div class="av-sel-label">{label_text}</div>', unsafe_allow_html=True)
     chosen = st.selectbox("_", options, index=idx, key=key, label_visibility="collapsed")
     return chosen
+
+
+def run_engine_animation(placeholder, steps: list, step_delay: float = 0.35):
+    """
+    Render animasi visual 'AEROVULPIS AI ENGINE' — checklist engine bertahap dengan
+    efek neon cybertech, dipakai sebagai pengganti st.spinner biasa yang terlalu polos.
+    `steps` adalah list nama engine (str), ditampilkan satu-satu dengan status berjalan.
+    """
+    import time as _time
+    done_html = ""
+    for i, step_name in enumerate(steps, start=1):
+        current_html = f"""
+        <div style="background:#05080F;border:1px solid rgba(0,225,255,0.3);
+                    border-radius:8px;padding:16px;box-shadow:0 0 25px rgba(0,225,255,0.08)">
+          <div style="font-size:10px;letter-spacing:3px;color:#00E1FF;font-weight:700;
+                      font-family:'Share Tech Mono',monospace;margin-bottom:12px;
+                      text-shadow:0 0 10px rgba(0,225,255,0.5);text-align:center">
+            ◈ AEROVULPIS AI ENGINE
+          </div>
+          {done_html}
+          <div style="display:flex;justify-content:space-between;align-items:center;
+                      padding:6px 0;border-bottom:1px solid rgba(0,225,255,0.1)">
+            <div>
+              <div style="font-size:8px;color:#3A5070;letter-spacing:1px;
+                          font-family:'Share Tech Mono',monospace">ENGINE {i:02d}</div>
+              <div style="font-size:10px;color:#C8D8F0;font-family:'Share Tech Mono',monospace;
+                          margin-top:2px">{step_name}</div>
+            </div>
+            <div style="font-size:13px;color:#00E1FF;animation:av-spin-pulse 1s ease-in-out infinite">⟳</div>
+          </div>
+          <div style="text-align:center;margin-top:10px;font-size:8px;color:#2A3A5A;
+                      letter-spacing:1px;font-family:'Share Tech Mono',monospace">
+            Mohon tunggu...
+          </div>
+          <style>
+            @keyframes av-spin-pulse {{ 0%,100% {{opacity:1;transform:scale(1)}} 50% {{opacity:0.4;transform:scale(0.85)}} }}
+          </style>
+        </div>"""
+        placeholder.markdown(current_html, unsafe_allow_html=True)
+        _time.sleep(step_delay)
+
+        done_html += f"""
+        <div style="display:flex;justify-content:space-between;align-items:center;
+                    padding:6px 0;border-bottom:1px solid rgba(0,225,255,0.08)">
+          <div>
+            <div style="font-size:8px;color:#2A3A5A;letter-spacing:1px;
+                        font-family:'Share Tech Mono',monospace">ENGINE {i:02d}</div>
+            <div style="font-size:10px;color:#5A7090;font-family:'Share Tech Mono',monospace;
+                        margin-top:2px">{step_name}</div>
+          </div>
+          <div style="font-size:12px;color:#00E1FF">✓ Selesai</div>
+        </div>"""
+    placeholder.empty()
 
 # ==============================================================================================
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -2315,13 +2396,12 @@ def render_pair_report(market, quant, inst, risk, score, narrative, pair, mct_d1
         <div class="av-report-section-title">INTERPRETASI AI</div>
         <div class="av-report-narrative">{narrative_html}</div>
 
-        <div style="font-size:8px;color:#3A5070;letter-spacing:0.5px;margin-top:14px;
-                    font-style:italic;text-align:center">
-          💾 Simpan hasil analisis ini ke catatan atau aplikasi favoritmu sebelum berpindah pair.
+        <div class="av-save-note">
+          💾 SIMPAN HASIL ANALISIS INI KE CATATAN ATAU APLIKASI FAVORITMU SEBELUM BERPINDAH PAIR
         </div>
 
-        <div class="av-report-section-title" style="margin-top:14px;font-size:7px;color:#2A3A5A">DISCLAIMER</div>
-        <div style="font-size:8px;color:#3A4A60;line-height:1.7">
+        <div class="av-disclaimer-box">
+          <div class="av-disclaimer-title">⚠ DISCLAIMER</div>
           Laporan ini merupakan estimasi probabilistik dari model kuantitatif, struktur pasar,
           likuiditas, dan interpretasi kecerdasan buatan. Sistem AI dapat sesekali salah membaca
           atau salah menyimpulkan suatu setup — jangan mengandalkan hasil ini 100%, selalu gabungkan
@@ -2394,13 +2474,12 @@ def render_calendar_event_report(event, setup, title_id, country_label, currency
         <div class="av-report-section-title">INTERPRETASI AI</div>
         <div class="av-report-narrative">{narrative_html}</div>
 
-        <div style="font-size:8px;color:#3A5070;letter-spacing:0.5px;margin-top:14px;
-                    font-style:italic;text-align:center">
-          💾 Simpan hasil analisis ini ke catatan atau aplikasi favoritmu sebelum berpindah event.
+        <div class="av-save-note">
+          💾 SIMPAN HASIL ANALISIS INI KE CATATAN ATAU APLIKASI FAVORITMU SEBELUM BERPINDAH EVENT
         </div>
 
-        <div class="av-report-section-title" style="margin-top:14px;font-size:7px;color:#2A3A5A">DISCLAIMER</div>
-        <div style="font-size:8px;color:#3A4A60;line-height:1.7">
+        <div class="av-disclaimer-box">
+          <div class="av-disclaimer-title">⚠ DISCLAIMER</div>
           Data ekonomi bersumber dari Investing.com. Interpretasi bersifat probabilistik
           dan sistem AI dapat sesekali salah membaca atau salah menyimpulkan suatu setup — jangan
           mengandalkan hasil ini 100%, selalu gabungkan dengan analisis dan penilaian tradingmu
@@ -2845,31 +2924,40 @@ if st.session_state.ai_mode == "pair":
         run_pair_clicked = st.button("RUN", key="btn_run_p")
 
     if run_pair_clicked:
-        with st.spinner("◈ Memindai struktur pasar, MCT Daily & suku bunga bank sentral..."):
-            pair_df = fetch_twelvedata(active_td, TD_INTERVAL[tf], outputsize=300)
-            is_simulated = pair_df.empty
-            if is_simulated:
-                anchor = get_anchor_price(active_td)
-                pair_df = _make_dummy_df(f"{active_label}-{tf}", anchor_price=anchor)
+        engine_placeholder = st.empty()
+        run_engine_animation(engine_placeholder, [
+            "Menghubungkan Data Pasar...",
+            "Memindai Struktur Pasar...",
+            "Menganalisis Smart Money Concept...",
+            "Menyelaraskan Multi-Timeframe...",
+            "Sinkronisasi MCT Daily...",
+            "Memvalidasi & Menyusun Laporan...",
+        ], step_delay=0.4)
 
-            m_data  = market_data_engine(pair_df, active_label, tf)
-            q_data  = quantitative_engine(pair_df)
-            i_data  = institutional_engine(pair_df)
-            r_data  = risk_engine(m_data, q_data, i_data, active_label)
+        pair_df = fetch_twelvedata(active_td, TD_INTERVAL[tf], outputsize=300)
+        is_simulated = pair_df.empty
+        if is_simulated:
+            anchor = get_anchor_price(active_td)
+            pair_df = _make_dummy_df(f"{active_label}-{tf}", anchor_price=anchor)
 
-            # MCT D1 — selalu Daily, terlepas dari timeframe UI aktif
-            mct_d1_data = get_mct_d1(active_label, active_td)
+        m_data  = market_data_engine(pair_df, active_label, tf)
+        q_data  = quantitative_engine(pair_df)
+        i_data  = institutional_engine(pair_df)
+        r_data  = risk_engine(m_data, q_data, i_data, active_label)
 
-            # Rate context — selisih suku bunga base vs quote currency
-            rate_data = get_rate_context_for_pair(active_label)
+        # MCT D1 — selalu Daily, terlepas dari timeframe UI aktif
+        mct_d1_data = get_mct_d1(active_label, active_td)
 
-            s_data  = scoring_engine(q_data, i_data, r_data, mct_d1_data, rate_data, source_timeframe=tf)
-            narrative = ai_interpret_pair(m_data, q_data, i_data, r_data, s_data, mct_d1_data, rate_data)
+        # Rate context — selisih suku bunga base vs quote currency
+        rate_data = get_rate_context_for_pair(active_label)
 
-            st.session_state.ai_result = render_pair_report(
-                m_data, q_data, i_data, r_data, s_data, narrative, active_label,
-                mct_d1_data, rate_data, is_simulated=is_simulated
-            )
+        s_data  = scoring_engine(q_data, i_data, r_data, mct_d1_data, rate_data, source_timeframe=tf)
+        narrative = ai_interpret_pair(m_data, q_data, i_data, r_data, s_data, mct_d1_data, rate_data)
+
+        st.session_state.ai_result = render_pair_report(
+            m_data, q_data, i_data, r_data, s_data, narrative, active_label,
+            mct_d1_data, rate_data, is_simulated=is_simulated
+        )
 
     if st.session_state.ai_result:
         st.markdown(st.session_state.ai_result, unsafe_allow_html=True)
@@ -3022,33 +3110,42 @@ else:
                 run_calendar_clicked = st.button("Analyze Now", key="btn_run_calendar", use_container_width=True)
 
             if run_calendar_clicked:
-                with st.spinner("◈ Memindai keterhubungan data ekonomi dengan struktur pasar & MCT..."):
-                    setup = calendar_event_setup_engine(sel_event, country_info["currency"])
+                engine_placeholder2 = st.empty()
+                run_engine_animation(engine_placeholder2, [
+                    "Menghubungkan Data Ekonomi...",
+                    "Memvalidasi Rilis Data...",
+                    "Menganalisis Dampak Fundamental...",
+                    "Menyelaraskan dengan Struktur Pasar...",
+                    "Sinkronisasi MCT Daily...",
+                    "Menyusun Interpretasi AI...",
+                ], step_delay=0.4)
 
-                    # Prioritas 1: pakai pair aktif di grafik atas jika currency-nya match
-                    # (lebih relevan buat user karena itu yang sedang dia pantau).
-                    # Prioritas 2: fallback ke pair representatif currency ini, agar MCT D1
-                    # SELALU tersedia di Analisis News — tidak tergantung pilihan grafik atas.
-                    if country_info["currency"] in active_label:
-                        related_pair, related_td = active_label, active_td
-                    else:
-                        related_pair, related_td = CURRENCY_REPRESENTATIVE_PAIR.get(
-                            country_info["currency"], (None, None)
-                        )
+                setup = calendar_event_setup_engine(sel_event, country_info["currency"])
 
-                    mct_for_event = None
-                    if related_pair and related_td:
-                        mct_for_event = get_mct_d1(related_pair, related_td)
-
-                    narrative = ai_interpret_calendar_event(
-                        sel_event, setup, country_info["label"], country_info["currency"],
-                        mct_for_event, related_pair,
+                # Prioritas 1: pakai pair aktif di grafik atas jika currency-nya match
+                # (lebih relevan buat user karena itu yang sedang dia pantau).
+                # Prioritas 2: fallback ke pair representatif currency ini, agar MCT D1
+                # SELALU tersedia di Analisis News — tidak tergantung pilihan grafik atas.
+                if country_info["currency"] in active_label:
+                    related_pair, related_td = active_label, active_td
+                else:
+                    related_pair, related_td = CURRENCY_REPRESENTATIVE_PAIR.get(
+                        country_info["currency"], (None, None)
                     )
-                    title_id2, _ = _translate_event_name(sel_event["event"])
-                    st.session_state.ai_result = render_calendar_event_report(
-                        sel_event, setup, title_id2, country_info["label"], country_info["currency"],
-                        narrative, mct_for_event, related_pair,
-                    )
+
+                mct_for_event = None
+                if related_pair and related_td:
+                    mct_for_event = get_mct_d1(related_pair, related_td)
+
+                narrative = ai_interpret_calendar_event(
+                    sel_event, setup, country_info["label"], country_info["currency"],
+                    mct_for_event, related_pair,
+                )
+                title_id2, _ = _translate_event_name(sel_event["event"])
+                st.session_state.ai_result = render_calendar_event_report(
+                    sel_event, setup, title_id2, country_info["label"], country_info["currency"],
+                    narrative, mct_for_event, related_pair,
+                )
 
     if st.session_state.ai_result:
         st.markdown(st.session_state.ai_result, unsafe_allow_html=True)
