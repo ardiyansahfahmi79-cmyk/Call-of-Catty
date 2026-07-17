@@ -1,5 +1,6 @@
 import time
-from datetime import datetime, timezone
+import html  # Menangani pembersihan entitas HTML mentah
+from datetime import datetime, timezone, timedelta
 from html import escape
 
 import streamlit as st
@@ -342,19 +343,19 @@ if "show_detail" not in st.session_state:
 if "ai_result" not in st.session_state:
     st.session_state.ai_result = {}
 
-# Fungsi Cache untuk Terjemahan agar memuat lebih cepat
+# Fungsi Cache untuk Terjemahan yang sudah diperbaiki dari bug kode mentah HTML
 @st.cache_data(ttl=3600, max_entries=200)
 def terjemahkan_teks(teks):
     if not teks: return ""
     try:
-        return GoogleTranslator(source='en', target='id').translate(teks)
+        # PENTING: Bersihkan entitas HTML mentah sebelum diterjemahkan oleh Google Translator
+        teks_bersih = html.unescape(teks)
+        return GoogleTranslator(source='en', target='id').translate(teks_bersih)
     except:
         return teks
 
-# Dibuat agar mengambil berita terbaru (mengabaikan strict tanggal hari ini yang sering bernilai kosong)
 @st.cache_data(ttl=1800)
 def muat_data_kategori(kategori):
-    # Parameter tanggal_target dihapus dari panggilan agar menarik berita paling mutakhir
     if kategori == "all":
         return ambil_semua_kategori(marketaux_key)
     return {kategori: ambil_berita_kategori(kategori, marketaux_key)}
@@ -393,7 +394,6 @@ def render_loading_animation(ph):
 def safe_text(v):
     return escape("" if v is None else str(v))
 
-# Menggunakan komponen tombol asli dari Streamlit
 st.markdown('<div class="category-wrap">', unsafe_allow_html=True)
 cols_btn = st.columns(len(KATEGORI))
 for i, (k, v) in enumerate(KATEGORI.items()):
@@ -414,11 +414,31 @@ if st.session_state.kategori_terpilih == "all":
             items.append(xx)
     items = hapus_duplikat(items)
 else:
-    items = data_kategori.get(st.session_state.kategori_terpilih, [])
+    items = data_kategori.get(st.session_state.kategori_terpilled, [])
+
+# --- FITUR FILTER RENTANG WAKTU (4 HARI TERAKHIR HINGGA SEKARANG) ---
+items_terbaru = []
+waktu_sekarang = datetime.now(timezone.utc)
+batas_waktu = waktu_sekarang - timedelta(days=4)
+
+for item in items:
+    waktu_str = item.get("waktu_terbit", "")
+    try:
+        # Konversi format waktu ISO 8601 dari API ke format Datetime Python
+        waktu_dt = datetime.fromisoformat(waktu_str.replace("Z", "+00:00"))
+        # Berita valid jika berada dalam 4 hari terakhir
+        if waktu_dt >= batas_waktu:
+            items_terbaru.append(item)
+    except Exception:
+        # Jika format waktu dari API bermasalah, tetap simpan sebagai fallback aman
+        items_terbaru.append(item)
+
+items = items_terbaru
+# ------------------------------------------------------------------
 
 if not items:
     st.markdown(
-        '<div class="empty-state">Tidak ada berita tersedia untuk kategori ini saat ini. Coba kategori lain atau tunggu update berikutnya dari pasar.</div>',
+        '<div class="empty-state">Tidak ada berita tersedia dalam 4 hari terakhir untuk kategori ini. Coba kategori lain atau tunggu update berikutnya dari pasar.</div>',
         unsafe_allow_html=True
     )
 else:
@@ -426,7 +446,6 @@ else:
     cols_news = st.columns(2)
     for i, item in enumerate(items):
         
-        # Proses Translate Teks Inggris ke Bahasa Indonesia
         judul_id = terjemahkan_teks(item.get("judul", ""))
         deskripsi_id = terjemahkan_teks(item.get("deskripsi", ""))
         
@@ -476,7 +495,6 @@ else:
                     ph = st.empty()
                     with st.spinner("AI sedang menganalisis berita...", show_time=True):
                         render_loading_animation(ph)
-                        # Mengirimkan berita bahasa Indonesia ke AI
                         item_id = item.copy()
                         item_id["judul"] = judul_id
                         item_id["deskripsi"] = deskripsi_id
