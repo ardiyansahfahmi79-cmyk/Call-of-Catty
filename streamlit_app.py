@@ -1,5 +1,6 @@
 import time
 from datetime import datetime, timezone
+from html import escape
 
 import streamlit as st
 
@@ -47,13 +48,14 @@ body, .stApp {
 
 .top-title {
   text-align: center;
-  margin-bottom: 1.2rem;
+  margin-bottom: 1.05rem;
 }
 
 .top-title h1 {
   font-size: 2rem;
   font-weight: 600;
   letter-spacing: 0.3px;
+  color: var(--text);
 }
 
 .top-title p {
@@ -61,15 +63,18 @@ body, .stApp {
   margin-top: 0.35rem;
 }
 
+.category-wrap {
+  margin: 0.8rem 0 2.1rem;
+}
+
 .category-row {
   display: flex;
   flex-wrap: nowrap;
-  overflow-x: auto;
   gap: 0.7rem;
   justify-content: center;
   align-items: center;
-  margin: 1rem 0 2.2rem;
-  padding-bottom: 0.4rem;
+  overflow-x: auto;
+  padding: 0.15rem 0 0.4rem;
   scrollbar-width: none;
 }
 
@@ -88,7 +93,9 @@ body, .stApp {
   border-radius: 4px;
   white-space: nowrap;
   text-decoration: none;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .category-btn.active {
@@ -96,6 +103,14 @@ body, .stApp {
   color: var(--accent);
   border-color: var(--accent);
   font-weight: 500;
+}
+
+.section-label {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-align: center;
+  margin-top: -0.25rem;
+  margin-bottom: 0.35rem;
 }
 
 .news-grid {
@@ -235,30 +250,6 @@ body, .stApp {
   height: 4px;
   border-radius: 50%;
   background: var(--text-muted);
-}
-
-.action-buttons {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.ai-btn {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 4px;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.ai-btn:hover {
-  background: rgba(0, 243, 255, 0.15);
-  color: var(--neon-blue);
 }
 
 .detail-panel {
@@ -401,21 +392,24 @@ def render_loading_animation(ph):
           <strong>{s}</strong>
         </div>
         """, unsafe_allow_html=True)
-        time.sleep(0.7)
+        time.sleep(0.65)
 
-st.markdown('<div class="category-row">', unsafe_allow_html=True)
-cols = st.columns(len(KATEGORI))
-for idx, (k, v) in enumerate(KATEGORI.items()):
-    with cols[idx]:
-        if st.button(v, key=f"cat_{k}", use_container_width=True):
-            st.session_state.kategori_terpilih = k
-            st.rerun()
-st.markdown('</div>', unsafe_allow_html=True)
+def safe_text(v):
+    return escape("" if v is None else str(v))
 
-kategori_terpilih = st.session_state.kategori_terpilih
-data_kategori = muat_data_kategori(kategori_terpilih, tanggal_target)
+def render_category_buttons(active):
+    html = ['<div class="category-wrap"><div class="category-row">']
+    for k, v in KATEGORI.items():
+        cls = "category-btn active" if k == active else "category-btn"
+        html.append(f'<span class="{cls}">{safe_text(v)}</span>')
+    html.append('</div></div>')
+    st.markdown("".join(html), unsafe_allow_html=True)
 
-if kategori_terpilih == "all":
+render_category_buttons(st.session_state.kategori_terpilih)
+
+data_kategori = muat_data_kategori(st.session_state.kategori_terpilih, tanggal_target)
+
+if st.session_state.kategori_terpilih == "all":
     items = []
     for k, arr in data_kategori.items():
         for x in arr:
@@ -424,7 +418,7 @@ if kategori_terpilih == "all":
             items.append(xx)
     items = hapus_duplikat(items)
 else:
-    items = data_kategori.get(kategori_terpilih, [])
+    items = data_kategori.get(st.session_state.kategori_terpilih, [])
 
 if not items:
     st.markdown(
@@ -432,32 +426,34 @@ if not items:
         unsafe_allow_html=True
     )
 else:
+    st.markdown('<div class="news-grid">', unsafe_allow_html=True)
     cols_news = st.columns(2)
     for i, item in enumerate(items):
         warna = sentiment_from_text(item.get("judul", "") + " " + item.get("deskripsi", ""))
         tag_label = item.get("kategori_label") or KATEGORI.get(
-            item.get("kategori_asli", kategori_terpilih),
-            KATEGORI.get(kategori_terpilih, "LAINNYA")
+            item.get("kategori_asli", st.session_state.kategori_terpilih),
+            KATEGORI.get(st.session_state.kategori_terpilih, "LAINNYA")
         )
-        key_prefix = f"{kategori_terpilih}_{i}"
+        key_prefix = f"{st.session_state.kategori_terpilih}_{i}"
+        key_id = safe_text(key_prefix)
 
         with cols_news[i % 2]:
             st.markdown(f"""
             <div class="news-card">
               <div class="sentiment-indicator sentiment-{warna}"></div>
               <div class="card-body">
-                <div class="category-tag">{tag_label}</div>
+                <div class="category-tag">{safe_text(tag_label)}</div>
                 <div class="news-title-row">
-                  <h3 class="news-title">{item.get('judul', '')}</h3>
-                  <button class="expand-btn {'expanded' if st.session_state.show_detail.get(key_prefix) else 'collapsed'}"></button>
+                  <h3 class="news-title">{safe_text(item.get('judul', ''))}</h3>
+                  <button class="expand-btn {'expanded' if st.session_state.show_detail.get(key_id) else 'collapsed'}"></button>
                 </div>
                 <div class="keywords"></div>
-                <div class="news-excerpt">{item.get('deskripsi', '')}</div>
+                <div class="news-excerpt">{safe_text(item.get('deskripsi', ''))}</div>
                 <div class="card-footer">
                   <div class="source-meta">
-                    <span class="source-name">{item.get('sumber', '')}</span>
+                    <span class="source-name">{safe_text(item.get('sumber', ''))}</span>
                     <span class="time-divider"></span>
-                    <span>{item.get('waktu_terbit', '')}</span>
+                    <span>{safe_text(item.get('waktu_terbit', ''))}</span>
                   </div>
                 </div>
               </div>
@@ -466,33 +462,34 @@ else:
 
             c1, c2 = st.columns([1, 1])
             with c1:
-                if st.button("Detail", key=f"detail_btn_{key_prefix}"):
-                    st.session_state.show_detail[key_prefix] = not st.session_state.show_detail.get(key_prefix, False)
+                if st.button("Detail", key=f"detail_btn_{key_id}"):
+                    st.session_state.show_detail[key_id] = not st.session_state.show_detail.get(key_id, False)
                     st.rerun()
 
             with c2:
-                if st.button("AI Analisis", key=f"ai_btn_{key_prefix}"):
+                if st.button("AI Analisis", key=f"ai_btn_{key_id}"):
                     ph = st.empty()
                     with st.spinner("AI sedang menganalisis berita...", show_time=True):
                         render_loading_animation(ph)
                         hasil = analisis_ai(openrouter_key, item, tag_label)
-                    st.session_state.ai_result[key_prefix] = hasil
+                    st.session_state.ai_result[key_id] = hasil
                     st.rerun()
 
-            if st.session_state.show_detail.get(key_prefix, False):
+            if st.session_state.show_detail.get(key_id, False):
                 st.markdown(f"""
                 <div class="detail-panel active">
-                  <div class="detail-content">{item.get('deskripsi', '')}</div>
+                  <div class="detail-content">{safe_text(item.get('deskripsi', ''))}</div>
                   <div class="detail-meta">Durasi Baca: 2 Menit</div>
                 </div>
                 """, unsafe_allow_html=True)
 
-            if st.session_state.ai_result.get(key_prefix):
+            if st.session_state.ai_result.get(key_id):
                 st.markdown(f"""
                 <div class="ai-status active">
-                  {st.session_state.ai_result[key_prefix]}
+                  {safe_text(st.session_state.ai_result[key_id])}
                 </div>
                 """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown("""
 <footer>
