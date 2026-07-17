@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from html import escape
 
 import streamlit as st
+from deep_translator import GoogleTranslator
 
 from config import KATEGORI
 from news_fetcher import ambil_berita_kategori, ambil_semua_kategori
@@ -48,81 +49,71 @@ body, .stApp {
 
 .top-title {
   text-align: center;
-  margin-bottom: 1.05rem;
+  margin-bottom: 2rem;
 }
 
 .top-title h1 {
-  font-size: 2rem;
-  font-weight: 600;
-  letter-spacing: 0.3px;
+  font-size: 2.2rem;
+  font-weight: 700;
+  letter-spacing: 1px;
   color: var(--text);
+  margin-bottom: 1.5rem;
 }
 
 .top-title p {
   color: var(--text-muted);
-  margin-top: 0.35rem;
+  margin-top: 1rem;
+  font-size: 1.05rem;
 }
 
 .category-wrap {
-  margin: 0.8rem 0 2.1rem;
-}
-
-.category-row {
+  margin: 1.5rem 0 3rem;
   display: flex;
-  flex-wrap: nowrap;
-  gap: 0.7rem;
-  justify-content: center;
-  align-items: center;
-  overflow-x: auto;
-  padding: 0.15rem 0 0.4rem;
-  scrollbar-width: none;
-}
-
-.category-row::-webkit-scrollbar {
-  display: none;
-}
-
-.category-btn {
-  flex: 0 0 auto;
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  padding: 0.55rem 1rem;
-  font-size: 0.87rem;
-  cursor: pointer;
-  border-radius: 4px;
-  white-space: nowrap;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
   justify-content: center;
 }
 
-.category-btn.active {
-  background: rgba(0, 168, 214, 0.05);
-  color: var(--accent);
-  border-color: var(--accent);
-  font-weight: 500;
+/* Modifikasi tombol Streamlit bawaan agar mirip dengan desain UI Aerovulpis */
+div[data-testid="column"] {
+    padding: 0 0.3rem;
+    min-width: fit-content !important;
+    flex: none !important;
 }
 
-.section-label {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  text-align: center;
-  margin-top: -0.25rem;
-  margin-bottom: 0.35rem;
+div[data-testid="stButton"] button {
+    background-color: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    border-radius: 6px;
+    font-size: 0.9rem;
+    padding: 0.4rem 1.2rem;
+    transition: all 0.2s;
+    height: auto;
+}
+
+div[data-testid="stButton"] button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: translateY(-1px);
+}
+
+div[data-testid="stButton"] button:active,
+div[data-testid="stButton"] button:focus {
+    background: rgba(0, 168, 214, 0.1);
+    color: var(--accent);
+    border-color: var(--accent);
+    font-weight: 600;
 }
 
 .news-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-  gap: 1.4rem;
+  gap: 1.5rem;
 }
 
 .news-card {
   background: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
   position: relative;
   transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
@@ -149,54 +140,52 @@ body, .stApp {
 .sentiment-neutral { background: var(--neutral); }
 
 .card-body {
-  padding: 1.4rem 1.4rem 1.25rem 1.1rem;
+  padding: 1.5rem 1.4rem 1.25rem 1.4rem;
 }
 
 .category-tag {
   display: inline-flex;
   align-items: center;
-  gap: 0.55rem;
-  font-size: 0.77rem;
-  font-weight: 500;
+  font-size: 0.8rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.9px;
-  margin-bottom: 0.85rem;
+  letter-spacing: 1.2px;
+  margin-bottom: 1rem;
   color: var(--text-muted);
 }
 
-.category-tag::before {
-  content: "";
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-
-.news-title-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.7rem;
-  margin-bottom: 0.85rem;
+.category-tag .dot {
+  color: var(--accent);
+  font-size: 1.5rem;
+  line-height: 0;
+  margin-right: 0.5rem;
 }
 
 .news-title {
-  font-size: 1.25rem;
-  font-weight: 600;
+  font-size: 1.35rem;
+  font-weight: 700;
   color: var(--text);
-  line-height: 1.42;
-  flex: 1;
+  line-height: 1.4;
+  margin-bottom: 0.5rem;
+}
+
+.expand-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1rem;
+  margin-top: 0.5rem;
 }
 
 .expand-btn {
-  width: 24px;
+  width: 32px;
   height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
   background: transparent;
-  color: var(--neon-blue);
-  font-size: 1.05rem;
+  color: var(--accent);
+  font-size: 1.3rem;
   cursor: pointer;
 }
 
@@ -206,23 +195,15 @@ body, .stApp {
 .keywords {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
-  margin-bottom: 1rem;
-}
-
-.keyword {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.05);
-  padding: 0.22rem 0.55rem;
-  border-radius: 3px;
+  gap: 0.5rem;
+  margin-bottom: 1.2rem;
 }
 
 .news-excerpt {
-  font-size: 0.96rem;
+  font-size: 1rem;
   color: var(--text-muted);
-  margin-bottom: 1.15rem;
-  line-height: 1.55;
+  margin-bottom: 1.5rem;
+  line-height: 1.6;
 }
 
 .card-footer {
@@ -302,10 +283,14 @@ body, .stApp {
 .empty-state {
   background: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 2rem;
+  border-radius: 8px;
+  padding: 3rem 2rem;
   text-align: center;
   color: var(--text-muted);
+  max-width: 700px;
+  margin: 2rem auto;
+  font-size: 1.05rem;
+  line-height: 1.6;
 }
 
 footer {
@@ -320,7 +305,7 @@ footer {
 .dynamiHatch {
   font-style: italic;
   color: var(--accent);
-  margin-top: 0.3rem;
+  margin-top: 0.5rem;
   display: block;
 }
 
@@ -329,10 +314,10 @@ footer {
     grid-template-columns: 1fr;
   }
   .news-title {
-    font-size: 1.12rem;
+    font-size: 1.2rem;
   }
   .top-title h1 {
-    font-size: 1.7rem;
+    font-size: 1.8rem;
   }
 }
 </style>
@@ -342,13 +327,13 @@ st.markdown("""
 <div class="top-title">
   <h1>MARKET INTELLIGENCE</h1>
   <p>Analisis Mendalam untuk Trader Modern</p>
+  <br>
   <p>Dirancang oleh Tim Aerovulpis</p>
 </div>
 """, unsafe_allow_html=True)
 
 marketaux_key = st.secrets["MARKETAUX_API_KEY"]
 openrouter_key = st.secrets["OPENROUTER_API_KEY"]
-tanggal_target = datetime.now(timezone.utc).date().isoformat()
 
 if "kategori_terpilih" not in st.session_state:
     st.session_state.kategori_terpilih = "all"
@@ -357,22 +342,33 @@ if "show_detail" not in st.session_state:
 if "ai_result" not in st.session_state:
     st.session_state.ai_result = {}
 
+# Fungsi Cache untuk Terjemahan agar memuat lebih cepat
+@st.cache_data(ttl=3600, max_entries=200)
+def terjemahkan_teks(teks):
+    if not teks: return ""
+    try:
+        return GoogleTranslator(source='en', target='id').translate(teks)
+    except:
+        return teks
+
+# Dibuat agar mengambil berita terbaru (mengabaikan strict tanggal hari ini yang sering bernilai kosong)
 @st.cache_data(ttl=1800)
-def muat_data_kategori(kategori, tanggal_target):
+def muat_data_kategori(kategori):
+    # Parameter tanggal_target dihapus dari panggilan agar menarik berita paling mutakhir
     if kategori == "all":
-        return ambil_semua_kategori(marketaux_key, tanggal_target=tanggal_target)
-    return {kategori: ambil_berita_kategori(kategori, marketaux_key, tanggal_target=tanggal_target)}
+        return ambil_semua_kategori(marketaux_key)
+    return {kategori: ambil_berita_kategori(kategori, marketaux_key)}
 
 def sentiment_from_text(text):
     t = (text or "").lower()
     if any(x in t for x in [
-        "rise", "surge", "beats", "strong", "record", "gain", "rebound",
-        "higher", "increase", "jump", "rally", "growth"
+        "naik", "lonjak", "kuat", "rekor", "untung", "pulih",
+        "tinggi", "peningkatan", "lompat", "reli", "pertumbuhan", "bullish"
     ]):
         return "bullish"
     if any(x in t for x in [
-        "fall", "drop", "miss", "weak", "decline", "slump", "tumble",
-        "lower", "reduce", "down", "slowdown"
+        "turun", "jatuh", "lemah", "merosot", "anjlok", "tumbang",
+        "rendah", "kurang", "lambat", "bearish"
     ]):
         return "bearish"
     return "neutral"
@@ -397,17 +393,17 @@ def render_loading_animation(ph):
 def safe_text(v):
     return escape("" if v is None else str(v))
 
-def render_category_buttons(active):
-    html = ['<div class="category-wrap"><div class="category-row">']
-    for k, v in KATEGORI.items():
-        cls = "category-btn active" if k == active else "category-btn"
-        html.append(f'<span class="{cls}">{safe_text(v)}</span>')
-    html.append('</div></div>')
-    st.markdown("".join(html), unsafe_allow_html=True)
+# Menggunakan komponen tombol asli dari Streamlit
+st.markdown('<div class="category-wrap">', unsafe_allow_html=True)
+cols_btn = st.columns(len(KATEGORI))
+for i, (k, v) in enumerate(KATEGORI.items()):
+    with cols_btn[i]:
+        if st.button(v, key=f"btn_cat_{k}", use_container_width=True):
+            st.session_state.kategori_terpilih = k
+            st.rerun()
+st.markdown('</div>', unsafe_allow_html=True)
 
-render_category_buttons(st.session_state.kategori_terpilih)
-
-data_kategori = muat_data_kategori(st.session_state.kategori_terpilih, tanggal_target)
+data_kategori = muat_data_kategori(st.session_state.kategori_terpilih)
 
 if st.session_state.kategori_terpilih == "all":
     items = []
@@ -422,14 +418,19 @@ else:
 
 if not items:
     st.markdown(
-        '<div class="empty-state">Tidak ada berita tersedia untuk hari ini pada kategori ini. Coba kategori lain atau tunggu update berikutnya.</div>',
+        '<div class="empty-state">Tidak ada berita tersedia untuk kategori ini saat ini. Coba kategori lain atau tunggu update berikutnya dari pasar.</div>',
         unsafe_allow_html=True
     )
 else:
     st.markdown('<div class="news-grid">', unsafe_allow_html=True)
     cols_news = st.columns(2)
     for i, item in enumerate(items):
-        warna = sentiment_from_text(item.get("judul", "") + " " + item.get("deskripsi", ""))
+        
+        # Proses Translate Teks Inggris ke Bahasa Indonesia
+        judul_id = terjemahkan_teks(item.get("judul", ""))
+        deskripsi_id = terjemahkan_teks(item.get("deskripsi", ""))
+        
+        warna = sentiment_from_text(judul_id + " " + deskripsi_id)
         tag_label = item.get("kategori_label") or KATEGORI.get(
             item.get("kategori_asli", st.session_state.kategori_terpilih),
             KATEGORI.get(st.session_state.kategori_terpilih, "LAINNYA")
@@ -442,13 +443,17 @@ else:
             <div class="news-card">
               <div class="sentiment-indicator sentiment-{warna}"></div>
               <div class="card-body">
-                <div class="category-tag">{safe_text(tag_label)}</div>
-                <div class="news-title-row">
-                  <h3 class="news-title">{safe_text(item.get('judul', ''))}</h3>
+                <div class="category-tag"><span class="dot">•</span>{safe_text(tag_label)}</div>
+                
+                <h3 class="news-title">{safe_text(judul_id)}</h3>
+                
+                <div class="expand-wrapper">
                   <button class="expand-btn {'expanded' if st.session_state.show_detail.get(key_id) else 'collapsed'}"></button>
                 </div>
+                
                 <div class="keywords"></div>
-                <div class="news-excerpt">{safe_text(item.get('deskripsi', ''))}</div>
+                <div class="news-excerpt">{safe_text(deskripsi_id)}</div>
+                
                 <div class="card-footer">
                   <div class="source-meta">
                     <span class="source-name">{safe_text(item.get('sumber', ''))}</span>
@@ -471,14 +476,18 @@ else:
                     ph = st.empty()
                     with st.spinner("AI sedang menganalisis berita...", show_time=True):
                         render_loading_animation(ph)
-                        hasil = analisis_ai(openrouter_key, item, tag_label)
+                        # Mengirimkan berita bahasa Indonesia ke AI
+                        item_id = item.copy()
+                        item_id["judul"] = judul_id
+                        item_id["deskripsi"] = deskripsi_id
+                        hasil = analisis_ai(openrouter_key, item_id, tag_label)
                     st.session_state.ai_result[key_id] = hasil
                     st.rerun()
 
             if st.session_state.show_detail.get(key_id, False):
                 st.markdown(f"""
                 <div class="detail-panel active">
-                  <div class="detail-content">{safe_text(item.get('deskripsi', ''))}</div>
+                  <div class="detail-content">{safe_text(deskripsi_id)}</div>
                   <div class="detail-meta">Durasi Baca: 2 Menit</div>
                 </div>
                 """, unsafe_allow_html=True)
