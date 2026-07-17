@@ -1,5 +1,8 @@
-import streamlit as st
+import time
 from datetime import datetime, timezone
+
+import streamlit as st
+
 from config import KATEGORI
 from news_fetcher import ambil_berita_kategori, ambil_semua_kategori
 from ai_analyzer import analisis_ai
@@ -23,109 +26,341 @@ st.markdown("""
   --bearish: #ff5555;
   --neutral: #88ccff;
 }
-* { margin:0; padding:0; box-sizing:border-box; }
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
 body, .stApp {
   background: var(--bg);
   color: var(--text);
   font-family: 'Inter', sans-serif;
 }
-.block-container { padding-top: 2.2rem; padding-bottom: 2rem; max-width: 1200px; }
-.container { max-width: 1200px; margin: 0 auto; padding: 2.2rem 1rem; }
-header { text-align: center; margin-bottom: 2.2rem; }
-h1 { font-size: 2rem; font-weight: 600; color: var(--text); letter-spacing: 0.3px; }
-.subtitle { font-size: 1rem; color: var(--text-muted); margin-top: 0.4rem; }
-.by-aerovulpis { font-size: 0.87rem; color: var(--text-muted); margin-top: 0.6rem; }
-.categories { display:flex; flex-wrap:wrap; gap:.7rem; justify-content:center; margin-bottom:2.4rem; }
+
+.block-container {
+  padding-top: 1.4rem;
+  padding-bottom: 2rem;
+  max-width: 1200px;
+}
+
+.top-title {
+  text-align: center;
+  margin-bottom: 1.2rem;
+}
+
+.top-title h1 {
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.top-title p {
+  color: var(--text-muted);
+  margin-top: 0.35rem;
+}
+
+.categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  justify-content: center;
+  margin: 1rem 0 2.2rem;
+}
+
 .category-btn {
-  background: transparent; border: 1px solid var(--border); color: var(--text-muted);
-  padding: 0.55rem 1rem; font-size: 0.87rem; border-radius: 4px; white-space: nowrap;
-  display:inline-block; text-decoration:none;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 0.55rem 1rem;
+  font-size: 0.87rem;
+  cursor: pointer;
+  border-radius: 4px;
+  white-space: nowrap;
+  text-decoration: none;
+  display: inline-block;
 }
-.category-btn.active { background: rgba(0,168,214,.05); color: var(--accent); border-color: var(--accent); font-weight: 500; }
-.news-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 1.3rem; }
+
+.category-btn.active {
+  background: rgba(0, 168, 214, 0.05);
+  color: var(--accent);
+  border-color: var(--accent);
+  font-weight: 500;
+}
+
+.news-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 1.4rem;
+}
+
 .news-card {
-  background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
-  position: relative; margin-bottom: 0.8rem;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+  margin-bottom: 0.8rem;
 }
-.news-card:hover { border-color: var(--accent); box-shadow: 0 8px 20px rgba(0,168,214,.1); }
-.sentiment-indicator { position:absolute; top:0; left:0; width:4px; height:100%; background: var(--neutral); }
+
+.news-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(0, 168, 214, 0.08);
+}
+
+.sentiment-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--neutral);
+}
+
 .sentiment-bullish { background: var(--bullish); }
 .sentiment-bearish { background: var(--bearish); }
 .sentiment-neutral { background: var(--neutral); }
-.card-body { padding: 1.5rem 1.45rem 1.3rem 1.15rem; }
+
+.card-body {
+  padding: 1.4rem 1.4rem 1.25rem 1.1rem;
+}
+
 .category-tag {
-  display:inline-flex; align-items:center; gap:.6rem; font-size:.77rem; font-weight:500;
-  text-transform:uppercase; letter-spacing:.9px; margin-bottom:.9rem; color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.77rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.9px;
+  margin-bottom: 0.85rem;
+  color: var(--text-muted);
 }
-.category-tag::before { content:""; width:5px; height:5px; border-radius:50%; background: var(--accent); }
-.news-title { font-size:1.32rem; font-weight:600; color: var(--text); line-height:1.42; margin-bottom:.95rem; }
+
+.category-tag::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.news-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  margin-bottom: 0.85rem;
+}
+
+.news-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.42;
+  flex: 1;
+}
+
 .expand-btn {
-  width:24px; height:24px; border:none; background:transparent; color: var(--neon-blue); font-size:1.1rem; cursor:pointer;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--neon-blue);
+  font-size: 1.05rem;
+  cursor: pointer;
 }
-.expand-btn.collapsed::after { content:"▼"; }
-.expand-btn.expanded::after { content:"▲"; }
-.title-row { display:flex; align-items:center; gap:.8rem; }
-.keywords { display:flex; flex-wrap:wrap; gap:.5rem; margin-bottom:1rem; }
-.keyword { font-size:.75rem; color: var(--text-muted); background: rgba(255,255,255,.05); padding:.2rem .6rem; border-radius:3px; }
-.news-excerpt { font-size:.96rem; color: var(--text-muted); margin-bottom:1.35rem; line-height:1.55; }
-.highlight { color: var(--accent); font-weight:500; }
-.card-footer { display:flex; justify-content:space-between; align-items:center; font-size:.86rem; color: var(--text-muted); }
-.source-meta { display:flex; align-items:center; gap:.8rem; flex-wrap:wrap; }
-.time-divider { width:4px; height:4px; border-radius:50%; background: var(--text-muted); margin:0 .4rem; }
+
+.expand-btn.collapsed::after { content: "▼"; }
+.expand-btn.expanded::after { content: "▲"; }
+
+.keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+}
+
+.keyword {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.22rem 0.55rem;
+  border-radius: 3px;
+}
+
+.news-excerpt {
+  font-size: 0.96rem;
+  color: var(--text-muted);
+  margin-bottom: 1.15rem;
+  line-height: 1.55;
+}
+
+.highlight {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+
+.source-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.source-name {
+  font-weight: 500;
+}
+
+.time-divider {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .ai-btn {
-  width:28px; height:28px; border:none; background: rgba(255,255,255,.05); border-radius:4px;
-  color: var(--text-muted); cursor:pointer;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
 }
-.ai-btn:hover { background: rgba(0,243,255,.15); color: var(--neon-blue); }
+
+.ai-btn:hover {
+  background: rgba(0, 243, 255, 0.15);
+  color: var(--neon-blue);
+}
+
 .detail-panel {
-  background: rgba(20,28,44,.95); border-top:1px solid var(--neon-blue); padding:1.5rem; margin-top:1rem;
-  border-radius: 0 0 6px 6px; border-left:1px solid var(--border); border-right:1px solid var(--border); border-bottom:1px solid var(--border);
+  display: none;
+  background: rgba(20, 28, 44, 0.95);
+  border-top: 1px solid var(--neon-blue);
+  padding: 1.25rem 1.2rem 1.2rem;
+  margin-top: 0;
+  border-radius: 0 0 6px 6px;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
-.detail-content { font-size:1rem; color: var(--text); line-height:1.7; }
-.detail-meta { margin-top:1rem; font-size:.85rem; color: var(--text-muted); }
+
+.detail-panel.active {
+  display: block;
+}
+
+.detail-content {
+  font-size: 1rem;
+  color: var(--text);
+  line-height: 1.7;
+}
+
+.detail-meta {
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
 .ai-status {
-  padding:1rem; background: rgba(0,0,0,.3); border-radius:4px; margin-top:1rem; font-size:.85rem; color: var(--text-muted);
+  display: none;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  margin-top: 1rem;
+  font-size: 0.86rem;
+  color: var(--text-muted);
 }
+
+.ai-status.active {
+  display: block;
+}
+
+.ai-status.loading::after {
+  content: " ...";
+  color: var(--neon-blue);
+}
+
 .empty-state {
-  background: var(--card-bg); border:1px solid var(--border); border-radius:6px; padding:2rem; text-align:center; color: var(--text-muted);
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-muted);
 }
+
 footer {
-  text-align:center; padding-top:2.6rem; margin-top:3.2rem; border-top:1px solid var(--divider); color: var(--text-muted); font-size:.86rem;
+  text-align: center;
+  padding-top: 2.6rem;
+  margin-top: 3.2rem;
+  border-top: 1px solid var(--divider);
+  color: var(--text-muted);
+  font-size: 0.86rem;
 }
-.dynamiHatch { font-style:italic; color: var(--accent); margin-top:.3rem; display:block; }
+
+.dynamiHatch {
+  font-style: italic;
+  color: var(--accent);
+  margin-top: 0.3rem;
+  display: block;
+}
+
 @media (max-width: 768px) {
-  .news-grid { grid-template-columns:1fr; }
-  h1 { font-size:1.7rem; }
-  .container { padding: 1.7rem 1rem; }
+  .news-grid {
+    grid-template-columns: 1fr;
+  }
+  .news-title {
+    font-size: 1.12rem;
+  }
+  .top-title h1 {
+    font-size: 1.7rem;
+  }
 }
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown("""
-<div class="container">
-  <header>
-    <h1>MARKET INTELLIGENCE</h1>
-    <p class="subtitle">Analisis Mendalam untuk Trader Modern</p>
-    <p class="by-aerovulpis">Dirancang oleh Tim Aerovulpis</p>
-  </header>
+<div class="top-title">
+  <h1>MARKET INTELLIGENCE</h1>
+  <p>Analisis Mendalam untuk Trader Modern</p>
+  <p>Dirancang oleh Tim Aerovulpis</p>
 </div>
 """, unsafe_allow_html=True)
-
-with st.sidebar:
-    st.header("Pengaturan")
-    kategori_terpilih = st.radio(
-        "Pilih kategori",
-        list(KATEGORI.keys()),
-        format_func=lambda x: KATEGORI[x],
-        index=0
-    )
-    st.caption("Limit 5 berita per kategori. Mode 'Semua' menggabungkan semua kategori hari ini.")
-    refresh = st.button("Muat Ulang Berita")
-    st.caption(f"Tanggal acuan: {datetime.now(timezone.utc).strftime('%d %b %Y')}")
 
 marketaux_key = st.secrets["MARKETAUX_API_KEY"]
 openrouter_key = st.secrets["OPENROUTER_API_KEY"]
 tanggal_target = datetime.now(timezone.utc).date().isoformat()
+
+if "kategori_terpilih" not in st.session_state:
+    st.session_state.kategori_terpilih = "all"
+if "show_detail" not in st.session_state:
+    st.session_state.show_detail = {}
+if "ai_result" not in st.session_state:
+    st.session_state.ai_result = {}
 
 @st.cache_data(ttl=1800)
 def muat_data_kategori(kategori, tanggal_target):
@@ -133,15 +368,48 @@ def muat_data_kategori(kategori, tanggal_target):
         return ambil_semua_kategori(marketaux_key, tanggal_target=tanggal_target)
     return {kategori: ambil_berita_kategori(kategori, marketaux_key, tanggal_target=tanggal_target)}
 
-if refresh:
-    st.cache_data.clear()
+def sentiment_from_text(text):
+    t = (text or "").lower()
+    if any(x in t for x in [
+        "rise", "surge", "beats", "strong", "record", "gain", "rebound",
+        "higher", "increase", "jump", "rally", "growth"
+    ]):
+        return "bullish"
+    if any(x in t for x in [
+        "fall", "drop", "miss", "weak", "decline", "slump", "tumble",
+        "lower", "reduce", "down", "slowdown"
+    ]):
+        return "bearish"
+    return "neutral"
 
+def render_loading_animation(ph):
+    steps = [
+        "AI Menganalisa...",
+        "Mengidentifikasi pola pasar...",
+        "Menyusun hubungan antar variabel...",
+        "Membandingkan dengan historis terbaru...",
+        "Merangkum inti berita...",
+        "Selesai — Executive Summary siap",
+    ]
+    for s in steps:
+        ph.markdown(f"""
+        <div class="ai-status active loading">
+          <strong>{s}</strong>
+        </div>
+        """, unsafe_allow_html=True)
+        time.sleep(0.7)
+
+st.markdown('<div class="categories">', unsafe_allow_html=True)
+cols = st.columns(len(KATEGORI))
+for idx, (k, v) in enumerate(KATEGORI.items()):
+    with cols[idx]:
+        if st.button(v, key=f"cat_{k}", use_container_width=True):
+            st.session_state.kategori_terpilih = k
+            st.rerun()
+st.markdown('</div>', unsafe_allow_html=True)
+
+kategori_terpilih = st.session_state.kategori_terpilih
 data_kategori = muat_data_kategori(kategori_terpilih, tanggal_target)
-
-st.markdown('<div class="categories">' + ''.join([
-    f'<span class="category-btn {"active" if k == kategori_terpilih else ""}">{v}</span>'
-    for k, v in KATEGORI.items()
-]) + '</div>', unsafe_allow_html=True)
 
 if kategori_terpilih == "all":
     items = []
@@ -155,31 +423,32 @@ else:
     items = data_kategori.get(kategori_terpilih, [])
 
 if not items:
-    st.markdown('<div class="empty-state">Tidak ada berita tersedia untuk hari ini pada kategori ini.</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="empty-state">Tidak ada berita tersedia untuk hari ini pada kategori ini.</div>',
+        unsafe_allow_html=True
+    )
 else:
-    cols = st.columns(2)
+    cols_news = st.columns(2)
     for i, item in enumerate(items):
-        berita_lower = (item.get("judul", "") + " " + item.get("deskripsi", "")).lower()
-        warna = "neutral"
-        if any(x in berita_lower for x in ["rise", "surge", "beats", "strong", "record", "bullish", "gain", "rebound", "higher", "increase", "jump", "rally", "growth"]):
-            warna = "bullish"
-        if any(x in berita_lower for x in ["fall", "drop", "miss", "weak", "bearish", "decline", "slump", "tumble", "lower", "reduce", "down", "slowdown"]):
-            warna = "bearish"
-
-        tag_label = item.get("kategori_label") or KATEGORI.get(item.get("kategori_asli", kategori_terpilih), KATEGORI.get(kategori_terpilih, "LAINNYA"))
+        warna = sentiment_from_text(item.get("judul", "") + " " + item.get("deskripsi", ""))
+        tag_label = item.get("kategori_label") or KATEGORI.get(
+            item.get("kategori_asli", kategori_terpilih),
+            KATEGORI.get(kategori_terpilih, "LAINNYA")
+        )
         key_prefix = f"{kategori_terpilih}_{i}"
 
-        with cols[i % 2]:
+        with cols_news[i % 2]:
             st.markdown(f"""
             <div class="news-card">
               <div class="sentiment-indicator sentiment-{warna}"></div>
               <div class="card-body">
                 <div class="category-tag">{tag_label}</div>
-                <div class="title-row">
+                <div class="news-title-row">
                   <h3 class="news-title">{item.get('judul', '')}</h3>
+                  <button class="expand-btn {'expanded' if st.session_state.show_detail.get(key_prefix) else 'collapsed'}"></button>
                 </div>
                 <div class="keywords"></div>
-                <p class="news-excerpt">{item.get('deskripsi', '')}</p>
+                <div class="news-excerpt">{item.get('deskripsi', '')}</div>
                 <div class="card-footer">
                   <div class="source-meta">
                     <span class="source-name">{item.get('sumber', '')}</span>
@@ -193,31 +462,36 @@ else:
 
             c1, c2 = st.columns([1, 1])
             with c1:
-                if st.button("Detail", key=f"detail_{key_prefix}"):
-                    st.session_state[f"show_detail_{key_prefix}"] = not st.session_state.get(f"show_detail_{key_prefix}", False)
+                if st.button("Detail", key=f"detail_btn_{key_prefix}"):
+                    st.session_state.show_detail[key_prefix] = not st.session_state.show_detail.get(key_prefix, False)
+                    st.rerun()
             with c2:
-                if st.button("AI Analisis", key=f"ai_{key_prefix}"):
-                    st.session_state[f"do_ai_{key_prefix}"] = True
+                if st.button("AI Analisis", key=f"ai_btn_{key_prefix}"):
+                    ph = st.empty()
+                    with st.spinner("AI sedang menganalisis berita...", show_time=True):
+                        render_loading_animation(ph)
+                        hasil = analisis_ai(openrouter_key, item, tag_label)
+                    st.session_state.ai_result[key_prefix] = hasil
+                    st.rerun()
 
-            if st.session_state.get(f"show_detail_{key_prefix}", False):
+            if st.session_state.show_detail.get(key_prefix, False):
                 st.markdown(f"""
-                <div class="detail-panel">
+                <div class="detail-panel active">
                   <div class="detail-content">{item.get('deskripsi', '')}</div>
                   <div class="detail-meta">Durasi Baca: 2 Menit</div>
                 </div>
                 """, unsafe_allow_html=True)
 
-            if st.session_state.get(f"do_ai_{key_prefix}", False):
-                with st.spinner("AI sedang menganalisis berita..."):
-                    hasil = analisis_ai(openrouter_key, item, tag_label)
-                st.markdown(f'<div class="ai-status">{hasil}</div>', unsafe_allow_html=True)
-                st.session_state[f"do_ai_{key_prefix}"] = False
+            if st.session_state.ai_result.get(key_prefix):
+                st.markdown(f"""
+                <div class="ai-status active">
+                  {st.session_state.ai_result[key_prefix]}
+                </div>
+                """, unsafe_allow_html=True)
 
 st.markdown("""
-<div class="container">
-  <footer>
-    © 2026 Aerovulpis
-    <span class="dynamiHatch">Dikembangkan oleh DynamiHatch • Teknologi Intelijensi Pasar Masa Depan</span>
-  </footer>
-</div>
+<footer>
+  © 2026 Aerovulpis
+  <span class="dynamiHatch">Dikembangkan oleh DynamiHatch • Teknologi Intelijensi Pasar Masa Depan</span>
+</footer>
 """, unsafe_allow_html=True)
