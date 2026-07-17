@@ -61,15 +61,24 @@ body, .stApp {
   margin-top: 0.35rem;
 }
 
-.categories {
+.category-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   gap: 0.7rem;
   justify-content: center;
+  align-items: center;
   margin: 1rem 0 2.2rem;
+  padding-bottom: 0.4rem;
+  scrollbar-width: none;
+}
+
+.category-row::-webkit-scrollbar {
+  display: none;
 }
 
 .category-btn {
+  flex: 0 0 auto;
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text-muted);
@@ -199,11 +208,6 @@ body, .stApp {
   color: var(--text-muted);
   margin-bottom: 1.15rem;
   line-height: 1.55;
-}
-
-.highlight {
-  color: var(--accent);
-  font-weight: 500;
 }
 
 .card-footer {
@@ -399,7 +403,7 @@ def render_loading_animation(ph):
         """, unsafe_allow_html=True)
         time.sleep(0.7)
 
-st.markdown('<div class="categories">', unsafe_allow_html=True)
+st.markdown('<div class="category-row">', unsafe_allow_html=True)
 cols = st.columns(len(KATEGORI))
 for idx, (k, v) in enumerate(KATEGORI.items()):
     with cols[idx]:
@@ -424,7 +428,7 @@ else:
 
 if not items:
     st.markdown(
-        '<div class="empty-state">Tidak ada berita tersedia untuk hari ini pada kategori ini.</div>',
+        '<div class="empty-state">Tidak ada berita tersedia untuk hari ini pada kategori ini. Coba kategori lain atau tunggu update berikutnya.</div>',
         unsafe_allow_html=True
     )
 else:
@@ -465,6 +469,7 @@ else:
                 if st.button("Detail", key=f"detail_btn_{key_prefix}"):
                     st.session_state.show_detail[key_prefix] = not st.session_state.show_detail.get(key_prefix, False)
                     st.rerun()
+
             with c2:
                 if st.button("AI Analisis", key=f"ai_btn_{key_prefix}"):
                     ph = st.empty()
