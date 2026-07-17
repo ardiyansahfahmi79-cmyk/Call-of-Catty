@@ -12,29 +12,13 @@ KATEGORI = {
 }
 
 QUERY_KATEGORI = {
-    "stock": [
-        "stocks", "equities", "earnings", "semiconductors", "big tech", "ai stocks"
-    ],
-    "crypto": [
-        "bitcoin", "ethereum", "crypto", "ETF", "blockchain", "spot ETF"
-    ],
-    "geopolitics": [
-        "war", "tariff", "sanctions", "geopolitics", "conflict", "trade war"
-    ],
-    "forex": [
-        "USD", "EUR", "JPY", "currency", "forex", "dollar", "yen", "euro"
-    ],
-    "indonesia": [
-        "Indonesia", "IHSG", "Bank Indonesia", "rupiah", "BPS", "emiten"
-    ],
-    "economy_us": [
-        "CPI", "PPI", "NFP", "jobs report", "GDP", "inflation", "unemployment",
-        "retail sales", "Treasury yield", "consumer confidence"
-    ],
-    "fed": [
-        "Federal Reserve", "Powell", "FOMC", "rate cuts", "rates", "dot plot",
-        "minutes", "hawkish", "dovish"
-    ],
+    "stock": ["stocks", "equities", "earnings", "semiconductors", "big tech", "ai stocks"],
+    "crypto": ["bitcoin", "ethereum", "crypto", "ETF", "blockchain", "spot ETF"],
+    "geopolitics": ["war", "tariff", "sanctions", "geopolitics", "conflict", "trade war"],
+    "forex": ["USD", "EUR", "JPY", "currency", "forex", "dollar", "yen", "euro"],
+    "indonesia": ["Indonesia", "IHSG", "Bank Indonesia", "rupiah", "BPS", "emiten"],
+    "economy_us": ["CPI", "PPI", "NFP", "jobs report", "GDP", "inflation", "unemployment", "retail sales", "Treasury yield", "consumer confidence"],
+    "fed": ["Federal Reserve", "Powell", "FOMC", "rate cuts", "rates", "dot plot", "minutes", "hawkish", "dovish"],
     "all": []
 }
 
