@@ -73,11 +73,20 @@ body, .stApp {
   justify-content: center;
 }
 
-/* Modifikasi tombol Streamlit bawaan agar mirip dengan desain UI Aerovulpis */
+/* FIX: Paksa container kolom Streamlit agar tetap horizontal & wrap di mobile */
+div[data-testid="stHorizontalBlock"] {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    gap: 0.5rem !important;
+}
+
+/* Modifikasi kolom bawaan agar lebarnya pas dengan tombol */
 div[data-testid="column"] {
-    padding: 0 0.3rem;
+    padding: 0 !important;
     min-width: fit-content !important;
-    flex: none !important;
+    flex: 0 0 auto !important;
 }
 
 div[data-testid="stButton"] button {
@@ -89,6 +98,7 @@ div[data-testid="stButton"] button {
     padding: 0.4rem 1.2rem;
     transition: all 0.2s;
     height: auto;
+    width: auto !important;
 }
 
 div[data-testid="stButton"] button:hover {
@@ -343,12 +353,11 @@ if "show_detail" not in st.session_state:
 if "ai_result" not in st.session_state:
     st.session_state.ai_result = {}
 
-# Fungsi Cache untuk Terjemahan yang sudah diperbaiki dari bug kode mentah HTML
+# Fungsi Cache untuk Terjemahan agar memuat lebih cepat
 @st.cache_data(ttl=3600, max_entries=200)
 def terjemahkan_teks(teks):
     if not teks: return ""
     try:
-        # PENTING: Bersihkan entitas HTML mentah sebelum diterjemahkan oleh Google Translator
         teks_bersih = html.unescape(teks)
         return GoogleTranslator(source='en', target='id').translate(teks_bersih)
     except:
@@ -414,7 +423,8 @@ if st.session_state.kategori_terpilih == "all":
             items.append(xx)
     items = hapus_duplikat(items)
 else:
-    items = data_kategori.get(st.session_state.kategori_terpilled, [])
+    # FIX: Typo dari kategori_terpilled dikembalikan ke kategori_terpilih
+    items = data_kategori.get(st.session_state.kategori_terpilih, [])
 
 # --- FITUR FILTER RENTANG WAKTU (4 HARI TERAKHIR HINGGA SEKARANG) ---
 items_terbaru = []
@@ -424,13 +434,10 @@ batas_waktu = waktu_sekarang - timedelta(days=4)
 for item in items:
     waktu_str = item.get("waktu_terbit", "")
     try:
-        # Konversi format waktu ISO 8601 dari API ke format Datetime Python
         waktu_dt = datetime.fromisoformat(waktu_str.replace("Z", "+00:00"))
-        # Berita valid jika berada dalam 4 hari terakhir
         if waktu_dt >= batas_waktu:
             items_terbaru.append(item)
     except Exception:
-        # Jika format waktu dari API bermasalah, tetap simpan sebagai fallback aman
         items_terbaru.append(item)
 
 items = items_terbaru
