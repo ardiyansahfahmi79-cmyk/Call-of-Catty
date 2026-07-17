@@ -11,6 +11,12 @@ def parse_waktu(value):
     except Exception:
         return None
 
+def tanggal_hari_ini(value):
+    dt = parse_waktu(value)
+    if not dt:
+        return None
+    return dt.date().isoformat()
+
 def hapus_duplikat(items):
     seen = set()
     hasil = []
