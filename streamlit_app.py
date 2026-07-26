@@ -185,6 +185,51 @@ div[data-testid="stButton"]>button:active{
 }
 .pub-btn div[data-testid="stButton"]>button:hover{box-shadow:0 0 26px rgba(0,200,240,.22)!important}
 
+/* ── TAGS ── */
+.tag-row{display:flex;flex-wrap:wrap;gap:.25rem;margin-bottom:.48rem}
+.etag{
+  font-family:'JetBrains Mono',monospace;font-size:.5rem;font-weight:700;
+  letter-spacing:1.5px;text-transform:uppercase;
+  color:#00c8f0;background:rgba(0,200,240,.08);
+  border:1px solid rgba(0,200,240,.2);border-radius:2px;
+  padding:.05rem .32rem;flex-shrink:0
+}
+
+/* ── DISCLAIMER BOX ── */
+.disc-box{
+  border:1px solid rgba(240,184,0,.2);border-radius:4px;
+  background:rgba(240,184,0,.05);padding:.55rem .7rem;
+  margin-top:.5rem;margin-bottom:.1rem
+}
+.disc-icon{font-size:.7rem;margin-right:.3rem}
+.disc-text{font-family:'JetBrains Mono',monospace;font-size:.54rem;color:#c8a020;line-height:1.6;letter-spacing:.3px}
+
+/* ── CATATAN EDITOR ── */
+.editor-note{
+  border-left:3px solid var(--warn);
+  background:rgba(240,184,0,.04);
+  padding:.5rem .75rem .5rem .8rem;
+  margin-top:.45rem;margin-bottom:.1rem;
+  border-radius:0 4px 4px 0
+}
+.editor-note-lbl{
+  font-family:'JetBrains Mono',monospace;font-size:.5rem;font-weight:700;
+  letter-spacing:2px;text-transform:uppercase;color:var(--warn);margin-bottom:.25rem
+}
+.editor-note-text{font-size:.77rem;color:#b89040;line-height:1.65;font-style:italic}
+
+
+/* ── ADMIN TOGGLE BAR ── */
+.atbar{display:flex;align-items:center;justify-content:space-between;padding:.45rem .9rem;background:var(--surf2);border:1px solid var(--bdr);border-radius:5px;margin:.5rem 0 .75rem}
+.atbar-l{display:flex;align-items:center;gap:.5rem}
+.atdot{width:7px;height:7px;border-radius:50%;background:var(--dim);transition:all .3s;flex-shrink:0}
+.atdot.on{background:var(--warn);box-shadow:0 0 10px var(--warn)}
+.atlbl{font-family:'JetBrains Mono',monospace;font-size:.58rem;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--dim)}
+.atlbl.on{color:var(--warn)}
+.atbadge{font-family:'JetBrains Mono',monospace;font-size:.5rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:.1rem .45rem;border-radius:2px}
+.atbadge.on{background:rgba(240,184,0,.1);border:1px solid rgba(240,184,0,.25);color:var(--warn)}
+.atbadge.off{background:rgba(255,255,255,.03);border:1px solid var(--bdr);color:var(--dim)}
+
 /* FOOTER */
 .ftr{margin-top:2rem;padding:1rem;border-top:1px solid var(--bdr);text-align:center;font-family:'JetBrains Mono',monospace;font-size:.56rem;color:var(--dim);line-height:1.9}
 .ftr .brand{color:var(--accent);font-weight:700;letter-spacing:2px}
@@ -228,11 +273,19 @@ KATEGORI_LABEL = {
 }
 
 INSTRUMEN_OPTIONS = [
+    "Tidak Ada / None",
     "XAUUSD","XAGUSD","EURUSD","GBPUSD","USDJPY","AUDUSD","USDCAD","USDCHF","NZDUSD",
     "DXY (Dolar Index)","US10Y Treasury","US30Y Treasury",
     "BTC/USD","ETH/USD","BNB/USD","SOL/USD","XRP/USD",
     "S&P 500","NASDAQ","Dow Jones","IHSG","Nikkei 225","Hang Seng",
     "Minyak WTI","Minyak Brent","Gas Alam",
+]
+
+# Tag ekonomi / event pasar
+TAG_OPTIONS = [
+    "USD","EUR","Gold","Oil","Crypto",
+    "NFP","CPI","FOMC","ECB",
+    "BOJ","GDP","PPI","PMI","Retail Sales","Fed Minutes",
 ]
 
 DAMPAK_CFG = {
@@ -249,6 +302,7 @@ for k, v in [
     ("show_detail",{}),
     ("berita",[]),          # list berita manual
     ("dampak_sel",2),       # default pilihan dampak di form
+    ("admin_mode",False),   # toggle admin panel
 ]:
     if k not in st.session_state:
         st.session_state[k] = v
@@ -273,6 +327,30 @@ def dampak_html(level: int) -> str:
       <span class="dampak-stars">{cfg["stars"]}{cfg["empty"]}</span>
       <span class="dampak-label">{cfg["label"]}</span>
     </div>'''
+
+# ═══════════════════════════════════════════════
+# ADMIN TOGGLE BAR
+# ═══════════════════════════════════════════════
+is_admin  = st.session_state.admin_mode
+dot_cls   = 'atdot on' if is_admin else 'atdot'
+lbl_cls   = 'atlbl on' if is_admin else 'atlbl'
+badge_cls = 'atbadge on' if is_admin else 'atbadge off'
+mode_txt  = 'EDITOR AKTIF' if is_admin else 'READER MODE'
+btn_lbl   = 'TUTUP ADMIN' if is_admin else 'ADMIN'
+
+col_tbar, col_tbtn = st.columns([5, 1])
+with col_tbar:
+    st.markdown(
+        f'<div class="atbar"><div class="atbar-l">'
+        f'<div class="{dot_cls}"></div>'
+        f'<span class="{lbl_cls}">T.I.M NEWS</span>'
+        f'</div><span class="{badge_cls}">{mode_txt}</span></div>',
+        unsafe_allow_html=True
+    )
+with col_tbtn:
+    if st.button(btn_lbl, key='tog_admin', use_container_width=True):
+        st.session_state.admin_mode = not st.session_state.admin_mode
+        st.rerun()
 
 # ═══════════════════════════════════════════════
 # KATEGORI BUTTONS
@@ -308,9 +386,13 @@ else:
 cat_lbl = KATEGORI.get(kat_aktif, "Semua")
 
 # ═══════════════════════════════════════════════
-# LAYOUT: FEED (kiri) + ADMIN (kanan)
+# LAYOUT kondisional
 # ═══════════════════════════════════════════════
-col_feed, col_admin = st.columns([3, 1], gap="medium")
+if st.session_state.admin_mode:
+    col_feed, col_admin = st.columns([3, 1], gap="medium")
+else:
+    col_feed = st.container()
+    col_admin = None
 
 # ══════════════
 # KOLOM FEED
@@ -346,6 +428,31 @@ with col_feed:
                     f'<span class="instr-tag">{escape(ins)}</span>' for ins in instrumen
                 ) + '</div>'
 
+            # Tags ekonomi
+            tags_item = item.get("tags", [])
+            tags_html = ""
+            if tags_item:
+                tags_html = '<div class="tag-row">' + "".join(
+                    f'<span class="etag">{escape(t)}</span>' for t in tags_item
+                ) + '</div>'
+
+            # Catatan editor
+            editor_note = item.get("catatan_editor","").strip()
+            editor_html = ""
+            if editor_note:
+                editor_html = f'''<div class="editor-note">
+                  <div class="editor-note-lbl">Catatan Editor</div>
+                  <div class="editor-note-text">{c(editor_note)}</div>
+                </div>'''
+
+            # Disclaimer
+            disc_html = ""
+            if item.get("pakai_disclaimer"):
+                disc_html = '''<div class="disc-box">
+                  <span class="disc-icon">&#9888;</span>
+                  <span class="disc-text">Ini merupakan perkiraan/prediksi Tim Analis T.I.M NEWS dan bukan merupakan rekomendasi investasi.</span>
+                </div>'''
+
             st.markdown(f"""
             <div class="card {warna}">
               <div class="cbody">
@@ -355,9 +462,12 @@ with col_feed:
                   <span class="sent-b {warna}">{c(sent_lbl)}</span>
                 </div>
                 {dampak_html(dampak)}
+                {tags_html}
                 {instr_html}
                 <div class="news-title">{c(item.get('judul',''))}</div>
                 <div class="news-desc">{c(item.get('deskripsi',''))}</div>
+                {editor_html}
+                {disc_html}
                 <div class="cmeta">
                   <span class="msrc">T.I.M NEWS</span>
                   <span class="mdot"></span>
@@ -393,9 +503,10 @@ with col_feed:
     </div>""", unsafe_allow_html=True)
 
 # ══════════════
-# KOLOM ADMIN
+# KOLOM ADMIN — hanya muncul saat admin_mode ON
 # ══════════════
-with col_admin:
+if st.session_state.admin_mode and col_admin is not None:
+  with col_admin:
     st.markdown("""
     <div class="adm-box">
       <div class="adm-head">
@@ -486,6 +597,30 @@ with col_admin:
     instr_in = st.multiselect("i", label_visibility="collapsed",
         options=INSTRUMEN_OPTIONS, placeholder="Pilih instrumen...", key="f_instr")
 
+    # Tags ekonomi
+    st.markdown('<div class="flbl">Tag Ekonomi / Event</div>', unsafe_allow_html=True)
+    tags_in = st.multiselect("tg", label_visibility="collapsed",
+        options=TAG_OPTIONS, placeholder="Pilih tag...", key="f_tags")
+
+    # Catatan editor (opsional)
+    st.markdown('<div class="flbl">Catatan Editor <span style="color:var(--dim);font-size:.45rem;letter-spacing:1px"> (OPSIONAL)</span></div>', unsafe_allow_html=True)
+    editor_in = st.text_area("e", label_visibility="collapsed",
+        placeholder="Konteks tambahan dari tim analis (opsional)...",
+        height=60, key="f_editor")
+
+    # Toggle disclaimer
+    st.markdown('<div class="fsep"></div>', unsafe_allow_html=True)
+    disc_in = st.checkbox(
+        "Tambahkan disclaimer prediksi/perkiraan",
+        key="f_disc",
+        help="Menambahkan catatan bahwa ini adalah prediksi/perkiraan, bukan rekomendasi"
+    )
+    if disc_in:
+        st.markdown('''<div class="disc-box" style="margin-top:.3rem">
+          <span class="disc-icon">&#9888;</span>
+          <span class="disc-text">Ini merupakan perkiraan/prediksi Tim Analis T.I.M NEWS dan bukan merupakan rekomendasi investasi.</span>
+        </div>''', unsafe_allow_html=True)
+
     st.markdown('<div class="fsep"></div>', unsafe_allow_html=True)
 
     # PUBLISH
@@ -493,20 +628,25 @@ with col_admin:
     if st.button("PUBLISH BERITA", key="pub", use_container_width=True):
         if judul_in.strip() and desk_in.strip():
             wkt_str = f"{tgl_in.strftime('%d %b %Y')} {jam_in}:{mnt_in} WIB"
+            # Filter "Tidak Ada / None" dari instrumen
+            instr_clean = [x for x in instr_in if x != "Tidak Ada / None"]
             berita_baru = {
-                "id":            str(len(st.session_state.berita)),
-                "judul":         judul_in.strip(),
-                "deskripsi":     desk_in.strip(),
-                "sumber":        "T.I.M NEWS",
-                "waktu_terbit":  wkt_str,
-                "sentimen":      sent_in,
-                "kategori_key":  kat_in,
-                "kategori_label":KATEGORI_LABEL[kat_in],
-                "instrumen":     instr_in,
-                "dampak":        d_aktif,
+                "id":              str(len(st.session_state.berita)),
+                "judul":           judul_in.strip(),
+                "deskripsi":       desk_in.strip(),
+                "sumber":          "T.I.M NEWS",
+                "waktu_terbit":    wkt_str,
+                "sentimen":        sent_in,
+                "kategori_key":    kat_in,
+                "kategori_label":  KATEGORI_LABEL[kat_in],
+                "instrumen":       instr_clean,
+                "dampak":          d_aktif,
+                "tags":            tags_in,
+                "catatan_editor":  editor_in.strip(),
+                "pakai_disclaimer":disc_in,
             }
             st.session_state.berita.insert(0, berita_baru)
-            for k in ["f_judul","f_desk","f_instr"]:
+            for k in ["f_judul","f_desk","f_instr","f_tags","f_editor","f_disc"]:
                 if k in st.session_state: del st.session_state[k]
             st.success("Berita dipublish!")
             st.rerun()
