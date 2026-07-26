@@ -1,7 +1,17 @@
+import re
+import html as _html
 from datetime import datetime
 
 def teks_aman(value, default=""):
     return value if value is not None else default
+
+def strip_html_utils(teks: str) -> str:
+    """Bersihkan HTML tag dari teks API."""
+    if not teks: return ""
+    teks = _html.unescape(teks)
+    teks = re.sub(r'<[^>]+>', ' ', teks)
+    teks = re.sub(r'\s+', ' ', teks).strip()
+    return teks
 
 def parse_waktu(value):
     if not value:
@@ -29,13 +39,38 @@ def hapus_duplikat(items):
     return hasil
 
 def normalisasi_artikel(item):
+    """
+    Normalisasi artikel dari API.
+    Prioritaskan field terpanjang untuk deskripsi agar
+    konten tidak terpotong.
+    """
+    judul = strip_html_utils(teks_aman(item.get("title")))
+
+    # Ambil deskripsi dari field terpanjang yang tersedia
+    candidates = [
+        item.get("description",""),
+        item.get("snippet",""),
+        item.get("content",""),
+        item.get("text",""),        # FMP
+        item.get("body",""),
+    ]
+    deskripsi = ""
+    for c in candidates:
+        cleaned = strip_html_utils(teks_aman(c))
+        if len(cleaned) > len(deskripsi):
+            deskripsi = cleaned
+
+    # Potong di 600 karakter agar tidak terlalu panjang tapi tetap informatif
+    if len(deskripsi) > 600:
+        deskripsi = deskripsi[:597] + "..."
+
     return {
-        "judul": teks_aman(item.get("title")),
-        "deskripsi": teks_aman(item.get("description") or item.get("snippet")),
-        "url": teks_aman(item.get("url")),
-        "sumber": teks_aman(item.get("source") or item.get("source_name")),
-        "waktu_terbit": teks_aman(item.get("published_at") or item.get("publishedAt")),
-        "raw": item,
+        "judul":       judul,
+        "deskripsi":   deskripsi,
+        "url":         teks_aman(item.get("url")),
+        "sumber":      teks_aman(item.get("source") or item.get("source_name") or item.get("site")),
+        "waktu_terbit":teks_aman(item.get("published_at") or item.get("publishedAt") or item.get("publishedDate")),
+        "raw":         item,
     }
 
 def cocok_keyword(teks, daftar_keyword):
