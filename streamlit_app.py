@@ -1,4 +1,5 @@
 import html
+import re as _re
 from datetime import datetime, timezone, timedelta
 from html import escape
 
@@ -149,7 +150,7 @@ div[data-testid="stButton"] > button:active {
 .instr-tag { font-family:'JetBrains Mono',monospace; font-size:.5rem; font-weight:600; color:var(--purple); background:rgba(96,32,204,.1); border:1px solid rgba(96,32,204,.25); border-radius:2px; padding:.05rem .35rem; }
 
 .news-title { font-size:.88rem; font-weight:700; color:var(--text); line-height:1.45; margin-bottom:.45rem; }
-.news-desc  { font-size:.78rem; color:var(--text-muted); line-height:1.62; margin-bottom:.6rem; }
+.news-desc  { font-size:.78rem; color:var(--text-muted); line-height:1.62; margin-bottom:.6rem; max-height:none; }
 .card-meta  { display:flex; align-items:center; gap:.35rem; font-family:'JetBrains Mono',monospace; font-size:.56rem; color:var(--text-dim); flex-wrap:wrap; }
 .meta-src   { color:var(--text-muted); font-weight:600; }
 .meta-dot   { width:3px; height:3px; border-radius:50%; background:var(--text-dim); flex-shrink:0; }
@@ -249,13 +250,23 @@ KATEGORI_ADMIN = {
 # ══════════════════════════════════════════════════════════════════
 # HELPERS
 # ══════════════════════════════════════════════════════════════════
+def strip_html(teks: str) -> str:
+    """Hapus semua HTML tag dan decode entitas — fix <div class='news-title'> tampil mentah."""
+    if not teks: return ""
+    teks = html.unescape(teks)
+    teks = _re.sub(r'<[^>]+>', ' ', teks)
+    teks = _re.sub(r'\s+', ' ', teks).strip()
+    return teks
+
 @st.cache_data(ttl=3600, max_entries=200)
 def terjemahkan(teks: str) -> str:
     if not teks: return ""
     try:
-        return GoogleTranslator(source='en', target='id').translate(html.unescape(teks))
+        bersih = strip_html(teks)
+        if not bersih: return ""
+        return GoogleTranslator(source='en', target='id').translate(bersih)
     except Exception:
-        return teks
+        return strip_html(teks)
 
 def muat_data(kategori: str) -> dict:
     initialize_news_cache()
@@ -279,8 +290,9 @@ def sentimen_teks(text: str) -> str:
 SENT_LBL = {"bullish":"+ BULLISH","bearish":"- BEARISH","neutral":"~ NETRAL"}
 
 def clean(v: str) -> str:
-    """Bersihkan teks untuk HTML — tidak double-escape."""
-    return escape(str(v)) if v else ""
+    """Strip HTML tag dulu, lalu escape untuk output aman."""
+    if not v: return ""
+    return escape(strip_html(str(v)))
 
 def fmt_dt(s: str) -> str:
     try:
