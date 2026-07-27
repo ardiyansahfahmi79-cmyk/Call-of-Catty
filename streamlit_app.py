@@ -349,10 +349,22 @@ INSTRUMEN = [
     "S&P 500","NASDAQ","Dow Jones","IHSG","Nikkei 225","Hang Seng",
     "Minyak WTI","Minyak Brent","Gas Alam",
 ]
+# Tag dikelompokkan: Mata Uang | Komoditas | Aset | Event Makro AS | Event Global | Indonesia
 TAGS = [
-    "USD","EUR","Gold","Oil","Crypto",
-    "NFP","CPI","FOMC","ECB",
-    "BOJ","GDP","PPI","PMI","Retail Sales","Fed Minutes",
+    # Mata uang
+    "USD","EUR","IDR","JPY","GBP","CNY",
+    # Komoditas & aset
+    "Gold","Silver","Oil","Gas","Crypto","Saham",
+    # Event makro AS
+    "NFP","CPI","PPI","PCE","GDP","FOMC","Fed Minutes","Retail Sales",
+    # Event bank sentral global
+    "ECB","BOJ","BI Rate","PBOC",
+    # Indikator makro
+    "PMI","Unemployment","Trade Balance","Inflation",
+    # Indonesia
+    "IHSG","Rupiah","BI","BPS","APBN",
+    # Geopolitik & sentimen
+    "Tariff","Sanctions","War Risk","Risk On","Risk Off",
 ]
 DAMPAK_CFG = {
     1:{"cls":"d1","stars":"★","rest":"☆☆","label":"DAMPAK RENDAH","color":"#00ff88","glow":"rgba(0,255,136,.22)"},
