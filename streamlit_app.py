@@ -239,6 +239,65 @@ div[data-testid="stButton"]>button:active {
 .msrc { color:var(--muted); font-weight:600; }
 .mdot { width:3px; height:3px; border-radius:50%; background:var(--dim); flex-shrink:0; }
 
+/* ── TOMBOL DETAIL DALAM KARTU ── */
+.card-action {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  padding: .6rem .95rem .65rem 1.15rem;
+  border-top: 1px solid rgba(255,255,255,.04);
+  cursor: pointer;
+  transition: background .18s;
+}
+.card-action:hover { background: rgba(0,200,240,.03); }
+
+.action-circle {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  font-size: .65rem; font-weight: 700;
+  transition: all .2s;
+}
+.circle-open {
+  background: rgba(0,200,240,.12);
+  border: 1.5px solid rgba(0,200,240,.5);
+  color: #00c8f0;
+  box-shadow: 0 0 10px rgba(0,200,240,.2);
+}
+.circle-open:hover {
+  background: rgba(0,200,240,.22);
+  box-shadow: 0 0 18px rgba(0,200,240,.35);
+}
+.circle-close {
+  background: rgba(255,24,64,.12);
+  border: 1.5px solid rgba(255,24,64,.5);
+  color: #ff1840;
+  box-shadow: 0 0 10px rgba(255,24,64,.22);
+}
+.circle-close:hover {
+  background: rgba(255,24,64,.22);
+  box-shadow: 0 0 18px rgba(255,24,64,.38);
+}
+
+.action-text-open {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .57rem; font-weight: 600;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--accent);
+}
+.action-text-close {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .57rem; font-weight: 600;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: #ff1840;
+}
+.action-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .46rem; color: var(--dim);
+  letter-spacing: 1px; margin-top: .08rem;
+}
+
 /* DETAIL PANEL */
 .det {
   border-top:1px solid rgba(0,200,240,.08);
@@ -396,7 +455,7 @@ def fmt_dt(s: str) -> str:
     except:
         return str(s)
 
-def build_card_html(item: dict) -> str:
+def build_card_html(item: dict, kid: str, show_detail: bool) -> str:
     """Bangun HTML kartu — semua bagian dirakit di Python, lalu dirender sekali."""
     warna     = item.get("sentimen","neutral")
     tag       = item.get("kategori_label","T.I.M NEWS")
@@ -453,6 +512,46 @@ def build_card_html(item: dict) -> str:
             f'</div>'
         )
 
+    # Action button dalam kartu
+    if show_detail:
+        action_html = (
+            f'<div class="card-action">'
+            f'  <div class="action-circle circle-close">&#10005;</div>'
+            f'  <div>'
+            f'    <div class="action-text-close">Sembunyikan Berita</div>'
+            f'    <div class="action-sub">Tutup ringkasan berita ini</div>'
+            f'  </div>'
+            f'</div>'
+        )
+    else:
+        action_html = (
+            f'<div class="card-action">'
+            f'  <div class="action-circle circle-open">&#9654;</div>'
+            f'  <div>'
+            f'    <div class="action-text-open">Baca Selengkapnya</div>'
+            f'    <div class="action-sub">Buka ringkasan berita & analisis</div>'
+            f'  </div>'
+            f'</div>'
+        )
+
+    # Detail panel (muncul di dalam kartu jika show_detail True)
+    detail_inner = ""
+    if show_detail:
+        instrumen_d = [x for x in item.get("instrumen",[]) if x != "Tidak Ada / None"]
+        instr_str_d = ", ".join(instrumen_d) if instrumen_d else "Tidak ada"
+        dcfg_d = DAMPAK_CFG.get(dampak, DAMPAK_CFG[1])
+        detail_inner = (
+            f'<div class="det">'
+            f'  <div class="det-lbl">Ringkasan Berita</div>'
+            f'  <div class="det-txt">{tx(deskripsi)}</div>'
+            f'  <div class="det-foot">'
+            f'    Instrumen: {tx(instr_str_d)} &nbsp;|&nbsp; '
+            f'    Dampak: {dcfg_d["stars"]} {dcfg_d["label"]} &nbsp;|&nbsp; '
+            f'    {tx(wkt)}'
+            f'  </div>'
+            f'</div>'
+        )
+
     html = (
         f'<div class="card {warna}">'
         f'  <div class="ctop">'
@@ -474,6 +573,8 @@ def build_card_html(item: dict) -> str:
         f'      <span>{tx(wkt)}</span>'
         f'    </div>'
         f'  </div>'
+        f'  {action_html}'
+        f'  {detail_inner}'
         f'</div>'
     )
     return html
@@ -584,29 +685,51 @@ with col_feed:
             kid = f"{kat_aktif}_{item.get('id','')}"
 
             # Render kartu — HTML dirakit di Python, tidak ada interpolasi double
-            st.markdown(build_card_html(item), unsafe_allow_html=True)
+            show_det = st.session_state.show_detail.get(kid, False)
+            st.markdown(build_card_html(item, kid, show_det), unsafe_allow_html=True)
 
-            # Tombol detail
-            lbl_d = "TUTUP DETAIL" if st.session_state.show_detail.get(kid) else "LIHAT DETAIL"
-            if st.button(lbl_d, key=f"d_{kid}", use_container_width=True):
-                st.session_state.show_detail[kid] = not st.session_state.show_detail.get(kid, False)
-                st.rerun()
-
-            if st.session_state.show_detail.get(kid, False):
-                instrumen_det = [x for x in item.get("instrumen",[]) if x != "Tidak Ada / None"]
-                instr_str = ", ".join(instrumen_det) if instrumen_det else "Tidak ada"
-                dcfg = DAMPAK_CFG.get(item.get("dampak",1), DAMPAK_CFG[1])
-                st.markdown(
-                    f'<div class="det">'
-                    f'<div class="det-lbl">Detail Berita</div>'
-                    f'<div class="det-txt">{tx(item.get("deskripsi",""))}</div>'
-                    f'<div class="det-foot">'
-                    f'Instrumen: {tx(instr_str)} &nbsp;|&nbsp; '
-                    f'Dampak: {dcfg["stars"]} {dcfg["label"]} &nbsp;|&nbsp; '
-                    f'{tx(item.get("waktu_terbit",""))}'
-                    f'</div></div>',
-                    unsafe_allow_html=True
+            # Tombol styled menyatu dengan kartu — override CSS per-key
+            is_open = st.session_state.show_detail.get(kid, False)
+            if is_open:
+                btn_label = "✕  Sembunyikan Berita"
+                btn_style = (
+                    "background:rgba(255,24,64,.1)!important;"
+                    "color:#ff1840!important;"
+                    "border-color:rgba(255,24,64,.4)!important;"
+                    "box-shadow:0 0 12px rgba(255,24,64,.18)!important;"
+                    "border-radius:0 0 7px 7px!important;"
+                    "border-top:1px solid rgba(255,24,64,.15)!important;"
+                    "margin-top:-2px!important;"
+                    "font-size:.58rem!important;"
+                    "letter-spacing:2px!important;"
+                    "padding:.4rem 1rem!important;"
+                    "width:100%!important;"
                 )
+            else:
+                btn_label = "▶  Baca Selengkapnya"
+                btn_style = (
+                    "background:rgba(0,200,240,.07)!important;"
+                    "color:#00c8f0!important;"
+                    "border-color:rgba(0,200,240,.3)!important;"
+                    "box-shadow:0 0 10px rgba(0,200,240,.12)!important;"
+                    "border-radius:0 0 7px 7px!important;"
+                    "border-top:1px solid rgba(0,200,240,.1)!important;"
+                    "margin-top:-2px!important;"
+                    "font-size:.58rem!important;"
+                    "letter-spacing:2px!important;"
+                    "padding:.4rem 1rem!important;"
+                    "width:100%!important;"
+                )
+            safe_kid = kid.replace('-','_').replace('.','_')
+            st.markdown(
+                f'<style>div[data-testid="stButton"]:has(>button[data-testid="baseButton-secondary"])#btn_{safe_kid},'
+                f'button[kind="secondary"][aria-label="{btn_label}"] {{'
+                f'{btn_style}}}</style>',
+                unsafe_allow_html=True
+            )
+            if st.button(btn_label, key=f"d_{kid}", use_container_width=True):
+                st.session_state.show_detail[kid] = not is_open
+                st.rerun()
 
     st.markdown(
         '<div class="ftr"><span class="brand">AEROVULPIS</span> | '
