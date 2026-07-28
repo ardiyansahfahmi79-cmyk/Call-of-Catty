@@ -552,10 +552,26 @@ else:
 # ══════════════════════════════════════════════════════════════════
 with col_feed:
     if not items:
+        if kat_aktif == "all":
+            empty_msg = (
+                "Tim Aerovulpis & T.I.M NEWS sedang menyiapkan berita terkini untuk Anda. "
+                "Mohon bersabar — update akan segera hadir."
+            )
+        else:
+            empty_msg = (
+                f"Belum ada update untuk kategori <strong>{tx(cat_lbl)}</strong> saat ini. "
+                "Tim T.I.M NEWS sedang memantau perkembangan pasar dan akan segera hadir."
+            )
         st.markdown(
-            f'<div class="empty"><h3>Belum Ada Berita</h3>'
-            f'<p>Tambahkan berita untuk kategori <strong>{tx(cat_lbl)}</strong>'
-            f' melalui panel T.I.M NEWS.</p></div>',
+            f'''<div class="empty">
+              <div style="font-size:1.6rem;opacity:.18;margin-bottom:.8rem">&#9711;</div>
+              <h3>Sedang Disiapkan</h3>
+              <p>{empty_msg}</p>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:.5rem;
+                          color:var(--dim);letter-spacing:2px;margin-top:.8rem">
+                T.I.M NEWS | AEROVULPIS INTELLIGENCE
+              </div>
+            </div>''',
             unsafe_allow_html=True
         )
     else:
