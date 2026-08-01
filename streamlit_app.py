@@ -233,19 +233,7 @@ st.markdown("""
 .oj-socmed-card.timnews  { border:1px solid rgba(0,212,255,.2); }
 .oj-socmed-card.dynamihatch { border:1px solid rgba(0,255,136,.2); }
 .oj-socmed-card.instagram { border:1px solid rgba(225,48,108,.2); }
-.oj-socmed-card:hover { transform:translateY(-3px); }
-.oj-socmed-card.timnews:hover {
-    border-color:rgba(0,212,255,.5);
-    box-shadow:0 8px 28px rgba(0,212,255,.1);
-}
-.oj-socmed-card.dynamihatch:hover {
-    border-color:rgba(0,255,136,.5);
-    box-shadow:0 8px 28px rgba(0,255,136,.1);
-}
-.oj-socmed-card.instagram:hover {
-    border-color:rgba(225,48,108,.5);
-    box-shadow:0 8px 28px rgba(225,48,108,.1);
-}
+
 .oj-socmed-platform {
     font-family:'Orbitron',sans-serif; font-size:.52rem;
     letter-spacing:3px; text-transform:uppercase;
@@ -276,21 +264,21 @@ st.markdown("""
     text-decoration:none; font-weight:600;
     transition:all .18s; cursor:pointer;
 }
-.timnews .oj-socmed-btn {
+.oj-socmed-btn.timnews {
     background:rgba(0,212,255,.1); color:#00d4ff;
     border:1px solid rgba(0,212,255,.3);
 }
-.timnews .oj-socmed-btn:hover { background:rgba(0,212,255,.2); }
-.dynamihatch .oj-socmed-btn {
+.oj-socmed-btn.timnews:hover { background:rgba(0,212,255,.2); }
+.oj-socmed-btn.dynamihatch {
     background:rgba(0,255,136,.08); color:#00ff88;
     border:1px solid rgba(0,255,136,.25);
 }
-.dynamihatch .oj-socmed-btn:hover { background:rgba(0,255,136,.16); }
-.instagram .oj-socmed-btn {
+.oj-socmed-btn.dynamihatch:hover { background:rgba(0,255,136,.16); }
+.oj-socmed-btn.instagram {
     background:rgba(225,48,108,.08); color:#e1306c;
     border:1px solid rgba(225,48,108,.25);
 }
-.instagram .oj-socmed-btn:hover { background:rgba(225,48,108,.16); }
+.oj-socmed-btn.instagram:hover { background:rgba(225,48,108,.16); }
 .oj-icon { font-size:.75rem; }
 
 .oj-quote {
@@ -471,32 +459,38 @@ st.markdown('<div class="oj-sec-title">Ikuti Perjalanan Kami</div>', unsafe_allo
 st.markdown("""
 <div class="oj-socmed-grid">
 
-<a class="oj-socmed-card timnews"
-href="https://vm.tiktok.com/ZS9hRjU5FKjcM-Gh63T/"
-target="_blank" rel="noopener noreferrer">
+<div class="oj-socmed-card timnews">
 <div class="oj-socmed-platform">TikTok</div>
 <div class="oj-socmed-name">T.I.M NEWS</div>
 <div class="oj-socmed-desc">Terminal Intelijen Pasar · Berita &amp; Analisis</div>
-<span class="oj-socmed-btn"><span class="oj-icon">&#9654;</span> Buka TikTok</span>
-</a>
-
-<a class="oj-socmed-card dynamihatch"
-href="https://vm.tiktok.com/ZS9hRjbGvmAtc-keGWq/"
+<a class="oj-socmed-btn timnews"
+href="https://vm.tiktok.com/ZS9hRjU5FKjcM-Gh63T/"
 target="_blank" rel="noopener noreferrer">
+<span class="oj-icon">&#9654;</span> Buka TikTok
+</a>
+</div>
+
+<div class="oj-socmed-card dynamihatch">
 <div class="oj-socmed-platform">TikTok</div>
 <div class="oj-socmed-name">DynamiHatch</div>
 <div class="oj-socmed-desc">Technology · Inovasi Digital Indonesia</div>
-<span class="oj-socmed-btn"><span class="oj-icon">&#9654;</span> Buka TikTok</span>
-</a>
-
-<a class="oj-socmed-card instagram"
-href="https://www.instagram.com/dynamihatch?igsh=MTd1NmVkcHB2ODV3OQ=="
+<a class="oj-socmed-btn dynamihatch"
+href="https://vm.tiktok.com/ZS9hRjbGvmAtc-keGWq/"
 target="_blank" rel="noopener noreferrer">
+<span class="oj-icon">&#9654;</span> Buka TikTok
+</a>
+</div>
+
+<div class="oj-socmed-card instagram">
 <div class="oj-socmed-platform">Instagram</div>
 <div class="oj-socmed-name">DynamiHatch</div>
 <div class="oj-socmed-desc">Technology · Inovasi Digital Indonesia</div>
-<span class="oj-socmed-btn"><span class="oj-icon">&#9654;</span> Buka Instagram</span>
+<a class="oj-socmed-btn instagram"
+href="https://www.instagram.com/dynamihatch?igsh=MTd1NmVkcHB2ODV3OQ=="
+target="_blank" rel="noopener noreferrer">
+<span class="oj-icon">&#9654;</span> Buka Instagram
 </a>
+</div>
 
 </div>
 """, unsafe_allow_html=True)
