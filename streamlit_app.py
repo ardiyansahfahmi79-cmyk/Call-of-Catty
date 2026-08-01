@@ -1,15 +1,22 @@
 """
-STREAMLIT APP — Aerovulpis v4.1 (Our Journey Standalone)
-Ditaruh langsung sebagai streamlit_app.py di GitHub
+streamlit_app.py — OUR JOURNEY · Aerovulpis v4.1
+Standalone page, deploy langsung ke Streamlit Cloud / GitHub.
 """
 
 import streamlit as st
 
+st.set_page_config(
+    page_title="Our Journey · Aerovulpis",
+    page_icon="🦊",
+    layout="centered",
+    initial_sidebar_state="collapsed",
+)
+
+# ── CSS ──
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Inter:wght@300;400;500;600&display=swap');
 
-/* ── SCANLINE overlay ── */
 .oj-wrap::before {
     content:'';
     position:fixed; inset:0; pointer-events:none; z-index:0;
@@ -22,7 +29,6 @@ st.markdown("""
     );
 }
 
-/* ── HERO ── */
 .oj-hero {
     text-align:center;
     padding: 2.5rem 1rem 1.5rem;
@@ -51,7 +57,6 @@ st.markdown("""
     opacity:.35;
 }
 
-/* ── SECTION TITLE ── */
 .oj-sec-title {
     font-family:'Orbitron',sans-serif;
     font-size:.8rem; font-weight:700; letter-spacing:4px;
@@ -66,7 +71,6 @@ st.markdown("""
     content:''; flex:1; height:1px; background:rgba(0,212,255,.15);
 }
 
-/* ── STATUS BADGE ── */
 .oj-status-bar {
     display:flex; align-items:center; justify-content:center;
     gap:1.5rem; flex-wrap:wrap;
@@ -90,7 +94,6 @@ st.markdown("""
 .oj-stat-item { color:rgba(136,153,187,.7); }
 .oj-stat-item span { color:#00d4ff; font-weight:600; }
 
-/* ── FOUNDER CARD ── */
 .oj-founder-card {
     background:linear-gradient(160deg, #080f1c 0%, #050b16 100%);
     border:1px solid rgba(0,212,255,.2);
@@ -145,7 +148,6 @@ st.markdown("""
 }
 .oj-founder-bio strong { color:#00d4ff; font-weight:600; }
 
-/* ── MISI BOX ── */
 .oj-mission-box {
     background:rgba(0,255,136,.04);
     border:1px solid rgba(0,255,136,.15);
@@ -162,7 +164,6 @@ st.markdown("""
     color:rgba(160,220,180,.8); line-height:1.7; font-style:italic;
 }
 
-/* ── DEVELOPMENT STATUS ── */
 .oj-dev-card {
     background:linear-gradient(160deg,#06101f,#040c18);
     border:1px solid rgba(255,170,0,.18);
@@ -172,7 +173,7 @@ st.markdown("""
 .oj-dev-card::before {
     content:'';
     position:absolute; top:0; left:0;
-    width:4px; height:100%; background:var(--warn,#e8b000);
+    width:4px; height:100%; background:#e8b000;
 }
 .oj-dev-badge {
     display:inline-flex; align-items:center; gap:.4rem;
@@ -194,9 +195,7 @@ st.markdown("""
     color:rgba(180,195,215,.8); line-height:1.76;
 }
 .oj-dev-text strong { color:#e8b000; }
-.oj-progress-wrap {
-    margin-top:1.1rem;
-}
+.oj-progress-wrap { margin-top:1.1rem; }
 .oj-progress-row {
     display:flex; align-items:center; gap:.8rem;
     margin-bottom:.5rem;
@@ -219,7 +218,7 @@ st.markdown("""
     color:#00d4ff; width:32px; text-align:right; flex-shrink:0;
 }
 
-/* ── SOCMED CARD ── */
+/* ── SOCMED GRID ── */
 .oj-socmed-grid {
     display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1.5rem;
 }
@@ -231,15 +230,10 @@ st.markdown("""
     text-decoration:none; display:block;
     transition:transform .2s, box-shadow .2s, border-color .2s;
 }
-.oj-socmed-card.timnews {
-    border:1px solid rgba(0,212,255,.2);
-}
-.oj-socmed-card.dynamihatch {
-    border:1px solid rgba(0,255,136,.2);
-}
-.oj-socmed-card:hover {
-    transform:translateY(-3px);
-}
+.oj-socmed-card.timnews  { border:1px solid rgba(0,212,255,.2); }
+.oj-socmed-card.dynamihatch { border:1px solid rgba(0,255,136,.2); }
+.oj-socmed-card.instagram { border:1px solid rgba(225,48,108,.2); }
+.oj-socmed-card:hover { transform:translateY(-3px); }
 .oj-socmed-card.timnews:hover {
     border-color:rgba(0,212,255,.5);
     box-shadow:0 8px 28px rgba(0,212,255,.1);
@@ -248,52 +242,57 @@ st.markdown("""
     border-color:rgba(0,255,136,.5);
     box-shadow:0 8px 28px rgba(0,255,136,.1);
 }
+.oj-socmed-card.instagram:hover {
+    border-color:rgba(225,48,108,.5);
+    box-shadow:0 8px 28px rgba(225,48,108,.1);
+}
 .oj-socmed-platform {
     font-family:'Orbitron',sans-serif; font-size:.52rem;
     letter-spacing:3px; text-transform:uppercase;
     margin-bottom:.5rem; font-weight:700;
 }
-.timnews .oj-socmed-platform { color:rgba(0,212,255,.5); }
+.timnews   .oj-socmed-platform { color:rgba(0,212,255,.5); }
 .dynamihatch .oj-socmed-platform { color:rgba(0,255,136,.5); }
+.instagram .oj-socmed-platform { color:rgba(225,48,108,.6); }
 .oj-socmed-name {
     font-family:'Orbitron',sans-serif; font-size:.9rem;
     font-weight:700; letter-spacing:1.5px; margin-bottom:.25rem;
 }
-.timnews .oj-socmed-name { color:#00d4ff; }
+.timnews   .oj-socmed-name { color:#00d4ff; }
 .dynamihatch .oj-socmed-name { color:#00ff88; }
+.instagram .oj-socmed-name { color:#e1306c; }
 .oj-socmed-desc {
     font-family:'Share Tech Mono',monospace; font-size:.62rem;
     letter-spacing:1px; margin-bottom:.9rem;
 }
-.timnews .oj-socmed-desc { color:rgba(0,212,255,.5); }
+.timnews   .oj-socmed-desc { color:rgba(0,212,255,.5); }
 .dynamihatch .oj-socmed-desc { color:rgba(0,255,136,.5); }
+.instagram .oj-socmed-desc { color:rgba(225,48,108,.5); }
 .oj-socmed-btn {
     display:inline-flex; align-items:center; gap:.4rem;
     font-family:'Share Tech Mono',monospace; font-size:.62rem;
     letter-spacing:2px; text-transform:uppercase;
     padding:.3rem .75rem; border-radius:3px;
     text-decoration:none; font-weight:600;
-    transition:all .18s;
+    transition:all .18s; cursor:pointer;
 }
 .timnews .oj-socmed-btn {
     background:rgba(0,212,255,.1); color:#00d4ff;
     border:1px solid rgba(0,212,255,.3);
 }
-.timnews .oj-socmed-btn:hover {
-    background:rgba(0,212,255,.2);
-}
+.timnews .oj-socmed-btn:hover { background:rgba(0,212,255,.2); }
 .dynamihatch .oj-socmed-btn {
     background:rgba(0,255,136,.08); color:#00ff88;
     border:1px solid rgba(0,255,136,.25);
 }
-.dynamihatch .oj-socmed-btn:hover {
-    background:rgba(0,255,136,.16);
+.dynamihatch .oj-socmed-btn:hover { background:rgba(0,255,136,.16); }
+.instagram .oj-socmed-btn {
+    background:rgba(225,48,108,.08); color:#e1306c;
+    border:1px solid rgba(225,48,108,.25);
 }
-.oj-tiktok-icon {
-    font-size:.75rem;
-}
+.instagram .oj-socmed-btn:hover { background:rgba(225,48,108,.16); }
+.oj-icon { font-size:.75rem; }
 
-/* ── QUOTE BOX ── */
 .oj-quote {
     background:linear-gradient(135deg,rgba(0,212,255,.04),rgba(0,255,136,.03));
     border:1px solid rgba(0,212,255,.12);
@@ -311,7 +310,6 @@ st.markdown("""
     letter-spacing:2px; color:rgba(0,212,255,.5); text-align:right;
 }
 
-/* ── FOOTER ── */
 .oj-footer {
     text-align:center; padding:1.5rem 1rem 1rem;
     border-top:1px solid rgba(0,212,255,.08);
@@ -326,166 +324,179 @@ st.markdown("""
     font-family:'Share Tech Mono',monospace; font-size:.58rem;
     color:rgba(136,153,187,.35); letter-spacing:1.5px;
 }
+
+#MainMenu, footer, header { visibility: hidden; }
+.block-container { padding-top: 1rem; padding-bottom: 0; }
 </style>
 """, unsafe_allow_html=True)
 
 # ── HERO ──
 st.markdown("""
 <div class="oj-wrap">
-  <div class="oj-hero">
-    <div class="oj-hero-label">// Aerovulpis · DynamiHatch · 2026</div>
-    <h1>OUR JOURNEY</h1>
-    <div class="oj-hero-sub">Membangun Terminal Intelijen Pasar untuk Indonesia</div>
-    <div class="oj-hero-line"></div>
-  </div>
-
-  <div class="oj-status-bar">
-    <div class="oj-live-dot"></div>
-    <div class="oj-stat-item">STATUS: <span>AKTIF DIKEMBANGKAN</span></div>
-    <div class="oj-stat-item">|</div>
-    <div class="oj-stat-item">VERSI: <span>v4.1 ULTIMATE</span></div>
-    <div class="oj-stat-item">|</div>
-    <div class="oj-stat-item">PLATFORM: <span>AEROVULPIS.MY.ID</span></div>
-  </div>
+<div class="oj-hero">
+<div class="oj-hero-label">// Aerovulpis · DynamiHatch · 2026</div>
+<h1>OUR JOURNEY</h1>
+<div class="oj-hero-sub">Membangun Terminal Intelijen Pasar untuk Indonesia</div>
+<div class="oj-hero-line"></div>
+</div>
+<div class="oj-status-bar">
+<div class="oj-live-dot"></div>
+<div class="oj-stat-item">STATUS: <span>AKTIF DIKEMBANGKAN</span></div>
+<div class="oj-stat-item">|</div>
+<div class="oj-stat-item">VERSI: <span>v4.1 ULTIMATE</span></div>
+<div class="oj-stat-item">|</div>
+<div class="oj-stat-item">PLATFORM: <span>AEROVULPIS.MY.ID</span></div>
+</div>
 </div>
 """, unsafe_allow_html=True)
 
 # ── FOUNDER ──
-st.markdown('<div class="oj-sec-title">Founder & Visioner</div>',
-            unsafe_allow_html=True)
-
+st.markdown('<div class="oj-sec-title">Founder & Visioner</div>', unsafe_allow_html=True)
 st.markdown("""
 <div class="oj-founder-card">
-  <div class="oj-founder-top">
-    <div class="oj-avatar">F</div>
-    <div>
-      <div class="oj-founder-name">FAHMI</div>
-      <div class="oj-founder-role">CEO &amp; Founder</div>
-      <div class="oj-founder-org">DynamiHatch Technology &nbsp;·&nbsp; Aerovulpis</div>
-    </div>
-  </div>
-
-  <div class="oj-founder-bio">
-    <strong>Fahmi</strong> adalah inisiator di balik lahirnya Aerovulpis — sebuah terminal
-    intelijen pasar yang dirancang khusus untuk trader Indonesia. Berangkat dari keyakinan
-    bahwa <strong>setiap trader Indonesia berhak mendapatkan akses ke analisis berkualitas
-    institusional</strong>, ia membangun ekosistem ini dari nol bersama tim DynamiHatch.
-    <br><br>
-    Melalui <strong>DynamiHatch Technology</strong>, visi ini diwujudkan dalam bentuk
-    platform yang terus berkembang — menggabungkan kecerdasan buatan, data pasar real-time,
-    dan edukasi trading dalam satu ekosistem yang terintegrasi. Setiap fitur yang hadir
-    adalah cerminan dari komitmen untuk menciptakan standar trading yang lebih sehat,
-    lebih cerdas, dan lebih independen di Indonesia.
-  </div>
-
-  <div class="oj-mission-box">
-    <div class="oj-mission-label">Misi Utama</div>
-    <div class="oj-mission-text">
-      "Mendemokratisasi akses ke intelijen pasar kelas dunia — agar setiap trader Indonesia,
-      dari pemula hingga profesional, dapat mengambil keputusan yang lebih terinformasi,
-      lebih terukur, dan lebih percaya diri."
-    </div>
-  </div>
+<div class="oj-founder-top">
+<div class="oj-avatar">F</div>
+<div>
+<div class="oj-founder-name">FAHMI</div>
+<div class="oj-founder-role">CEO &amp; Founder</div>
+<div class="oj-founder-org">DynamiHatch Technology &nbsp;·&nbsp; Aerovulpis</div>
+</div>
+</div>
+<div class="oj-founder-bio">
+<strong>Fahmi</strong> adalah inisiator di balik lahirnya Aerovulpis — sebuah terminal
+intelijen pasar yang dirancang khusus untuk trader Indonesia. Berangkat dari keyakinan
+bahwa <strong>setiap trader Indonesia berhak mendapatkan akses ke analisis berkualitas
+institusional</strong>, ia membangun ekosistem ini dari nol bersama tim DynamiHatch.
+<br><br>
+Melalui <strong>DynamiHatch Technology</strong>, visi ini diwujudkan dalam bentuk
+platform yang terus berkembang — menggabungkan kecerdasan buatan, data pasar real-time,
+dan edukasi trading dalam satu ekosistem yang terintegrasi. Setiap fitur yang hadir
+adalah cerminan dari komitmen untuk menciptakan standar trading yang lebih sehat,
+lebih cerdas, dan lebih independen di Indonesia.
+</div>
+<div class="oj-mission-box">
+<div class="oj-mission-label">Misi Utama</div>
+<div class="oj-mission-text">
+"Mendemokratisasi akses ke intelijen pasar kelas dunia — agar setiap trader Indonesia,
+dari pemula hingga profesional, dapat mengambil keputusan yang lebih terinformasi,
+lebih terukur, dan lebih percaya diri."
+</div>
+</div>
 </div>
 """, unsafe_allow_html=True)
 
 # ── STATUS PENGEMBANGAN ──
-st.markdown('<div class="oj-sec-title">Status Pengembangan</div>',
-            unsafe_allow_html=True)
-
+st.markdown('<div class="oj-sec-title">Status Pengembangan</div>', unsafe_allow_html=True)
 st.markdown("""
 <div class="oj-dev-card">
-  <div class="oj-dev-badge">
-    <div class="oj-dev-badge-dot"></div>
-    PLATFORM AKTIF DIKEMBANGKAN
-  </div>
-  <div class="oj-dev-text">
-    Aerovulpis saat ini berada dalam fase pengembangan aktif. Website berjalan di
-    <strong>aerovulpis.my.id</strong> dan terus diperbarui secara berkala.
-    Setiap pembaruan membawa fitur baru, peningkatan performa, dan penyempurnaan
-    pengalaman pengguna berdasarkan masukan komunitas trader Indonesia.
-    <br><br>
-    Kami percaya bahwa <strong>transparansi adalah fondasi kepercayaan</strong>.
-    Oleh karena itu, perjalanan pengembangan ini kami jalani bersama komunitas —
-    terbuka, iteratif, dan berorientasi pada kebutuhan nyata trader di lapangan.
-  </div>
-
-  <div class="oj-progress-wrap">
-    <div class="oj-progress-row">
-      <div class="oj-progress-label">AI Trade Analysis</div>
-      <div class="oj-progress-bar">
-        <div class="oj-progress-fill" style="width:85%"></div>
-      </div>
-      <div class="oj-progress-pct">85%</div>
-    </div>
-    <div class="oj-progress-row">
-      <div class="oj-progress-label">Market Intelligence</div>
-      <div class="oj-progress-bar">
-        <div class="oj-progress-fill" style="width:78%"></div>
-      </div>
-      <div class="oj-progress-pct">78%</div>
-    </div>
-    <div class="oj-progress-row">
-      <div class="oj-progress-label">Economic Radar</div>
-      <div class="oj-progress-bar">
-        <div class="oj-progress-fill" style="width:70%"></div>
-      </div>
-      <div class="oj-progress-pct">70%</div>
-    </div>
-    <div class="oj-progress-row">
-      <div class="oj-progress-label">Aero Academy</div>
-      <div class="oj-progress-bar">
-        <div class="oj-progress-fill" style="width:60%"></div>
-      </div>
-      <div class="oj-progress-pct">60%</div>
-    </div>
-  </div>
+<div class="oj-dev-badge">
+<div class="oj-dev-badge-dot"></div>
+PLATFORM AKTIF DIKEMBANGKAN
+</div>
+<div class="oj-dev-text">
+Aerovulpis saat ini berada dalam fase pengembangan aktif. Website berjalan di
+<strong>aerovulpis.my.id</strong> dan terus diperbarui secara berkala.
+Setiap pembaruan membawa fitur baru, peningkatan performa, dan penyempurnaan
+pengalaman pengguna berdasarkan masukan komunitas trader Indonesia.
+<br><br>
+Kami percaya bahwa <strong>transparansi adalah fondasi kepercayaan</strong>.
+Oleh karena itu, perjalanan pengembangan ini kami jalani bersama komunitas —
+terbuka, iteratif, dan berorientasi pada kebutuhan nyata trader di lapangan.
+</div>
+<div class="oj-progress-wrap">
+<div class="oj-progress-row">
+<div class="oj-progress-label">Aero Terminal</div>
+<div class="oj-progress-bar"><div class="oj-progress-fill" style="width:67%"></div></div>
+<div class="oj-progress-pct">67%</div>
+</div>
+<div class="oj-progress-row">
+<div class="oj-progress-label">Signal Analysis</div>
+<div class="oj-progress-bar"><div class="oj-progress-fill" style="width:35%"></div></div>
+<div class="oj-progress-pct">35%</div>
+</div>
+<div class="oj-progress-row">
+<div class="oj-progress-label">Market News</div>
+<div class="oj-progress-bar"><div class="oj-progress-fill" style="width:56%"></div></div>
+<div class="oj-progress-pct">56%</div>
+</div>
+<div class="oj-progress-row">
+<div class="oj-progress-label">Market Sessions</div>
+<div class="oj-progress-bar"><div class="oj-progress-fill" style="width:12%"></div></div>
+<div class="oj-progress-pct">12%</div>
+</div>
+<div class="oj-progress-row">
+<div class="oj-progress-label">Broker</div>
+<div class="oj-progress-bar"><div class="oj-progress-fill" style="width:45%"></div></div>
+<div class="oj-progress-pct">45%</div>
+</div>
+<div class="oj-progress-row">
+<div class="oj-progress-label">Chatbot AI</div>
+<div class="oj-progress-bar"><div class="oj-progress-fill" style="width:32%"></div></div>
+<div class="oj-progress-pct">32%</div>
+</div>
+<div class="oj-progress-row">
+<div class="oj-progress-label">Aero Academy</div>
+<div class="oj-progress-bar"><div class="oj-progress-fill" style="width:21%"></div></div>
+<div class="oj-progress-pct">21%</div>
+</div>
+<div class="oj-progress-row">
+<div class="oj-progress-label">Risk Management</div>
+<div class="oj-progress-bar"><div class="oj-progress-fill" style="width:25%"></div></div>
+<div class="oj-progress-pct">25%</div>
+</div>
+<div class="oj-progress-row">
+<div class="oj-progress-label">Economic Radar</div>
+<div class="oj-progress-bar"><div class="oj-progress-fill" style="width:36%"></div></div>
+<div class="oj-progress-pct">36%</div>
+</div>
+</div>
 </div>
 """, unsafe_allow_html=True)
 
 # ── QUOTE ──
 st.markdown("""
 <div class="oj-quote">
-  <div class="oj-quote-text">
-    "Sebuah inovasi besar tidak lahir dalam semalam. AeroVulpis masih terus berbenah
-    dan membutuhkan dukungan penuh dari komunitas trader domestik demi mencapai performa
-    terbaiknya. Mari bersama-sama memberikan dukungan, memperbaiki kekurangan yang ada,
-    dan berkembang bersama untuk menciptakan standar trading yang lebih sehat di Indonesia."
-  </div>
-  <div class="oj-quote-sig">&mdash; Fahmi · Founder, Aerovulpis &amp; DynamiHatch</div>
+<div class="oj-quote-text">
+"Sebuah inovasi besar tidak lahir dalam semalam. AeroVulpis masih terus berbenah
+dan membutuhkan dukungan penuh dari komunitas trader domestik demi mencapai performa
+terbaiknya. Mari bersama-sama memberikan dukungan, memperbaiki kekurangan yang ada,
+dan berkembang bersama untuk menciptakan standar trading yang lebih sehat di Indonesia."
+</div>
+<div class="oj-quote-sig">&mdash; Fahmi · Founder, Aerovulpis &amp; DynamiHatch</div>
 </div>
 """, unsafe_allow_html=True)
 
 # ── IKUTI KAMI ──
-st.markdown('<div class="oj-sec-title">Ikuti Perjalanan Kami</div>',
-            unsafe_allow_html=True)
-
+st.markdown('<div class="oj-sec-title">Ikuti Perjalanan Kami</div>', unsafe_allow_html=True)
 st.markdown("""
 <div class="oj-socmed-grid">
 
-  <a class="oj-socmed-card timnews"
-     href="https://vm.tiktok.com/ZS9hRjU5FKjcM-Gh63T/"
-     target="_blank" rel="noopener noreferrer">
-    <div class="oj-socmed-platform">TikTok</div>
-    <div class="oj-socmed-name">T.I.M NEWS</div>
-    <div class="oj-socmed-desc">Terminal Intelijen Pasar · Berita &amp; Analisis</div>
-    <a class="oj-socmed-btn" href="https://vm.tiktok.com/ZS9hRjU5FKjcM-Gh63T/"
-       target="_blank" rel="noopener noreferrer">
-      <span class="oj-tiktok-icon">&#9654;</span> Buka TikTok
-    </a>
-  </a>
+<a class="oj-socmed-card timnews"
+href="https://vm.tiktok.com/ZS9hRjU5FKjcM-Gh63T/"
+target="_blank" rel="noopener noreferrer">
+<div class="oj-socmed-platform">TikTok</div>
+<div class="oj-socmed-name">T.I.M NEWS</div>
+<div class="oj-socmed-desc">Terminal Intelijen Pasar · Berita &amp; Analisis</div>
+<span class="oj-socmed-btn"><span class="oj-icon">&#9654;</span> Buka TikTok</span>
+</a>
 
-  <a class="oj-socmed-card dynamihatch"
-     href="https://vm.tiktok.com/ZS9hRjbGvmAtc-keGWq/"
-     target="_blank" rel="noopener noreferrer">
-    <div class="oj-socmed-platform">TikTok</div>
-    <div class="oj-socmed-name">DynamiHatch</div>
-    <div class="oj-socmed-desc">Technology · Inovasi Digital Indonesia</div>
-    <a class="oj-socmed-btn" href="https://vm.tiktok.com/ZS9hRjbGvmAtc-keGWq/"
-       target="_blank" rel="noopener noreferrer">
-      <span class="oj-tiktok-icon">&#9654;</span> Buka TikTok
-    </a>
-  </a>
+<a class="oj-socmed-card dynamihatch"
+href="https://vm.tiktok.com/ZS9hRjbGvmAtc-keGWq/"
+target="_blank" rel="noopener noreferrer">
+<div class="oj-socmed-platform">TikTok</div>
+<div class="oj-socmed-name">DynamiHatch</div>
+<div class="oj-socmed-desc">Technology · Inovasi Digital Indonesia</div>
+<span class="oj-socmed-btn"><span class="oj-icon">&#9654;</span> Buka TikTok</span>
+</a>
+
+<a class="oj-socmed-card instagram"
+href="https://www.instagram.com/dynamihatch?igsh=MTd1NmVkcHB2ODV3OQ=="
+target="_blank" rel="noopener noreferrer">
+<div class="oj-socmed-platform">Instagram</div>
+<div class="oj-socmed-name">DynamiHatch</div>
+<div class="oj-socmed-desc">Technology · Inovasi Digital Indonesia</div>
+<span class="oj-socmed-btn"><span class="oj-icon">&#9654;</span> Buka Instagram</span>
+</a>
 
 </div>
 """, unsafe_allow_html=True)
@@ -493,10 +504,10 @@ st.markdown("""
 # ── CLOSING ──
 st.markdown("""
 <div class="oj-footer">
-  <div class="oj-footer-brand">AEROVULPIS</div>
-  <div class="oj-footer-sub">
-    Dikembangkan oleh DynamiHatch Technology &nbsp;·&nbsp;
-    aerovulpis.my.id &nbsp;·&nbsp; 2026
-  </div>
+<div class="oj-footer-brand">AEROVULPIS</div>
+<div class="oj-footer-sub">
+Dikembangkan oleh DynamiHatch Technology &nbsp;·&nbsp;
+aerovulpis.my.id &nbsp;·&nbsp; 2026
+</div>
 </div>
 """, unsafe_allow_html=True)
