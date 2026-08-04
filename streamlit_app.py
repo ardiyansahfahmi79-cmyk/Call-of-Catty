@@ -29,7 +29,7 @@ if "signals" not in st.session_state:
             "confidence": 82,
             "rr1": "1:1.0", "rr2": "1:2.0", "rr3": "1:3.5",
             "bull_prob": 82, "bear_prob": 18,
-            "tp1_hit": False, "tp2_hit": False, "tp3_hit": False, "sl_hit": False,
+            "tp1_hit": None, "tp2_hit": None, "tp3_hit": None, "sl_hit": None,
             "timeframe": "H4", "session": "LONDON / NEW YORK", "tag": "TREND FOLLOW",
             "explanation": "Harga Gold bergerak dalam struktur higher-high higher-low di timeframe H4. EMA 21 bertindak sebagai support dinamis yang masih terjaga. Volume beli meningkat signifikan pada sesi London open. RSI (14) berada di 58 — masih dalam zona netral menuju bullish tanpa overbought. MACD crossover positif terkonfirmasi di H1.",
             "updated": "03 Agu 2026 · 13:00 WIB",
@@ -43,7 +43,7 @@ if "signals" not in st.session_state:
             "confidence": 74,
             "rr1": "1:1.0", "rr2": "1:2.0", "rr3": "1:3.5",
             "bull_prob": 74, "bear_prob": 26,
-            "tp1_hit": True, "tp2_hit": False, "tp3_hit": False, "sl_hit": False,
+            "tp1_hit": True, "tp2_hit": None, "tp3_hit": None, "sl_hit": None,
             "timeframe": "H4", "session": "CRYPTO 24H", "tag": "BREAKOUT",
             "explanation": "BTC menunjukkan konsolidasi sehat setelah breakout dari range 90K–95K minggu lalu. On-chain data menunjukkan akumulasi oleh wallet besar (>1000 BTC). Struktur market H4 bullish dengan support kuat di 93.2K. TP1 sudah tercapai, potensi lanjut ke TP2 dengan trailing SL ke entry.",
             "updated": "03 Agu 2026 · 08:00 WIB",
@@ -57,7 +57,7 @@ if "signals" not in st.session_state:
             "confidence": 77,
             "rr1": "1:1.0", "rr2": "1:2.0", "rr3": "1:3.5",
             "bull_prob": 31, "bear_prob": 69,
-            "tp1_hit": False, "tp2_hit": False, "tp3_hit": False, "sl_hit": True,
+            "tp1_hit": None, "tp2_hit": None, "tp3_hit": None, "sl_hit": True,
             "timeframe": "H4", "session": "LONDON / NEW YORK", "tag": "REVERSAL",
             "explanation": "EURUSD menguji resistance kuat di 1.0875 yang bertepatan dengan EMA 200 D1. Data NFP AS lebih kuat dari ekspektasi menekan Euro. Struktur bearish engulfing candle di H4 terkonfirmasi. Signal SL telah terkena — posisi ditutup.",
             "updated": "02 Agu 2026 · 20:00 WIB",
@@ -353,16 +353,7 @@ html, body, [class*="css"] { background-color: #030810 !important; }
     padding:.22rem .65rem; border-radius:3px;
 }
 .sm-meta-row { display:flex; gap:.4rem; align-items:center; }
-.sm-meta-pill {
-    font-family:'Share Tech Mono',monospace; font-size:.5rem; letter-spacing:1.5px;
-    color:rgba(136,153,187,.4); background:rgba(255,255,255,.03);
-    border:1px solid rgba(255,255,255,.06); border-radius:2px; padding:.08rem .38rem;
-}
-.sm-tag-pill {
-    font-family:'Share Tech Mono',monospace; font-size:.5rem; letter-spacing:1.5px;
-    color:#00d4ff; background:rgba(0,212,255,.06);
-    border:1px solid rgba(0,212,255,.15); border-radius:2px; padding:.08rem .38rem;
-}
+
 .sm-card-body { padding:.85rem 1.1rem; }
 .sm-price-grid { display:grid; grid-template-columns:1fr 1fr; gap:.55rem .7rem; margin-bottom:.85rem; }
 .sm-price-label {
@@ -404,6 +395,42 @@ html, body, [class*="css"] { background-color: #030810 !important; }
     background:rgba(0,255,136,.08); border:1px solid rgba(0,255,136,.25);
     border-radius:3px; padding:.1rem .4rem;
     font-family:'Share Tech Mono',monospace; font-size:.5rem; letter-spacing:1px; color:#00ff88;
+}
+.sm-tp-pending {
+    display:inline-flex; align-items:center; gap:.2rem;
+    background:rgba(136,153,187,.05); border:1px solid rgba(136,153,187,.15);
+    border-radius:3px; padding:.1rem .4rem;
+    font-family:'Share Tech Mono',monospace; font-size:.5rem; letter-spacing:1px;
+    color:rgba(136,153,187,.45);
+}
+.sm-tp-miss {
+    display:inline-flex; align-items:center; gap:.2rem;
+    background:rgba(255,68,102,.08); border:1px solid rgba(255,68,102,.25);
+    border-radius:3px; padding:.1rem .4rem;
+    font-family:'Share Tech Mono',monospace; font-size:.5rem; letter-spacing:1px; color:#ff4466;
+}
+.sm-sl-miss-badge {
+    display:inline-flex; align-items:center; gap:.25rem;
+    background:rgba(255,68,102,.06); border:1px solid rgba(255,68,102,.2);
+    border-radius:3px; padding:.12rem .45rem; margin-left:.45rem;
+    font-family:'Share Tech Mono',monospace; font-size:.52rem;
+    letter-spacing:1.5px; color:rgba(255,68,102,.6); vertical-align:middle;
+}
+
+/* META PILL CYBERTECH GLOW */
+.sm-meta-pill {
+    font-family:'Share Tech Mono',monospace; font-size:.5rem; letter-spacing:1.5px;
+    color:#00d4ff; background:rgba(0,212,255,.07);
+    border:1px solid rgba(0,212,255,.25); border-radius:3px; padding:.08rem .38rem;
+    text-shadow:0 0 8px rgba(0,212,255,.6);
+    box-shadow:0 0 6px rgba(0,212,255,.15), inset 0 0 4px rgba(0,212,255,.05);
+}
+.sm-tag-pill {
+    font-family:'Share Tech Mono',monospace; font-size:.5rem; letter-spacing:1.5px;
+    color:#00ff88; background:rgba(0,255,136,.07);
+    border:1px solid rgba(0,255,136,.3); border-radius:3px; padding:.08rem .38rem;
+    text-shadow:0 0 8px rgba(0,255,136,.5);
+    box-shadow:0 0 6px rgba(0,255,136,.12), inset 0 0 4px rgba(0,255,136,.05);
 }
 .sm-rr-chip {
     font-family:'Share Tech Mono',monospace; font-size:.55rem;
@@ -558,8 +585,8 @@ st.markdown(ticker_html, unsafe_allow_html=True)
 total     = len(published)
 bull_c    = sum(1 for p in published if p["direction"] == "BULLISH")
 bear_c    = total - bull_c
-tp_c      = sum(1 for p in published if p["tp1_hit"] or p["tp2_hit"] or p["tp3_hit"])
-sl_c      = sum(1 for p in published if p["sl_hit"])
+tp_c      = sum(1 for p in published if p["tp1_hit"] is True or p["tp2_hit"] is True or p["tp3_hit"] is True)
+sl_c      = sum(1 for p in published if p["sl_hit"] is True)
 avg_conf  = int(sum(p["confidence"] for p in published) / total) if total else 0
 
 st.markdown(f"""
@@ -635,7 +662,7 @@ if st.session_state.admin_mode:
                         "rr2": calc_rr(new_entry, new_sl, new_tp2),
                         "rr3": calc_rr(new_entry, new_sl, new_tp3),
                         "bull_prob": bp, "bear_prob": brp,
-                        "tp1_hit": False, "tp2_hit": False, "tp3_hit": False, "sl_hit": False,
+                        "tp1_hit": None, "tp2_hit": None, "tp3_hit": None, "sl_hit": None,
                         "timeframe": new_tf, "session": new_session, "tag": new_tag,
                         "explanation": new_expl,
                         "updated": new_upd,
@@ -671,26 +698,33 @@ if st.session_state.admin_mode:
             hc1, hc2, hc3, hc4, hc5, hc6 = st.columns(6)
             sid = sig["id"]
 
+            def cycle(val):
+                if val is None: return True
+                if val is True: return False
+                return None
+
+            def lbl_tp(val, n):
+                if val is True:  return f"✓ TP{n} HIT"
+                if val is False: return f"✗ TP{n} MISS"
+                return f"– TP{n} PENDING"
+
+            def lbl_sl(val):
+                if val is True:  return "✓ SL HIT"
+                if val is False: return "✗ SL MISS"
+                return "– SL PENDING"
+
             with hc1:
-                tp1_label = "✓ TP1 HIT" if sig["tp1_hit"] else "✗ TP1 OPEN"
-                if st.button(tp1_label, key=f"tp1_{sid}", use_container_width=True):
-                    sig["tp1_hit"] = not sig["tp1_hit"]
-                    st.rerun()
+                if st.button(lbl_tp(sig["tp1_hit"], 1), key=f"tp1_{sid}", use_container_width=True):
+                    sig["tp1_hit"] = cycle(sig["tp1_hit"]); st.rerun()
             with hc2:
-                tp2_label = "✓ TP2 HIT" if sig["tp2_hit"] else "✗ TP2 OPEN"
-                if st.button(tp2_label, key=f"tp2_{sid}", use_container_width=True):
-                    sig["tp2_hit"] = not sig["tp2_hit"]
-                    st.rerun()
+                if st.button(lbl_tp(sig["tp2_hit"], 2), key=f"tp2_{sid}", use_container_width=True):
+                    sig["tp2_hit"] = cycle(sig["tp2_hit"]); st.rerun()
             with hc3:
-                tp3_label = "✓ TP3 HIT" if sig["tp3_hit"] else "✗ TP3 OPEN"
-                if st.button(tp3_label, key=f"tp3_{sid}", use_container_width=True):
-                    sig["tp3_hit"] = not sig["tp3_hit"]
-                    st.rerun()
+                if st.button(lbl_tp(sig["tp3_hit"], 3), key=f"tp3_{sid}", use_container_width=True):
+                    sig["tp3_hit"] = cycle(sig["tp3_hit"]); st.rerun()
             with hc4:
-                sl_label = "✓ SL HIT" if sig["sl_hit"] else "✗ SL OPEN"
-                if st.button(sl_label, key=f"sl_{sid}", use_container_width=True):
-                    sig["sl_hit"] = not sig["sl_hit"]
-                    st.rerun()
+                if st.button(lbl_sl(sig["sl_hit"]), key=f"sl_{sid}", use_container_width=True):
+                    sig["sl_hit"] = cycle(sig["sl_hit"]); st.rerun()
             with hc5:
                 if st.button("🗑 Hapus", key=f"del_{sid}", use_container_width=True):
                     st.session_state.signals = [s for s in st.session_state.signals if s["id"] != sid]
@@ -720,9 +754,9 @@ filtered = []
 for p in published:
     if sym_filter and p["symbol"] not in sym_filter: continue
     if dir_filter != "ALL" and p["direction"] != dir_filter: continue
-    if status_filter == "ACTIVE" and (p["sl_hit"] or p["tp3_hit"]): continue
-    if status_filter == "TP HIT" and not (p["tp1_hit"] or p["tp2_hit"] or p["tp3_hit"]): continue
-    if status_filter == "SL HIT" and not p["sl_hit"]: continue
+    if status_filter == "ACTIVE" and (p["sl_hit"] is True or p["tp3_hit"] is True): continue
+    if status_filter == "TP HIT" and not (p["tp1_hit"] is True or p["tp2_hit"] is True or p["tp3_hit"] is True): continue
+    if status_filter == "SL HIT" and p["sl_hit"] is not True: continue
     filtered.append(p)
 
 st.markdown("")
@@ -733,15 +767,23 @@ if not filtered:
 
 for p in filtered:
     is_bull   = p["direction"] == "BULLISH"
-    card_cls  = ("bull-card" if is_bull else "bear-card") + (" sl-hit" if p["sl_hit"] else "")
+    card_cls  = ("bull-card" if is_bull else "bear-card") + (" sl-hit" if p["sl_hit"] is True else "")
     dir_bcls  = "sm-dir-badge-bull" if is_bull else "sm-dir-badge-bear"
     conf      = p["confidence"]
     conf_col  = "#00ff88" if conf >= 70 else ("#e8b000" if conf >= 55 else "#ff4466")
 
     def tp_badge(hit):
-        return '<span class="sm-tp-ok">✓ HIT</span>' if hit else '<span class="sm-tp-hit">✗ OPEN</span>'
+        if hit is True:  return '<span class="sm-tp-ok">✓ HIT</span>'
+        if hit is False: return '<span class="sm-tp-miss">✗ MISS</span>'
+        return '<span class="sm-tp-pending">– PENDING</span>'
 
-    sl_badge = '<span class="sm-sl-badge">✗ SL HIT</span>' if p["sl_hit"] else ""
+    if p["sl_hit"] is True:
+        sl_badge = '<span class="sm-sl-badge">✗ SL HIT</span>'
+    elif p["sl_hit"] is False:
+        sl_badge = '<span class="sm-sl-miss-badge">✗ SL MISS</span>'
+    else:
+        sl_badge = ''
+    
 
     st.markdown(f"""
 <div class="sm-card {card_cls}">
