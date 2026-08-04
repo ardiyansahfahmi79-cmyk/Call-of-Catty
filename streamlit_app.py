@@ -4,8 +4,6 @@ Prototype: Mode User + Mode Admin
 """
 
 import streamlit as st
-import plotly.graph_objects as go
-import numpy as np
 from datetime import datetime
 import random
 
@@ -86,89 +84,6 @@ SESSIONS   = ["LONDON", "NEW YORK", "LONDON / NEW YORK", "ASIA", "CRYPTO 24H", "
 TAGS       = ["TREND FOLLOW", "BREAKOUT", "REVERSAL", "PATTERN", "DIVERGENCE", "SCALP", "SWING"]
 
 
-def make_forecast_chart(direction, entry, sl, tp1, tp2, tp3, symbol):
-    random.seed(hash(symbol + str(entry)) % 9999)
-    n_hist = 55
-    price_range = abs(tp3 - sl) or entry * 0.02
-    noise = price_range * 0.04
-
-    hist = [entry - price_range * 0.28]
-    for _ in range(n_hist - 1):
-        drift = (entry - hist[-1]) * 0.04
-        hist.append(hist[-1] + drift + random.gauss(0, noise * 0.3))
-    hist[-1] = entry
-
-    from datetime import timedelta
-    times_hist = [datetime.now() - timedelta(hours=(n_hist - i)) for i in range(n_hist)]
-
-    n_fc = 28
-    times_fc = [datetime.now() + timedelta(hours=i) for i in range(n_fc + 1)]
-
-    def interp(start, end, n, ns=0.12):
-        pts = [start]
-        for i in range(1, n + 1):
-            t = i / n
-            s = start + (end - start) * (t ** 0.65)
-            pts.append(s + random.gauss(0, abs(end - start) * ns * (1 - t * 0.5)))
-        return pts
-
-    if direction == "BULLISH":
-        fc_bull = interp(entry, tp3, n_fc, 0.12)
-        fc_bear = interp(entry, sl - (tp1 - entry) * 0.4, n_fc, 0.08)
-    else:
-        fc_bull = interp(entry, sl + (entry - tp1) * 0.4, n_fc, 0.08)
-        fc_bear = interp(entry, tp3, n_fc, 0.12)
-
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=times_hist, y=hist, mode='lines',
-        line=dict(color='#00d4ff', width=2),
-        name='Price History',
-        hovertemplate='%{y:.5g}<extra></extra>',
-    ))
-    fig.add_trace(go.Scatter(
-        x=times_fc, y=fc_bear, mode='lines',
-        line=dict(color='#ff4466', width=1.5, dash='dot'),
-        name='Bearish Scenario',
-        hovertemplate='%{y:.5g}<extra></extra>',
-    ))
-    fig.add_trace(go.Scatter(
-        x=times_fc, y=fc_bull, mode='lines',
-        line=dict(color='#00ff88', width=1.5, dash='dot'),
-        name='Bullish Scenario',
-        hovertemplate='%{y:.5g}<extra></extra>',
-    ))
-    fig.add_hline(y=entry, line=dict(color='#ffffff', width=1, dash='dash'), opacity=0.25)
-    fig.add_hline(y=sl,    line=dict(color='#ff4466', width=1, dash='dash'), opacity=0.35)
-    fig.add_hline(y=tp3,   line=dict(color='#00ff88', width=1, dash='dash'), opacity=0.3)
-    fig.add_trace(go.Scatter(
-        x=[datetime.now()], y=[entry], mode='markers',
-        marker=dict(color='#ffffff', size=8, line=dict(color='#00d4ff', width=2)),
-        showlegend=False,
-        hovertemplate=f'Entry: {entry}<extra></extra>',
-    ))
-    fig.update_layout(
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font=dict(family='Share Tech Mono', color='rgba(136,153,187,0.7)', size=10),
-        margin=dict(l=0, r=0, t=8, b=0),
-        height=190,
-        legend=dict(
-            orientation='h', x=0, y=-0.18,
-            font=dict(size=9, color='rgba(136,153,187,0.5)'),
-            bgcolor='rgba(0,0,0,0)',
-        ),
-        xaxis=dict(showgrid=False, zeroline=False,
-                   tickfont=dict(size=8), color='rgba(136,153,187,0.4)',
-                   fixedrange=True),
-        yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.04)',
-                   zeroline=False, tickfont=dict(size=8),
-                   color='rgba(136,153,187,0.4)', side='right',
-                   fixedrange=True),
-        hovermode='x unified',
-        dragmode=False,
-    )
-    return fig
 
 
 def calc_rr(entry, sl, tp):
@@ -254,32 +169,6 @@ html, body, [class*="css"] { background-color: #030810 !important; }
     letter-spacing:1.5px; margin-bottom:1.3rem;
 }
 
-/* TICKER */
-.sm-ticker-wrap {
-    background:rgba(0,212,255,.03);
-    border-top:1px solid rgba(0,212,255,.07);
-    border-bottom:1px solid rgba(0,212,255,.07);
-    padding:.42rem 0; margin-bottom:1.4rem; overflow:hidden;
-}
-.sm-ticker-inner {
-    display:flex; gap:2.5rem;
-    font-family:'Share Tech Mono',monospace;
-    font-size:.62rem; letter-spacing:1.5px; white-space:nowrap;
-}
-.sm-tick-item { display:flex; align-items:center; gap:.5rem; }
-.sm-tick-sym  { color:rgba(136,153,187,.6); }
-.sm-tick-bull { color:#00ff88; }
-.sm-tick-bear { color:#ff4466; }
-.sm-tick-dir-bull {
-    background:rgba(0,255,136,.1); color:#00ff88;
-    border:1px solid rgba(0,255,136,.25); border-radius:2px;
-    padding:0 .35rem; font-size:.52rem;
-}
-.sm-tick-dir-bear {
-    background:rgba(255,68,102,.1); color:#ff4466;
-    border:1px solid rgba(255,68,102,.25); border-radius:2px;
-    padding:0 .35rem; font-size:.52rem;
-}
 
 /* STATS ROW */
 .sm-stats-row { display:flex; gap:.7rem; flex-wrap:wrap; margin-bottom:1.4rem; }
@@ -571,15 +460,6 @@ st.markdown("""
 <div class="sm-page-sub">Live trading signal · XAUUSD · BTCUSD · ETHUSD · BNBUSD · EURUSD · GBPUSD dan lebih banyak lagi &nbsp;|&nbsp; Update otomatis setiap 19 jam</div>
 """, unsafe_allow_html=True)
 
-# ── TICKER ──
-published = [s for s in st.session_state.signals if s.get("published")]
-ticker_html = '<div class="sm-ticker-wrap"><div class="sm-ticker-inner">'
-for p in published:
-    dc = "sm-tick-bull" if p["direction"] == "BULLISH" else "sm-tick-bear"
-    bdc = "sm-tick-dir-bull" if p["direction"] == "BULLISH" else "sm-tick-dir-bear"
-    ticker_html += f'<div class="sm-tick-item"><span class="sm-tick-sym">{p["symbol"]}</span><span class="{dc}">{p["entry"]}</span><span class="{bdc}">{p["direction"][:4]}</span></div>'
-ticker_html += '</div></div>'
-st.markdown(ticker_html, unsafe_allow_html=True)
 
 # ── STATS ──
 total     = len(published)
@@ -628,11 +508,19 @@ if st.session_state.admin_mode:
 
         st.markdown("**Level Harga**")
         p1, p2, p3, p4, p5 = st.columns(5)
-        with p1: new_entry = st.number_input("Entry", value=0.0, format="%g", key="new_entry")
-        with p2: new_sl    = st.number_input("Stop Loss", value=0.0, format="%g", key="new_sl")
-        with p3: new_tp1   = st.number_input("TP 1", value=0.0, format="%g", key="new_tp1")
-        with p4: new_tp2   = st.number_input("TP 2", value=0.0, format="%g", key="new_tp2")
-        with p5: new_tp3   = st.number_input("TP 3", value=0.0, format="%g", key="new_tp3")
+        with p1: new_entry_str = st.text_input("Entry", value="0", key="new_entry")
+        with p2: new_sl_str    = st.text_input("Stop Loss", value="0", key="new_sl")
+        with p3: new_tp1_str   = st.text_input("TP 1", value="0", key="new_tp1")
+        with p4: new_tp2_str   = st.text_input("TP 2", value="0", key="new_tp2")
+        with p5: new_tp3_str   = st.text_input("TP 3", value="0", key="new_tp3")
+        def to_float(s):
+            try: return float(s.replace(",", ".").strip())
+            except: return 0.0
+        new_entry = to_float(new_entry_str)
+        new_sl    = to_float(new_sl_str)
+        new_tp1   = to_float(new_tp1_str)
+        new_tp2   = to_float(new_tp2_str)
+        new_tp3   = to_float(new_tp3_str)
 
         new_expl = st.text_area(
             "Deskripsi Analisis (kenapa Bullish/Bearish?)",
@@ -824,14 +712,6 @@ for p in filtered:
 </div>
 </div>
 """, unsafe_allow_html=True)
-
-    fig = make_forecast_chart(p["direction"], p["entry"], p["sl"], p["tp1"], p["tp2"], p["tp3"], p["symbol"])
-    st.plotly_chart(fig, use_container_width=True, config={
-        "displayModeBar": False,
-        "scrollZoom": False,
-        "doubleClick": False,
-        "staticPlot": True,
-    })
 
     st.markdown(f"""
 <div class="sm-explanation" style="margin:0 1.1rem .45rem">
