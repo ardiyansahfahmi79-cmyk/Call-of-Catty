@@ -65,18 +65,55 @@ if "signals" not in st.session_state:
 if "next_id" not in st.session_state:
     st.session_state.next_id = 4
 
-PAIR_OPTIONS = [
-    "XAUUSD", "XAGUSD", "BTCUSD", "ETHUSD", "BNBUSD",
-    "SOLUSD", "XRPUSD", "EURUSD", "GBPUSD", "USDJPY",
-    "AUDUSD", "USDCAD", "USDCHF", "NZDUSD", "CUSTOM",
+# ── Forex ──
+FOREX_PAIRS = [
+    "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD",
+    "USDCHF", "NZDUSD", "EURGBP", "EURJPY", "GBPJPY",
 ]
+# ── Crypto ──
+CRYPTO_PAIRS = [
+    "BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "XRPUSD",
+    "ADAUSD", "DOTUSD", "MATICUSD", "LINKUSD", "AVAXUSD",
+]
+# ── Komoditas ──
+COMMODITY_PAIRS = [
+    "XAUUSD", "XAGUSD", "XBRUSD", "XNGUSD", "XPDUSD",
+]
+# ── Saham Indonesia ──
+IDX_PAIRS = [
+    "IHSG", "BBCA", "BBRI", "TLKM", "ASII",
+    "BMRI", "UNVR", "GGRM", "HMSP", "ANTM",
+]
+
+PAIR_OPTIONS = (
+    ["── FOREX ──"] + FOREX_PAIRS +
+    ["── CRYPTO ──"] + CRYPTO_PAIRS +
+    ["── KOMODITAS ──"] + COMMODITY_PAIRS +
+    ["── SAHAM IDX ──"] + IDX_PAIRS +
+    ["CUSTOM"]
+)
+
 PAIR_NAMES = {
-    "XAUUSD": "Gold", "XAGUSD": "Silver", "BTCUSD": "Bitcoin",
-    "ETHUSD": "Ethereum", "BNBUSD": "BNB", "SOLUSD": "Solana",
-    "XRPUSD": "Ripple", "EURUSD": "Euro / Dollar",
-    "GBPUSD": "Pound / Dollar", "USDJPY": "Dollar / Yen",
-    "AUDUSD": "Aussie / Dollar", "USDCAD": "Dollar / CAD",
-    "USDCHF": "Dollar / Franc", "NZDUSD": "Kiwi / Dollar",
+    # Forex
+    "EURUSD": "Euro / Dollar", "GBPUSD": "Pound / Dollar",
+    "USDJPY": "Dollar / Yen", "AUDUSD": "Aussie / Dollar",
+    "USDCAD": "Dollar / CAD", "USDCHF": "Dollar / Franc",
+    "NZDUSD": "Kiwi / Dollar", "EURGBP": "Euro / Pound",
+    "EURJPY": "Euro / Yen", "GBPJPY": "Pound / Yen",
+    # Crypto
+    "BTCUSD": "Bitcoin", "ETHUSD": "Ethereum", "BNBUSD": "BNB",
+    "SOLUSD": "Solana", "XRPUSD": "Ripple", "ADAUSD": "Cardano",
+    "DOTUSD": "Polkadot", "MATICUSD": "Polygon", "LINKUSD": "Chainlink",
+    "AVAXUSD": "Avalanche",
+    # Komoditas
+    "XAUUSD": "Gold", "XAGUSD": "Silver", "XBRUSD": "Brent Crude Oil",
+    "XNGUSD": "Natural Gas", "XPDUSD": "Palladium",
+    # Saham IDX
+    "IHSG": "Indeks Harga Saham Gabungan", "BBCA": "Bank BCA",
+    "BBRI": "Bank BRI", "TLKM": "Telkom Indonesia",
+    "ASII": "Astra International", "BMRI": "Bank Mandiri",
+    "UNVR": "Unilever Indonesia", "GGRM": "Gudang Garam",
+    "HMSP": "HM Sampoerna", "ANTM": "Aneka Tambang",
     "CUSTOM": "Custom Pair",
 }
 TIMEFRAMES = ["M15", "M30", "H1", "H4", "D1", "W1"]
@@ -455,7 +492,7 @@ if st.session_state.admin_mode:
 # ── PAGE TITLE ──
 st.markdown("""
 <div class="sm-page-title">SIGNAL <span>ANALYSIS</span></div>
-<div class="sm-page-sub">Live trading signal · XAUUSD · BTCUSD · ETHUSD · BNBUSD · EURUSD · GBPUSD dan lebih banyak lagi &nbsp;|&nbsp; Update otomatis setiap 19 jam</div>
+
 """, unsafe_allow_html=True)
 
 
@@ -532,7 +569,9 @@ if st.session_state.admin_mode:
             if st.button("🚀 Publish Sinyal", use_container_width=True, key="btn_publish"):
                 sym  = custom_sym.strip().upper() if sel_pair == "CUSTOM" else sel_pair
                 name = custom_name.strip() if sel_pair == "CUSTOM" else PAIR_NAMES.get(sel_pair, sel_pair)
-                if not sym or new_entry == 0:
+                if sel_pair.startswith("──"):
+                    st.error("Pilih pair yang valid, bukan kategori.")
+                elif not sym or new_entry == 0:
                     st.error("Isi Symbol dan Entry terlebih dahulu.")
                 else:
                     is_bull  = new_direction == "BULLISH"
@@ -544,6 +583,9 @@ if st.session_state.admin_mode:
                         "direction": new_direction,
                         "entry": new_entry, "sl": new_sl,
                         "tp1": new_tp1, "tp2": new_tp2, "tp3": new_tp3,
+                        "entry_str": new_entry_str.strip(), "sl_str": new_sl_str.strip(),
+                        "tp1_str": new_tp1_str.strip(), "tp2_str": new_tp2_str.strip(),
+                        "tp3_str": new_tp3_str.strip(),
                         "confidence": new_conf,
                         "rr1": calc_rr(new_entry, new_sl, new_tp1),
                         "rr2": calc_rr(new_entry, new_sl, new_tp2),
@@ -611,7 +653,20 @@ if st.session_state.admin_mode:
                     sig["tp3_hit"] = cycle(sig["tp3_hit"]); st.rerun()
             with hc4:
                 if st.button(lbl_sl(sig["sl_hit"]), key=f"sl_{sid}", use_container_width=True):
-                    sig["sl_hit"] = cycle(sig["sl_hit"]); st.rerun()
+                    new_sl_val = cycle(sig["sl_hit"])
+                    sig["sl_hit"] = new_sl_val
+                    # Jika SL kena (True), TP yang masih PENDING → otomatis MISS (False)
+                    # TP yang sudah HIT (True) tetap tidak diubah
+                    if new_sl_val is True:
+                        if sig["tp1_hit"] is None: sig["tp1_hit"] = False
+                        if sig["tp2_hit"] is None: sig["tp2_hit"] = False
+                        if sig["tp3_hit"] is None: sig["tp3_hit"] = False
+                    # Jika SL di-undo kembali ke None/False, kembalikan TP Miss → Pending
+                    elif new_sl_val is None or new_sl_val is False:
+                        if sig["tp1_hit"] is False: sig["tp1_hit"] = None
+                        if sig["tp2_hit"] is False: sig["tp2_hit"] = None
+                        if sig["tp3_hit"] is False: sig["tp3_hit"] = None
+                    st.rerun()
             with hc5:
                 if st.button("🗑 Hapus", key=f"del_{sid}", use_container_width=True):
                     st.session_state.signals = [s for s in st.session_state.signals if s["id"] != sid]
@@ -690,8 +745,8 @@ for p in filtered:
 </div>
 <div class="sm-card-body">
 <div class="sm-price-grid">
-<div><div class="sm-price-label">Entry</div><div class="sm-price-value cyan">{p['entry']}</div></div>
-<div><div class="sm-price-label">Stop Loss</div><div class="sm-price-value red">{p['sl']}{sl_badge}</div></div>
+<div><div class="sm-price-label">Entry</div><div class="sm-price-value cyan">{p.get('entry_str', p['entry'])}</div></div>
+<div><div class="sm-price-label">Stop Loss</div><div class="sm-price-value red">{p.get('sl_str', p['sl'])}{sl_badge}</div></div>
 <div><div class="sm-price-label">Risk : Reward</div><div class="sm-price-value" style="font-size:1.05rem">{p['rr1']}</div></div>
 <div><div class="sm-price-label">Confidence</div><div class="sm-price-value" style="color:{conf_col};font-size:1.35rem">{conf}%</div></div>
 </div>
@@ -701,9 +756,9 @@ for p in filtered:
 <div class="sm-conf-pct" style="color:{conf_col}">{conf}%</div>
 </div>
 <div class="sm-tp-grid">
-<div class="sm-tp-row"><span class="sm-tp-badge">TP 1</span><span class="sm-tp-price">{p['tp1']}</span>{tp_badge(p['tp1_hit'])}<span class="sm-rr-chip">R:R {p['rr1']}</span></div>
-<div class="sm-tp-row"><span class="sm-tp-badge">TP 2</span><span class="sm-tp-price">{p['tp2']}</span>{tp_badge(p['tp2_hit'])}<span class="sm-rr-chip">R:R {p['rr2']}</span></div>
-<div class="sm-tp-row"><span class="sm-tp-badge">TP 3</span><span class="sm-tp-price">{p['tp3']}</span>{tp_badge(p['tp3_hit'])}<span class="sm-rr-chip">R:R {p['rr3']}</span></div>
+<div class="sm-tp-row"><span class="sm-tp-badge">TP 1</span><span class="sm-tp-price">{p.get('tp1_str', p['tp1'])}</span>{tp_badge(p['tp1_hit'])}<span class="sm-rr-chip">R:R {p['rr1']}</span></div>
+<div class="sm-tp-row"><span class="sm-tp-badge">TP 2</span><span class="sm-tp-price">{p.get('tp2_str', p['tp2'])}</span>{tp_badge(p['tp2_hit'])}<span class="sm-rr-chip">R:R {p['rr2']}</span></div>
+<div class="sm-tp-row"><span class="sm-tp-badge">TP 3</span><span class="sm-tp-price">{p.get('tp3_str', p['tp3'])}</span>{tp_badge(p['tp3_hit'])}<span class="sm-rr-chip">R:R {p['rr3']}</span></div>
 </div>
 <div class="sm-forecast-row">
 <div class="sm-forecast-box sm-forecast-bull"><div style="font-size:.5rem;letter-spacing:2px;opacity:.6;margin-bottom:.18rem">BULLISH PROB</div><div class="sm-forecast-val">[{p['bull_prob']}%]</div></div>
