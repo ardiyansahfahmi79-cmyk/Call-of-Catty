@@ -416,13 +416,11 @@ div[data-testid="stSlider"] { color:#00d4ff !important; }
 
 
 # ── TOPBAR ──
-now_str = datetime.now().strftime("%d %b %Y · %H:%M WIB")
 st.markdown(f"""
 <div class="sm-topbar">
 <div class="sm-brand">AEROVULPIS <span>· SIGNAL MATRIX v4.1</span></div>
 <div class="sm-topbar-right">
 <div class="sm-live-pill"><div class="sm-live-dot"></div> LIVE FEED</div>
-<div class="sm-time">{now_str}</div>
 </div>
 </div>
 """, unsafe_allow_html=True)
@@ -462,6 +460,7 @@ st.markdown("""
 
 
 # ── STATS ──
+published = [s for s in st.session_state.signals if s.get("published")]
 total     = len(published)
 bull_c    = sum(1 for p in published if p["direction"] == "BULLISH")
 bear_c    = total - bull_c
