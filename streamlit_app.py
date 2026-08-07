@@ -32,6 +32,16 @@ if "signals" not in st.session_state:
             "explanation": "Harga Gold bergerak dalam struktur higher-high higher-low di timeframe H4. EMA 21 bertindak sebagai support dinamis yang masih terjaga. Volume beli meningkat signifikan pada sesi London open. RSI (14) berada di 58 — masih dalam zona netral menuju bullish tanpa overbought. MACD crossover positif terkonfirmasi di H1.",
             "updated": "03 Agu 2026 · 13:00 WIB",
             "published": True,
+            "lm_bear": [
+                {"low": "3.340,00", "high": "3.352,50", "pct": "0.84"},
+                {"low": "3.318,00", "high": "3.328,00", "pct": "0.58"},
+                {"low": "", "high": "", "pct": ""},
+            ],
+            "lm_bull": [
+                {"low": "3.288,00", "high": "3.297,50", "pct": "0.61"},
+                {"low": "3.275,00", "high": "3.283,00", "pct": "0.52"},
+                {"low": "3.258,00", "high": "3.266,00", "pct": "0.59"},
+            ],
         },
         {
             "id": 2, "symbol": "BTCUSD", "name": "Bitcoin",
@@ -46,6 +56,16 @@ if "signals" not in st.session_state:
             "explanation": "BTC menunjukkan konsolidasi sehat setelah breakout dari range 90K–95K minggu lalu. On-chain data menunjukkan akumulasi oleh wallet besar (>1000 BTC). Struktur market H4 bullish dengan support kuat di 93.2K. TP1 sudah tercapai, potensi lanjut ke TP2 dengan trailing SL ke entry.",
             "updated": "03 Agu 2026 · 08:00 WIB",
             "published": True,
+            "lm_bear": [
+                {"low": "97.200", "high": "98.500", "pct": "1.38"},
+                {"low": "", "high": "", "pct": ""},
+                {"low": "", "high": "", "pct": ""},
+            ],
+            "lm_bull": [
+                {"low": "93.800", "high": "94.600", "pct": "0.82"},
+                {"low": "", "high": "", "pct": ""},
+                {"low": "", "high": "", "pct": ""},
+            ],
         },
         {
             "id": 3, "symbol": "EURUSD", "name": "Euro / Dollar",
@@ -60,6 +80,16 @@ if "signals" not in st.session_state:
             "explanation": "EURUSD menguji resistance kuat di 1.0875 yang bertepatan dengan EMA 200 D1. Data NFP AS lebih kuat dari ekspektasi menekan Euro. Struktur bearish engulfing candle di H4 terkonfirmasi. Signal SL telah terkena — posisi ditutup.",
             "updated": "02 Agu 2026 · 20:00 WIB",
             "published": True,
+            "lm_bear": [
+                {"low": "", "high": "", "pct": ""},
+                {"low": "", "high": "", "pct": ""},
+                {"low": "", "high": "", "pct": ""},
+            ],
+            "lm_bull": [
+                {"low": "", "high": "", "pct": ""},
+                {"low": "", "high": "", "pct": ""},
+                {"low": "", "high": "", "pct": ""},
+            ],
         },
     ]
 if "next_id" not in st.session_state:
@@ -432,6 +462,95 @@ html, body, [class*="css"] { background-color: #030810 !important; }
     color:rgba(136,153,187,.4); padding:.25rem .7rem; border-radius:4px; cursor:default;
 }
 
+/* ── LIQUIDITY MATRIX ── */
+.lm-wrap {
+    margin: 0 0 .85rem 0;
+    background: linear-gradient(160deg, #050e1d, #040a15);
+    border: 1px solid rgba(0,212,255,.12);
+    border-radius: 8px; overflow: hidden;
+}
+.lm-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: .55rem .9rem .45rem;
+    border-bottom: 1px solid rgba(0,212,255,.07);
+    background: rgba(0,212,255,.03);
+}
+.lm-title {
+    font-family: 'Orbitron', sans-serif; font-size: .58rem;
+    font-weight: 700; letter-spacing: 3px; color: #00d4ff;
+    text-transform: uppercase;
+}
+.lm-subtitle {
+    font-family: 'Share Tech Mono', monospace; font-size: .5rem;
+    letter-spacing: 1.5px; color: rgba(136,153,187,.4);
+}
+.lm-body { padding: .6rem .9rem .5rem; }
+.lm-section-label {
+    font-family: 'Share Tech Mono', monospace; font-size: .5rem;
+    letter-spacing: 2.5px; text-transform: uppercase;
+    margin-bottom: .35rem; margin-top: .45rem;
+    display: flex; align-items: center; gap: .5rem;
+}
+.lm-section-label.bear { color: rgba(255,68,102,.6); }
+.lm-section-label.bull { color: rgba(0,212,255,.6); }
+.lm-section-label::after {
+    content: ''; flex: 1; height: 1px;
+    background: currentColor; opacity: .2;
+}
+.lm-zone-row {
+    display: flex; align-items: center; gap: .6rem;
+    margin-bottom: .32rem;
+}
+.lm-zone-bar-wrap {
+    flex: 1; height: 5px; border-radius: 3px;
+    background: rgba(255,255,255,.04); overflow: hidden; position: relative;
+}
+.lm-zone-bar-bear {
+    height: 100%; border-radius: 3px;
+    background: linear-gradient(90deg, #ff4466, #ff2244);
+    box-shadow: 0 0 8px rgba(255,68,102,.5);
+    animation: lm-glow-bear 2.5s ease-in-out infinite;
+}
+.lm-zone-bar-bull {
+    height: 100%; border-radius: 3px;
+    background: linear-gradient(90deg, #00d4ff, #00aaff);
+    box-shadow: 0 0 8px rgba(0,212,255,.5);
+    animation: lm-glow-bull 2.5s ease-in-out infinite;
+}
+@keyframes lm-glow-bear {
+    0%,100%{box-shadow:0 0 6px rgba(255,68,102,.4);}
+    50%{box-shadow:0 0 14px rgba(255,68,102,.8);}
+}
+@keyframes lm-glow-bull {
+    0%,100%{box-shadow:0 0 6px rgba(0,212,255,.4);}
+    50%{box-shadow:0 0 14px rgba(0,212,255,.8);}
+}
+.lm-zone-range {
+    font-family: 'Share Tech Mono', monospace; font-size: .58rem;
+    letter-spacing: .5px; flex: 1; white-space: nowrap;
+}
+.lm-zone-range.bear { color: #ff4466; }
+.lm-zone-range.bull { color: #00d4ff; }
+.lm-zone-pct {
+    font-family: 'Orbitron', monospace; font-size: .6rem;
+    font-weight: 700; width: 38px; text-align: right; flex-shrink: 0;
+}
+.lm-zone-pct.bear { color: rgba(255,68,102,.8); }
+.lm-zone-pct.bull { color: rgba(0,212,255,.8); }
+.lm-detect-text {
+    font-family: 'Inter', sans-serif; font-size: .72rem;
+    color: rgba(150,180,210,.65); line-height: 1.65;
+    padding: .5rem .9rem .4rem;
+    border-top: 1px solid rgba(0,212,255,.06);
+}
+.lm-detect-text strong { color: rgba(0,212,255,.8); }
+.lm-disclaimer {
+    font-family: 'Share Tech Mono', monospace; font-size: .52rem;
+    letter-spacing: .8px; color: rgba(136,153,187,.3);
+    padding: .3rem .9rem .55rem; line-height: 1.6;
+    border-top: 1px solid rgba(255,255,255,.03);
+}
+
 /* Streamlit overrides */
 div[data-testid="stSelectbox"] > div { background:#07101f !important; border-color:rgba(0,212,255,.15) !important; }
 div[data-testid="stNumberInput"] input { background:#07101f !important; color:#e8f4ff !important; border-color:rgba(0,212,255,.15) !important; }
@@ -564,6 +683,31 @@ if st.session_state.admin_mode:
             placeholder="Jelaskan alasan teknikal/fundamental: struktur market, indikator, level kunci, skenario..."
         )
 
+        st.markdown("---")
+        st.markdown("**⬡ LIQUIDITY MATRIX — Zona Institusional**")
+        st.caption("Kosongkan range jika zona tidak terdeteksi — tidak akan ditampilkan di card.")
+
+        lm_bear_zones = []
+        lm_bull_zones = []
+
+        lmc1, lmc2 = st.columns(2)
+        with lmc1:
+            st.markdown('<div style="font-family:Share Tech Mono,monospace;font-size:.62rem;letter-spacing:2px;color:#ff4466;margin-bottom:.4rem">▼ BEARISH ZONE</div>', unsafe_allow_html=True)
+            for i in range(1, 4):
+                bc1, bc2, bc3 = st.columns([2, 2, 1])
+                with bc1: lo = st.text_input(f"Low {i}", value="", key=f"lm_bear_lo_{i}", placeholder="cth: 3.320,00")
+                with bc2: hi = st.text_input(f"High {i}", value="", key=f"lm_bear_hi_{i}", placeholder="cth: 3.335,00")
+                with bc3: pc = st.text_input(f"% {i}", value="", key=f"lm_bear_pc_{i}", placeholder="0.58")
+                lm_bear_zones.append({"low": lo.strip(), "high": hi.strip(), "pct": pc.strip()})
+        with lmc2:
+            st.markdown('<div style="font-family:Share Tech Mono,monospace;font-size:.62rem;letter-spacing:2px;color:#00d4ff;margin-bottom:.4rem">▲ BULLISH ZONE</div>', unsafe_allow_html=True)
+            for i in range(1, 4):
+                bc1, bc2, bc3 = st.columns([2, 2, 1])
+                with bc1: lo = st.text_input(f"Low {i}", value="", key=f"lm_bull_lo_{i}", placeholder="cth: 3.280,00")
+                with bc2: hi = st.text_input(f"High {i}", value="", key=f"lm_bull_hi_{i}", placeholder="cth: 3.295,00")
+                with bc3: pc = st.text_input(f"% {i}", value="", key=f"lm_bull_pc_{i}", placeholder="0.61")
+                lm_bull_zones.append({"low": lo.strip(), "high": hi.strip(), "pct": pc.strip()})
+
         col_pub1, col_pub2 = st.columns([1, 5])
         with col_pub1:
             if st.button("🚀 Publish Sinyal", use_container_width=True, key="btn_publish"):
@@ -596,6 +740,8 @@ if st.session_state.admin_mode:
                         "explanation": new_expl,
                         "updated": new_upd,
                         "published": True,
+                        "lm_bear": lm_bear_zones,
+                        "lm_bull": lm_bull_zones,
                     })
                     st.session_state.next_id += 1
                     st.success(f"✓ Sinyal {sym} berhasil dipublish!")
@@ -766,6 +912,65 @@ for p in filtered:
 </div>
 </div>
 """, unsafe_allow_html=True)
+
+    # ── LIQUIDITY MATRIX ──
+    lm_bear = p.get("lm_bear", [])
+    lm_bull = p.get("lm_bull", [])
+    bear_active = [z for z in lm_bear if z.get("low") and z.get("high")]
+    bull_active = [z for z in lm_bull if z.get("low") and z.get("high")]
+
+    if bear_active or bull_active:
+        def lm_bar(pct_str, kind):
+            try:
+                val = float(pct_str.replace(",", ".")) if pct_str else 0
+                val = min(val, 5.0)
+                width = (val / 5.0) * 100
+            except:
+                width = 0
+            return f'<div class="lm-zone-bar-wrap"><div class="lm-zone-bar-{kind}" style="width:{width:.1f}%"></div></div>'
+
+        bear_rows = ""
+        for z in bear_active:
+            pct_disp = z["pct"] + "%" if z["pct"] else ""
+            bear_rows += f'''
+<div class="lm-zone-row">
+{lm_bar(z["pct"], "bear")}
+<div class="lm-zone-range bear">{z["low"]} – {z["high"]}</div>
+<div class="lm-zone-pct bear">{pct_disp}</div>
+</div>'''
+
+        bull_rows = ""
+        for z in bull_active:
+            pct_disp = z["pct"] + "%" if z["pct"] else ""
+            bull_rows += f'''
+<div class="lm-zone-row">
+{lm_bar(z["pct"], "bull")}
+<div class="lm-zone-range bull">{z["low"]} – {z["high"]}</div>
+<div class="lm-zone-pct bull">{pct_disp}</div>
+</div>'''
+
+        bear_section = f'''<div class="lm-section-label bear">▼ Bearish Zone</div>{bear_rows}''' if bear_active else ""
+        bull_section = f'''<div class="lm-section-label bull">▲ Bullish Zone</div>{bull_rows}''' if bull_active else ""
+
+        st.markdown(f'''
+<div class="lm-wrap">
+<div class="lm-header">
+<div class="lm-title">⬡ Liquidity Matrix</div>
+<div class="lm-subtitle">Institutional Order Flow Detection</div>
+</div>
+<div class="lm-body">
+{bear_section}
+{bull_section}
+</div>
+<div class="lm-detect-text">
+Sistem mendeteksi <strong>zona akumulasi institusional</strong> pada level harga di atas.
+Area ini mencerminkan potensi posisi besar dari smart money berdasarkan struktur FVG dan Order Block yang teridentifikasi.
+</div>
+<div class="lm-disclaimer">
+⚠ Bukan rekomendasi investasi. Validasi zona ini dengan analisis mandiri sebelum mengambil keputusan trading.
+</div>
+</div>
+''', unsafe_allow_html=True)
 
     st.markdown(f"""
 <div class="sm-explanation" style="margin:0 1.1rem .45rem">
