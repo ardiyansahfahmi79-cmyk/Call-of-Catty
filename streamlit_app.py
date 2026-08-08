@@ -18,82 +18,8 @@ st.set_page_config(
 if "admin_mode" not in st.session_state:
     st.session_state.admin_mode = False
 if "signals" not in st.session_state:
-    st.session_state.signals = [
-        {
-            "id": 1, "symbol": "XAUUSD", "name": "Gold",
-            "direction": "BULLISH",
-            "entry": 3321.50, "sl": 3305.00,
-            "tp1": 3338.00, "tp2": 3355.50, "tp3": 3380.00,
-            "confidence": 82,
-            "rr1": "1:1.0", "rr2": "1:2.0", "rr3": "1:3.5",
-            "bull_prob": 82, "bear_prob": 18,
-            "tp1_hit": None, "tp2_hit": None, "tp3_hit": None, "sl_hit": None,
-            "timeframe": "H4", "session": "LONDON / NEW YORK", "tag": "TREND FOLLOW",
-            "explanation": "Harga Gold bergerak dalam struktur higher-high higher-low di timeframe H4. EMA 21 bertindak sebagai support dinamis yang masih terjaga. Volume beli meningkat signifikan pada sesi London open. RSI (14) berada di 58 — masih dalam zona netral menuju bullish tanpa overbought. MACD crossover positif terkonfirmasi di H1.",
-            "updated": "03 Agu 2026 · 13:00 WIB",
-            "published": True,
-            "lm_bear": [
-                {"low": "3.340,00", "high": "3.352,50", "pct": "0.84"},
-                {"low": "3.318,00", "high": "3.328,00", "pct": "0.58"},
-                {"low": "", "high": "", "pct": ""},
-            ],
-            "lm_bull": [
-                {"low": "3.288,00", "high": "3.297,50", "pct": "0.61"},
-                {"low": "3.275,00", "high": "3.283,00", "pct": "0.52"},
-                {"low": "3.258,00", "high": "3.266,00", "pct": "0.59"},
-            ],
-        },
-        {
-            "id": 2, "symbol": "BTCUSD", "name": "Bitcoin",
-            "direction": "BULLISH",
-            "entry": 95840.00, "sl": 93200.00,
-            "tp1": 98500.00, "tp2": 101200.00, "tp3": 105000.00,
-            "confidence": 74,
-            "rr1": "1:1.0", "rr2": "1:2.0", "rr3": "1:3.5",
-            "bull_prob": 74, "bear_prob": 26,
-            "tp1_hit": True, "tp2_hit": None, "tp3_hit": None, "sl_hit": None,
-            "timeframe": "H4", "session": "CRYPTO 24H", "tag": "BREAKOUT",
-            "explanation": "BTC menunjukkan konsolidasi sehat setelah breakout dari range 90K–95K minggu lalu. On-chain data menunjukkan akumulasi oleh wallet besar (>1000 BTC). Struktur market H4 bullish dengan support kuat di 93.2K. TP1 sudah tercapai, potensi lanjut ke TP2 dengan trailing SL ke entry.",
-            "updated": "03 Agu 2026 · 08:00 WIB",
-            "published": True,
-            "lm_bear": [
-                {"low": "97.200", "high": "98.500", "pct": "1.38"},
-                {"low": "", "high": "", "pct": ""},
-                {"low": "", "high": "", "pct": ""},
-            ],
-            "lm_bull": [
-                {"low": "93.800", "high": "94.600", "pct": "0.82"},
-                {"low": "", "high": "", "pct": ""},
-                {"low": "", "high": "", "pct": ""},
-            ],
-        },
-        {
-            "id": 3, "symbol": "EURUSD", "name": "Euro / Dollar",
-            "direction": "BEARISH",
-            "entry": 1.08420, "sl": 1.08750,
-            "tp1": 1.08090, "tp2": 1.07760, "tp3": 1.07300,
-            "confidence": 77,
-            "rr1": "1:1.0", "rr2": "1:2.0", "rr3": "1:3.5",
-            "bull_prob": 31, "bear_prob": 69,
-            "tp1_hit": None, "tp2_hit": None, "tp3_hit": None, "sl_hit": True,
-            "timeframe": "H4", "session": "LONDON / NEW YORK", "tag": "REVERSAL",
-            "explanation": "EURUSD menguji resistance kuat di 1.0875 yang bertepatan dengan EMA 200 D1. Data NFP AS lebih kuat dari ekspektasi menekan Euro. Struktur bearish engulfing candle di H4 terkonfirmasi. Signal SL telah terkena — posisi ditutup.",
-            "updated": "02 Agu 2026 · 20:00 WIB",
-            "published": True,
-            "lm_bear": [
-                {"low": "", "high": "", "pct": ""},
-                {"low": "", "high": "", "pct": ""},
-                {"low": "", "high": "", "pct": ""},
-            ],
-            "lm_bull": [
-                {"low": "", "high": "", "pct": ""},
-                {"low": "", "high": "", "pct": ""},
-                {"low": "", "high": "", "pct": ""},
-            ],
-        },
-    ]
-if "next_id" not in st.session_state:
-    st.session_state.next_id = 4
+    st.session_state.signals = []
+    st.session_state.next_id = 1
 
 # ── Forex ──
 FOREX_PAIRS = [
@@ -146,9 +72,18 @@ PAIR_NAMES = {
     "HMSP": "HM Sampoerna", "ANTM": "Aneka Tambang",
     "CUSTOM": "Custom Pair",
 }
-TIMEFRAMES = ["M15", "M30", "H1", "H4", "D1", "W1"]
+TIMEFRAMES = ["M1", "M3", "M5", "M15", "M30", "H1", "H2", "H4", "H6", "H8", "D1", "W1", "MN"]
 SESSIONS   = ["LONDON", "NEW YORK", "LONDON / NEW YORK", "ASIA", "CRYPTO 24H", "ALL SESSION"]
 TAGS       = ["TREND FOLLOW", "BREAKOUT", "REVERSAL", "PATTERN", "DIVERGENCE", "SCALP", "SWING"]
+
+ANALYSTS = ["FOX", "ZETA", "DELTA", "CIPHER", "NOVA"]
+ANALYST_COLORS = {
+    "FOX":    {"color": "#00ff88", "glow": "rgba(0,255,136,.3)"},
+    "ZETA":   {"color": "#00d4ff", "glow": "rgba(0,212,255,.3)"},
+    "DELTA":  {"color": "#e8b000", "glow": "rgba(232,176,0,.3)"},
+    "CIPHER": {"color": "#b06eff", "glow": "rgba(176,110,255,.3)"},
+    "NOVA":   {"color": "#ff6b35", "glow": "rgba(255,107,53,.3)"},
+}
 
 
 
@@ -462,6 +397,24 @@ html, body, [class*="css"] { background-color: #030810 !important; }
     color:rgba(136,153,187,.4); padding:.25rem .7rem; border-radius:4px; cursor:default;
 }
 
+/* ── ANALYST BADGE ── */
+.analyst-badge {
+    display: inline-flex; align-items: center; gap: .4rem;
+    border-radius: 4px; padding: .22rem .65rem;
+    font-family: 'Orbitron', sans-serif; font-size: .6rem;
+    font-weight: 700; letter-spacing: 2.5px;
+    border: 1px solid; transition: box-shadow .2s;
+}
+.analyst-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    animation: sm-pulse 2s ease-in-out infinite;
+}
+.analyst-label {
+    font-family: 'Share Tech Mono', monospace; font-size: .5rem;
+    letter-spacing: 2px; color: rgba(136,153,187,.4);
+    margin-right: .1rem;
+}
+
 /* ── LIQUIDITY MATRIX ── */
 .lm-wrap {
     margin: 0 0 .85rem 0;
@@ -658,8 +611,9 @@ if st.session_state.admin_mode:
             new_session = st.selectbox("Session", SESSIONS, key="new_session")
             new_tag     = st.selectbox("Tag Strategi", TAGS, key="new_tag")
         with c3:
-            new_conf = st.slider("Confidence (%)", 10, 99, 70, key="new_conf")
-            new_upd  = st.text_input("Jam Update", value=datetime.now().strftime("%d %b %Y · %H:%M WIB"), key="new_upd")
+            new_conf     = st.slider("Confidence (%)", 10, 99, 70, key="new_conf")
+            new_analyst  = st.selectbox("Analis", ANALYSTS, key="new_analyst")
+            new_upd      = st.text_input("Jam Update", value=datetime.now().strftime("%d %b %Y · %H:%M WIB"), key="new_upd")
 
         st.markdown("**Level Harga**")
         p1, p2, p3, p4, p5 = st.columns(5)
@@ -713,7 +667,7 @@ if st.session_state.admin_mode:
             if st.button("🚀 Publish Sinyal", use_container_width=True, key="btn_publish"):
                 sym  = custom_sym.strip().upper() if sel_pair == "CUSTOM" else sel_pair
                 name = custom_name.strip() if sel_pair == "CUSTOM" else PAIR_NAMES.get(sel_pair, sel_pair)
-                if sel_pair.startswith("──"):
+                if sel_pair.strip().startswith("──") or sel_pair.strip() == "":
                     st.error("Pilih pair yang valid, bukan kategori.")
                 elif not sym or new_entry == 0:
                     st.error("Isi Symbol dan Entry terlebih dahulu.")
@@ -739,6 +693,7 @@ if st.session_state.admin_mode:
                         "timeframe": new_tf, "session": new_session, "tag": new_tag,
                         "explanation": new_expl,
                         "updated": new_upd,
+                        "analyst": new_analyst,
                         "published": True,
                         "lm_bear": lm_bear_zones,
                         "lm_bull": lm_bull_zones,
@@ -889,6 +844,15 @@ for p in filtered:
 </div>
 </div>
 </div>
+{"" if not p.get("analyst") else f"""
+<div style="padding:.35rem 1.1rem .4rem;border-bottom:1px solid rgba(255,255,255,.03);display:flex;align-items:center;gap:.5rem;">
+<span style="font-family:Share Tech Mono,monospace;font-size:.5rem;letter-spacing:2px;color:rgba(136,153,187,.35);">ANALYST</span>
+<span class="analyst-badge" style="color:{ANALYST_COLORS.get(p.get('analyst','FOX'),{}).get('color','#00d4ff')};border-color:{ANALYST_COLORS.get(p.get('analyst','FOX'),{}).get('color','#00d4ff')}33;background:{ANALYST_COLORS.get(p.get('analyst','FOX'),{}).get('glow','rgba(0,212,255,.08)')};box-shadow:0 0 10px {ANALYST_COLORS.get(p.get('analyst','FOX'),{}).get('glow','rgba(0,212,255,.2)')};">
+<span class="analyst-dot" style="background:{ANALYST_COLORS.get(p.get('analyst','FOX'),{}).get('color','#00d4ff')};box-shadow:0 0 6px {ANALYST_COLORS.get(p.get('analyst','FOX'),{}).get('color','#00d4ff')};"></span>
+{p.get('analyst','—')}
+</span>
+</div>
+"""}
 <div class="sm-card-body">
 <div class="sm-price-grid">
 <div><div class="sm-price-label">Entry</div><div class="sm-price-value cyan">{p.get('entry_str', p['entry'])}</div></div>
