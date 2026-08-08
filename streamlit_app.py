@@ -120,19 +120,6 @@ html, body, [class*="css"] { background-color: #030810 !important; }
 }
 .sm-brand span { color:rgba(136,153,187,.4); font-weight:400; }
 .sm-topbar-right { display:flex; align-items:center; gap:1rem; }
-.sm-live-pill {
-    display:inline-flex; align-items:center; gap:.4rem;
-    background:rgba(0,255,136,.06); border:1px solid rgba(0,255,136,.2);
-    border-radius:20px; padding:.2rem .7rem;
-    font-family:'Share Tech Mono',monospace;
-    font-size:.58rem; letter-spacing:2px; color:#00ff88;
-}
-.sm-live-dot {
-    width:5px; height:5px; border-radius:50%;
-    background:#00ff88; box-shadow:0 0 8px #00ff88;
-    animation:sm-pulse 2s ease-in-out infinite;
-}
-@keyframes sm-pulse { 0%,100%{opacity:1;} 50%{opacity:.3;} }
 .sm-time { font-family:'Share Tech Mono',monospace; font-size:.58rem; color:rgba(136,153,187,.4); letter-spacing:1px; }
 
 /* ADMIN BANNER */
@@ -529,7 +516,6 @@ st.markdown(f"""
 <div class="sm-topbar">
 <div class="sm-brand">AEROVULPIS <span>· SIGNAL MATRIX v4.1</span></div>
 <div class="sm-topbar-right">
-<div class="sm-live-pill"><div class="sm-live-dot"></div> LIVE FEED</div>
 </div>
 </div>
 """, unsafe_allow_html=True)
@@ -601,7 +587,9 @@ if st.session_state.admin_mode:
 
         c1, c2, c3 = st.columns([2, 2, 2])
         with c1:
-            sel_pair = st.selectbox("Pair", PAIR_OPTIONS, key="new_pair")
+            # Default ke pair valid pertama (skip separator "──")
+            valid_default = next((i for i, p in enumerate(PAIR_OPTIONS) if not p.startswith("──")), 1)
+            sel_pair = st.selectbox("Pair", PAIR_OPTIONS, index=valid_default, key="new_pair")
             if sel_pair == "CUSTOM":
                 custom_sym  = st.text_input("Symbol custom (cth: SOLUSD)", key="custom_sym")
                 custom_name = st.text_input("Nama pair", key="custom_name")
@@ -617,11 +605,11 @@ if st.session_state.admin_mode:
 
         st.markdown("**Level Harga**")
         p1, p2, p3, p4, p5 = st.columns(5)
-        with p1: new_entry_str = st.text_input("Entry", value="0", key="new_entry")
-        with p2: new_sl_str    = st.text_input("Stop Loss", value="0", key="new_sl")
-        with p3: new_tp1_str   = st.text_input("TP 1", value="0", key="new_tp1")
-        with p4: new_tp2_str   = st.text_input("TP 2", value="0", key="new_tp2")
-        with p5: new_tp3_str   = st.text_input("TP 3", value="0", key="new_tp3")
+        with p1: new_entry_str = st.text_input("Entry", value="", placeholder="cth: 3321.50", key="new_entry")
+        with p2: new_sl_str    = st.text_input("Stop Loss", value="", placeholder="cth: 3305.00", key="new_sl")
+        with p3: new_tp1_str   = st.text_input("TP 1", value="", placeholder="cth: 3338.00", key="new_tp1")
+        with p4: new_tp2_str   = st.text_input("TP 2", value="", placeholder="cth: 3355.50", key="new_tp2")
+        with p5: new_tp3_str   = st.text_input("TP 3", value="", placeholder="cth: 3380.00", key="new_tp3")
         def to_float(s):
             try: return float(s.replace(",", ".").strip())
             except: return 0.0
@@ -669,8 +657,10 @@ if st.session_state.admin_mode:
                 name = custom_name.strip() if sel_pair == "CUSTOM" else PAIR_NAMES.get(sel_pair, sel_pair)
                 if sel_pair.strip().startswith("──") or sel_pair.strip() == "":
                     st.error("Pilih pair yang valid, bukan kategori.")
-                elif not sym or new_entry == 0:
-                    st.error("Isi Symbol dan Entry terlebih dahulu.")
+                elif not sym:
+                    st.error("Pilih pair terlebih dahulu.")
+                elif not new_entry_str.strip() or new_entry_str.strip() in ("0", "0.0", ""):
+                    st.error("Isi harga Entry terlebih dahulu.")
                 else:
                     is_bull  = new_direction == "BULLISH"
                     bp = new_conf
