@@ -1,944 +1,564 @@
 """
-signal_analysis.py — Signal Analysis · Aerovulpis v4.1
-Prototype: Mode User + Mode Admin
+DH LAB — Trading Simulation (Standalone)
+=========================================
+Prototipe simulasi trading mandiri oleh DynamiHatch Identity.
+Pair simulasi: DHAV (DynamiHatch AeroVulpis Index)
+
+Jalankan langsung:
+    streamlit run dh_lab.py
+
+Dependencies:
+    pip install streamlit pandas numpy plotly
 """
 
 import streamlit as st
-from datetime import datetime
-import random
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+from datetime import datetime, timedelta
+import time
+import uuid
 
-st.set_page_config(
-    page_title="Signal Analysis · Aerovulpis",
-    page_icon="📡",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
+# ─────────────────────────────────────────────────────────
+# KONFIGURASI
+# ─────────────────────────────────────────────────────────
+SALDO_AWAL        = 100.0
+KONTRAK_PER_LOT   = 100      # 1 lot = 100 unit DHAV
+HARGA_AWAL        = 1000.0
+CANDLE_AWAL       = 120
+INTERVAL_MENIT    = 5
+LIVE_INTERVAL_SEC = 1.5      # detik antar auto-tick
 
-# ── SESSION STATE ──
-if "admin_mode" not in st.session_state:
-    st.session_state.admin_mode = False
-if "signals" not in st.session_state:
-    st.session_state.signals = []
-    st.session_state.next_id = 1
-
-# ── Forex ──
-FOREX_PAIRS = [
-    "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD",
-    "USDCHF", "NZDUSD", "EURGBP", "EURJPY", "GBPJPY",
-]
-# ── Crypto ──
-CRYPTO_PAIRS = [
-    "BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "XRPUSD",
-    "ADAUSD", "DOTUSD", "MATICUSD", "LINKUSD", "AVAXUSD",
-]
-# ── Komoditas ──
-COMMODITY_PAIRS = [
-    "XAUUSD", "XAGUSD", "XBRUSD", "XNGUSD", "XPDUSD",
-]
-# ── Saham Indonesia ──
-IDX_PAIRS = [
-    "IHSG", "BBCA", "BBRI", "TLKM", "ASII",
-    "BMRI", "UNVR", "GGRM", "HMSP", "ANTM",
-]
-
-PAIR_OPTIONS = (
-    ["── FOREX ──"] + FOREX_PAIRS +
-    ["── CRYPTO ──"] + CRYPTO_PAIRS +
-    ["── KOMODITAS ──"] + COMMODITY_PAIRS +
-    ["── SAHAM IDX ──"] + IDX_PAIRS +
-    ["CUSTOM"]
-)
-
-PAIR_NAMES = {
-    # Forex
-    "EURUSD": "Euro / Dollar", "GBPUSD": "Pound / Dollar",
-    "USDJPY": "Dollar / Yen", "AUDUSD": "Aussie / Dollar",
-    "USDCAD": "Dollar / CAD", "USDCHF": "Dollar / Franc",
-    "NZDUSD": "Kiwi / Dollar", "EURGBP": "Euro / Pound",
-    "EURJPY": "Euro / Yen", "GBPJPY": "Pound / Yen",
-    # Crypto
-    "BTCUSD": "Bitcoin", "ETHUSD": "Ethereum", "BNBUSD": "BNB",
-    "SOLUSD": "Solana", "XRPUSD": "Ripple", "ADAUSD": "Cardano",
-    "DOTUSD": "Polkadot", "MATICUSD": "Polygon", "LINKUSD": "Chainlink",
-    "AVAXUSD": "Avalanche",
-    # Komoditas
-    "XAUUSD": "Gold", "XAGUSD": "Silver", "XBRUSD": "Brent Crude Oil",
-    "XNGUSD": "Natural Gas", "XPDUSD": "Palladium",
-    # Saham IDX
-    "IHSG": "Indeks Harga Saham Gabungan", "BBCA": "Bank BCA",
-    "BBRI": "Bank BRI", "TLKM": "Telkom Indonesia",
-    "ASII": "Astra International", "BMRI": "Bank Mandiri",
-    "UNVR": "Unilever Indonesia", "GGRM": "Gudang Garam",
-    "HMSP": "HM Sampoerna", "ANTM": "Aneka Tambang",
-    "CUSTOM": "Custom Pair",
-}
-TIMEFRAMES = ["M1", "M3", "M5", "M15", "M30", "H1", "H2", "H4", "H6", "H8", "D1", "W1", "MN"]
-SESSIONS   = ["LONDON", "NEW YORK", "LONDON / NEW YORK", "ASIA", "CRYPTO 24H", "ALL SESSION"]
-TAGS       = ["TREND FOLLOW", "BREAKOUT", "REVERSAL", "PATTERN", "DIVERGENCE", "SCALP", "SWING"]
-
-ANALYSTS = ["FOX", "ZETA", "DELTA", "CIPHER", "NOVA"]
-ANALYST_COLORS = {
-    "FOX":    {"color": "#00ff88", "glow": "rgba(0,255,136,.3)"},
-    "ZETA":   {"color": "#00d4ff", "glow": "rgba(0,212,255,.3)"},
-    "DELTA":  {"color": "#e8b000", "glow": "rgba(232,176,0,.3)"},
-    "CIPHER": {"color": "#b06eff", "glow": "rgba(176,110,255,.3)"},
-    "NOVA":   {"color": "#ff6b35", "glow": "rgba(255,107,53,.3)"},
-}
+# Palet warna TradingView / MT5 dark
+C_BG     = "#0e1117"
+C_PANEL  = "#131722"
+C_CARD   = "#1c2030"
+C_BORDER = "#2a2e39"
+C_TEXT   = "#d1d4dc"
+C_MUTED  = "#787b86"
+C_GREEN  = "#26a69a"
+C_RED    = "#ef5350"
+C_BLUE   = "#3b82f6"
+C_YELLOW = "#f59e0b"
 
 
-
-
-def calc_rr(entry, sl, tp):
-    risk = abs(entry - sl)
-    if risk == 0:
-        return "1:0"
-    reward = abs(tp - entry)
-    ratio = reward / risk
-    return f"1:{ratio:.1f}"
-
-
-# ── CSS ──
-st.markdown("""
+# ─────────────────────────────────────────────────────────
+# CSS — DARK THEME
+# ─────────────────────────────────────────────────────────
+CSS = f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Inter:wght@300;400;500;600;700&display=swap');
-
-html, body, [class*="css"] { background-color: #030810 !important; }
-.block-container { padding: 0 1rem 2rem !important; max-width: 1400px !important; }
-#MainMenu, footer, header { visibility: hidden; }
-* { box-sizing: border-box; }
-
-/* TOPBAR */
-.sm-topbar {
-    display:flex; align-items:center; justify-content:space-between;
-    padding:.9rem 0 1.1rem;
-    border-bottom:1px solid rgba(0,212,255,.08);
-    margin-bottom:1.2rem;
-}
-.sm-brand {
-    font-family:'Orbitron',sans-serif; font-size:.7rem;
-    font-weight:700; letter-spacing:4px; color:#00d4ff;
-}
-.sm-brand span { color:rgba(136,153,187,.4); font-weight:400; }
-.sm-topbar-right { display:flex; align-items:center; gap:1rem; }
-.sm-time { font-family:'Share Tech Mono',monospace; font-size:.58rem; color:rgba(136,153,187,.4); letter-spacing:1px; }
-
-/* ADMIN BANNER */
-.sm-admin-banner {
-    background:linear-gradient(135deg,rgba(255,170,0,.06),rgba(255,100,0,.04));
-    border:1px solid rgba(255,170,0,.25);
-    border-radius:8px; padding:1rem 1.4rem; margin-bottom:1.2rem;
-    display:flex; align-items:center; justify-content:space-between; gap:1rem;
-}
-.sm-admin-banner-left { display:flex; align-items:center; gap:.8rem; }
-.sm-admin-icon {
-    font-size:1.2rem;
-    background:rgba(255,170,0,.1); border:1px solid rgba(255,170,0,.3);
-    border-radius:6px; padding:.4rem .6rem;
-}
-.sm-admin-title {
-    font-family:'Orbitron',sans-serif; font-size:.72rem;
-    font-weight:700; letter-spacing:3px; color:#e8b000;
-}
-.sm-admin-sub {
-    font-family:'Share Tech Mono',monospace; font-size:.58rem;
-    color:rgba(255,170,0,.5); letter-spacing:1px; margin-top:.1rem;
-}
-
-/* PAGE TITLE */
-.sm-page-title {
-    font-family:'Orbitron',sans-serif;
-    font-size:clamp(1.4rem,4vw,2.1rem);
-    font-weight:900; letter-spacing:5px; color:#e8f4ff;
-    margin-bottom:.2rem; line-height:1;
-}
-.sm-page-title span { color:#00d4ff; }
-.sm-page-sub {
-    font-family:'Share Tech Mono',monospace;
-    font-size:.62rem; color:rgba(136,153,187,.5);
-    letter-spacing:1.5px; margin-bottom:1.3rem;
-}
-
-
-/* STATS ROW */
-.sm-stats-row { display:flex; gap:.7rem; flex-wrap:wrap; margin-bottom:1.4rem; }
-.sm-stat-box {
-    flex:1; min-width:110px;
-    background:linear-gradient(160deg,#07101f,#040c18);
-    border:1px solid rgba(0,212,255,.1);
-    border-radius:6px; padding:.75rem .9rem;
-    position:relative; overflow:hidden;
-}
-.sm-stat-box::before {
-    content:''; position:absolute; bottom:0; left:0; right:0; height:2px;
-    background:var(--accent,linear-gradient(90deg,#00d4ff,#00ff88)); opacity:.5;
-}
-.sm-stat-label {
-    font-family:'Share Tech Mono',monospace; font-size:.5rem;
-    letter-spacing:2px; color:rgba(136,153,187,.45);
-    margin-bottom:.25rem; text-transform:uppercase;
-}
-.sm-stat-value {
-    font-family:'Orbitron',sans-serif; font-size:1.3rem;
-    font-weight:700; color:#e8f4ff; line-height:1;
-}
-.sm-stat-value.bull { color:#00ff88; }
-.sm-stat-value.bear { color:#ff4466; }
-.sm-stat-value.cyan { color:#00d4ff; }
-.sm-stat-value.warn { color:#e8b000; }
-
-/* FILTER */
-.sm-filter-label {
-    font-family:'Share Tech Mono',monospace; font-size:.55rem;
-    letter-spacing:2px; color:rgba(136,153,187,.4);
-    margin-bottom:.4rem; text-transform:uppercase;
-}
-.sm-section-title {
-    font-family:'Orbitron',sans-serif; font-size:.7rem;
-    font-weight:700; letter-spacing:4px; text-transform:uppercase; color:#00d4ff;
-    display:flex; align-items:center; gap:.7rem;
-    margin-bottom:.9rem; margin-top:.3rem;
-}
-.sm-section-title::before { content:''; width:24px; height:1px; background:#00d4ff; opacity:.5; }
-.sm-section-title::after  { content:''; flex:1; height:1px; background:rgba(0,212,255,.1); }
-
-/* SIGNAL CARD */
-.sm-card {
-    background:linear-gradient(160deg,#070f1e,#040b16);
-    border-radius:10px; margin-bottom:1.2rem;
-    position:relative; overflow:hidden;
-    border-top:1px solid rgba(255,255,255,.04);
-}
-.sm-card.bull-card { border:1px solid rgba(0,255,136,.15); border-left:3px solid #00ff88; }
-.sm-card.bear-card { border:1px solid rgba(255,68,102,.15); border-left:3px solid #ff4466; }
-.sm-card.sl-hit    { opacity:.6; }
-.sm-card-header {
-    display:flex; align-items:flex-start; justify-content:space-between;
-    padding:.9rem 1.1rem .65rem;
-    border-bottom:1px solid rgba(255,255,255,.04);
-}
-.sm-card-header-left { display:flex; flex-direction:column; gap:.12rem; }
-.sm-symbol { font-family:'Orbitron',sans-serif; font-size:1.05rem; font-weight:700; letter-spacing:2px; color:#e8f4ff; }
-.sm-pair-name { font-family:'Share Tech Mono',monospace; font-size:.58rem; color:rgba(136,153,187,.5); letter-spacing:1.5px; }
-.sm-card-header-right { display:flex; flex-direction:column; align-items:flex-end; gap:.3rem; }
-.sm-dir-badge-bull {
-    font-family:'Orbitron',sans-serif; font-size:.6rem; font-weight:700; letter-spacing:3px;
-    background:rgba(0,255,136,.1); border:1px solid rgba(0,255,136,.3); color:#00ff88;
-    padding:.22rem .65rem; border-radius:3px;
-}
-.sm-dir-badge-bear {
-    font-family:'Orbitron',sans-serif; font-size:.6rem; font-weight:700; letter-spacing:3px;
-    background:rgba(255,68,102,.1); border:1px solid rgba(255,68,102,.3); color:#ff4466;
-    padding:.22rem .65rem; border-radius:3px;
-}
-.sm-meta-row { display:flex; gap:.4rem; align-items:center; }
-
-.sm-card-body { padding:.85rem 1.1rem; }
-.sm-price-grid { display:grid; grid-template-columns:1fr 1fr; gap:.55rem .7rem; margin-bottom:.85rem; }
-.sm-price-label {
-    font-family:'Share Tech Mono',monospace; font-size:.5rem;
-    letter-spacing:2px; color:rgba(136,153,187,.4);
-    text-transform:uppercase; margin-bottom:.18rem;
-}
-.sm-price-value { font-family:'Orbitron',sans-serif; font-size:1.35rem; font-weight:700; color:#e8f4ff; line-height:1; }
-.sm-price-value.cyan { color:#00d4ff; }
-.sm-price-value.red  { color:#ff4466; }
-.sm-sl-badge {
-    display:inline-flex; align-items:center; gap:.25rem;
-    background:rgba(255,68,102,.1); border:1px solid rgba(255,68,102,.35);
-    border-radius:3px; padding:.12rem .45rem; margin-left:.45rem;
-    font-family:'Share Tech Mono',monospace; font-size:.52rem;
-    letter-spacing:1.5px; color:#ff4466; vertical-align:middle;
-}
-.sm-conf-row { display:flex; align-items:center; gap:.75rem; margin-bottom:.9rem; }
-.sm-conf-label { font-family:'Share Tech Mono',monospace; font-size:.5rem; letter-spacing:2px; color:rgba(136,153,187,.4); width:75px; flex-shrink:0; }
-.sm-conf-bar-wrap { flex:1; height:4px; background:rgba(255,255,255,.05); border-radius:4px; overflow:hidden; }
-.sm-conf-fill { height:100%; border-radius:4px; }
-.sm-conf-pct { font-family:'Orbitron',sans-serif; font-size:.68rem; font-weight:700; width:38px; text-align:right; flex-shrink:0; }
-.sm-tp-grid { display:flex; flex-direction:column; gap:.45rem; margin-bottom:.85rem; }
-.sm-tp-row { display:flex; align-items:center; gap:.55rem; }
-.sm-tp-badge {
-    font-family:'Orbitron',sans-serif; font-size:.52rem; font-weight:700; letter-spacing:1px;
-    background:rgba(0,255,136,.1); border:1px solid rgba(0,255,136,.25); color:#00ff88;
-    padding:.18rem .45rem; border-radius:3px; width:42px; text-align:center; flex-shrink:0;
-}
-.sm-tp-price { font-family:'Orbitron',sans-serif; font-size:1rem; font-weight:700; color:#e8f4ff; flex:1; }
-.sm-tp-hit {
-    display:inline-flex; align-items:center; gap:.2rem;
-    background:rgba(255,68,102,.08); border:1px solid rgba(255,68,102,.25);
-    border-radius:3px; padding:.1rem .4rem;
-    font-family:'Share Tech Mono',monospace; font-size:.5rem; letter-spacing:1px; color:#ff4466;
-}
-.sm-tp-ok {
-    display:inline-flex; align-items:center; gap:.2rem;
-    background:rgba(0,255,136,.08); border:1px solid rgba(0,255,136,.25);
-    border-radius:3px; padding:.1rem .4rem;
-    font-family:'Share Tech Mono',monospace; font-size:.5rem; letter-spacing:1px; color:#00ff88;
-}
-.sm-tp-pending {
-    display:inline-flex; align-items:center; gap:.2rem;
-    background:rgba(136,153,187,.05); border:1px solid rgba(136,153,187,.15);
-    border-radius:3px; padding:.1rem .4rem;
-    font-family:'Share Tech Mono',monospace; font-size:.5rem; letter-spacing:1px;
-    color:rgba(136,153,187,.45);
-}
-.sm-tp-miss {
-    display:inline-flex; align-items:center; gap:.2rem;
-    background:rgba(255,68,102,.08); border:1px solid rgba(255,68,102,.25);
-    border-radius:3px; padding:.1rem .4rem;
-    font-family:'Share Tech Mono',monospace; font-size:.5rem; letter-spacing:1px; color:#ff4466;
-}
-.sm-sl-miss-badge {
-    display:inline-flex; align-items:center; gap:.25rem;
-    background:rgba(255,68,102,.06); border:1px solid rgba(255,68,102,.2);
-    border-radius:3px; padding:.12rem .45rem; margin-left:.45rem;
-    font-family:'Share Tech Mono',monospace; font-size:.52rem;
-    letter-spacing:1.5px; color:rgba(255,68,102,.6); vertical-align:middle;
-}
-
-/* META PILL CYBERTECH GLOW */
-.sm-meta-pill {
-    font-family:'Share Tech Mono',monospace; font-size:.5rem; letter-spacing:1.5px;
-    color:#00d4ff; background:rgba(0,212,255,.07);
-    border:1px solid rgba(0,212,255,.25); border-radius:3px; padding:.08rem .38rem;
-    text-shadow:0 0 8px rgba(0,212,255,.6);
-    box-shadow:0 0 6px rgba(0,212,255,.15), inset 0 0 4px rgba(0,212,255,.05);
-}
-.sm-tag-pill {
-    font-family:'Share Tech Mono',monospace; font-size:.5rem; letter-spacing:1.5px;
-    color:#00ff88; background:rgba(0,255,136,.07);
-    border:1px solid rgba(0,255,136,.3); border-radius:3px; padding:.08rem .38rem;
-    text-shadow:0 0 8px rgba(0,255,136,.5);
-    box-shadow:0 0 6px rgba(0,255,136,.12), inset 0 0 4px rgba(0,255,136,.05);
-}
-.sm-rr-chip {
-    font-family:'Share Tech Mono',monospace; font-size:.55rem;
-    color:rgba(0,212,255,.7); background:rgba(0,212,255,.07);
-    border:1px solid rgba(0,212,255,.15); border-radius:3px; padding:.08rem .42rem; flex-shrink:0;
-}
-.sm-forecast-row { display:flex; gap:.5rem; margin-bottom:.85rem; }
-.sm-forecast-box { flex:1; padding:.5rem .75rem; border-radius:5px; font-family:'Share Tech Mono',monospace; font-size:.6rem; letter-spacing:1.5px; }
-.sm-forecast-bull { background:rgba(0,255,136,.06); border:1px solid rgba(0,255,136,.2); color:#00ff88; }
-.sm-forecast-bear { background:rgba(255,68,102,.06); border:1px solid rgba(255,68,102,.2); color:#ff4466; text-align:right; }
-.sm-forecast-val { font-family:'Orbitron',sans-serif; font-size:.88rem; font-weight:700; }
-.sm-explanation {
-    background:rgba(0,212,255,.02); border:1px solid rgba(0,212,255,.08);
-    border-radius:6px; padding:.85rem .95rem; margin-top:.3rem;
-}
-.sm-expl-label {
-    font-family:'Orbitron',sans-serif; font-size:.5rem; letter-spacing:3px;
-    text-transform:uppercase; color:rgba(0,212,255,.4); margin-bottom:.45rem; font-weight:700;
-}
-.sm-expl-text { font-family:'Inter',sans-serif; font-size:.79rem; color:rgba(160,185,210,.7); line-height:1.75; }
-.sm-updated { font-family:'Share Tech Mono',monospace; font-size:.52rem; color:rgba(136,153,187,.3); letter-spacing:1.5px; padding:.45rem 1.1rem .85rem; text-align:right; }
-
-/* ADMIN PANEL */
-.admin-panel {
-    background:linear-gradient(160deg,#0a1020,#070d1a);
-    border:1px solid rgba(255,170,0,.2);
-    border-radius:10px; padding:1.3rem 1.4rem;
-    margin-bottom:1.4rem;
-}
-.admin-panel-title {
-    font-family:'Orbitron',sans-serif; font-size:.72rem;
-    font-weight:700; letter-spacing:4px; color:#e8b000;
-    display:flex; align-items:center; gap:.7rem; margin-bottom:1.1rem;
-}
-.admin-panel-title::before { content:''; width:24px; height:1px; background:#e8b000; opacity:.5; }
-.admin-panel-title::after  { content:''; flex:1; height:1px; background:rgba(255,170,0,.1); }
-
-/* Admin result card */
-.admin-result-card {
-    background:rgba(255,170,0,.03);
-    border:1px solid rgba(255,170,0,.12);
-    border-radius:8px; padding:.9rem 1.1rem; margin-bottom:.8rem;
-}
-.admin-result-title {
-    font-family:'Orbitron',sans-serif; font-size:.75rem;
-    font-weight:700; letter-spacing:2px; color:#e8f4ff; margin-bottom:.6rem;
-    display:flex; align-items:center; gap:.6rem;
-}
-.admin-result-dir-bull {
-    font-size:.58rem; letter-spacing:2px;
-    background:rgba(0,255,136,.1); border:1px solid rgba(0,255,136,.3);
-    color:#00ff88; padding:.15rem .5rem; border-radius:3px;
-}
-.admin-result-dir-bear {
-    font-size:.58rem; letter-spacing:2px;
-    background:rgba(255,68,102,.1); border:1px solid rgba(255,68,102,.3);
-    color:#ff4466; padding:.15rem .5rem; border-radius:3px;
-}
-.admin-hit-grid { display:flex; gap:.5rem; flex-wrap:wrap; }
-.hit-active-bull {
-    font-family:'Share Tech Mono',monospace; font-size:.58rem; letter-spacing:1.5px;
-    background:rgba(0,255,136,.12); border:1px solid rgba(0,255,136,.35);
-    color:#00ff88; padding:.25rem .7rem; border-radius:4px; cursor:default;
-}
-.hit-active-red {
-    font-family:'Share Tech Mono',monospace; font-size:.58rem; letter-spacing:1.5px;
-    background:rgba(255,68,102,.12); border:1px solid rgba(255,68,102,.35);
-    color:#ff4466; padding:.25rem .7rem; border-radius:4px; cursor:default;
-}
-.hit-inactive {
-    font-family:'Share Tech Mono',monospace; font-size:.58rem; letter-spacing:1.5px;
-    background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08);
-    color:rgba(136,153,187,.4); padding:.25rem .7rem; border-radius:4px; cursor:default;
-}
-
-/* ── ANALYST BADGE ── */
-.analyst-badge {
-    display: inline-flex; align-items: center; gap: .4rem;
-    border-radius: 4px; padding: .22rem .65rem;
-    font-family: 'Orbitron', sans-serif; font-size: .6rem;
-    font-weight: 700; letter-spacing: 2.5px;
-    border: 1px solid; transition: box-shadow .2s;
-}
-.analyst-dot {
-    width: 5px; height: 5px; border-radius: 50%;
-    animation: sm-pulse 2s ease-in-out infinite;
-}
-.analyst-label {
-    font-family: 'Share Tech Mono', monospace; font-size: .5rem;
-    letter-spacing: 2px; color: rgba(136,153,187,.4);
-    margin-right: .1rem;
-}
-
-/* ── LIQUIDITY MATRIX ── */
-.lm-wrap {
-    margin: 0 0 .85rem 0;
-    background: linear-gradient(160deg, #050e1d, #040a15);
-    border: 1px solid rgba(0,212,255,.12);
-    border-radius: 8px; overflow: hidden;
-}
-.lm-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: .55rem .9rem .45rem;
-    border-bottom: 1px solid rgba(0,212,255,.07);
-    background: rgba(0,212,255,.03);
-}
-.lm-title {
-    font-family: 'Orbitron', sans-serif; font-size: .58rem;
-    font-weight: 700; letter-spacing: 3px; color: #00d4ff;
+/* ── Latar belakang utama ── */
+html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] {{
+    background-color: {C_BG} !important;
+    color: {C_TEXT};
+}}
+[data-testid="stSidebar"] {{
+    background-color: {C_PANEL} !important;
+}}
+/* ── Header ── */
+.dh-header {{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0 4px 0;
+    border-bottom: 1px solid {C_BORDER};
+    margin-bottom: 12px;
+}}
+.dh-logo {{
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: {C_BLUE};
+}}
+.dh-sub {{
+    font-size: 12px;
+    color: {C_MUTED};
+}}
+/* ── Metric cards ── */
+[data-testid="stMetric"] {{
+    background-color: {C_CARD} !important;
+    border: 1px solid {C_BORDER} !important;
+    border-radius: 10px !important;
+    padding: 14px 18px !important;
+}}
+[data-testid="stMetricLabel"] p {{
+    color: {C_MUTED} !important;
+    font-size: 11px !important;
     text-transform: uppercase;
-}
-.lm-subtitle {
-    font-family: 'Share Tech Mono', monospace; font-size: .5rem;
-    letter-spacing: 1.5px; color: rgba(136,153,187,.4);
-}
-.lm-body { padding: .6rem .9rem .5rem; }
-.lm-section-label {
-    font-family: 'Share Tech Mono', monospace; font-size: .5rem;
-    letter-spacing: 2.5px; text-transform: uppercase;
-    margin-bottom: .35rem; margin-top: .45rem;
-    display: flex; align-items: center; gap: .5rem;
-}
-.lm-section-label.bear { color: rgba(255,68,102,.6); }
-.lm-section-label.bull { color: rgba(0,212,255,.6); }
-.lm-section-label::after {
-    content: ''; flex: 1; height: 1px;
-    background: currentColor; opacity: .2;
-}
-.lm-zone-row {
-    display: flex; align-items: center; gap: .6rem;
-    margin-bottom: .32rem;
-}
-.lm-zone-bar-wrap {
-    flex: 1; height: 5px; border-radius: 3px;
-    background: rgba(255,255,255,.04); overflow: hidden; position: relative;
-}
-.lm-zone-bar-bear {
-    height: 100%; border-radius: 3px;
-    background: linear-gradient(90deg, #ff4466, #ff2244);
-    box-shadow: 0 0 8px rgba(255,68,102,.5);
-    animation: lm-glow-bear 2.5s ease-in-out infinite;
-}
-.lm-zone-bar-bull {
-    height: 100%; border-radius: 3px;
-    background: linear-gradient(90deg, #00d4ff, #00aaff);
-    box-shadow: 0 0 8px rgba(0,212,255,.5);
-    animation: lm-glow-bull 2.5s ease-in-out infinite;
-}
-@keyframes lm-glow-bear {
-    0%,100%{box-shadow:0 0 6px rgba(255,68,102,.4);}
-    50%{box-shadow:0 0 14px rgba(255,68,102,.8);}
-}
-@keyframes lm-glow-bull {
-    0%,100%{box-shadow:0 0 6px rgba(0,212,255,.4);}
-    50%{box-shadow:0 0 14px rgba(0,212,255,.8);}
-}
-.lm-zone-range {
-    font-family: 'Share Tech Mono', monospace; font-size: .58rem;
-    letter-spacing: .5px; flex: 1; white-space: nowrap;
-}
-.lm-zone-range.bear { color: #ff4466; }
-.lm-zone-range.bull { color: #00d4ff; }
-.lm-zone-pct {
-    font-family: 'Orbitron', monospace; font-size: .6rem;
-    font-weight: 700; width: 38px; text-align: right; flex-shrink: 0;
-}
-.lm-zone-pct.bear { color: rgba(255,68,102,.8); }
-.lm-zone-pct.bull { color: rgba(0,212,255,.8); }
-.lm-detect-text {
-    font-family: 'Inter', sans-serif; font-size: .72rem;
-    color: rgba(150,180,210,.65); line-height: 1.65;
-    padding: .5rem .9rem .4rem;
-    border-top: 1px solid rgba(0,212,255,.06);
-}
-.lm-detect-text strong { color: rgba(0,212,255,.8); }
-.lm-disclaimer {
-    font-family: 'Share Tech Mono', monospace; font-size: .52rem;
-    letter-spacing: .8px; color: rgba(136,153,187,.3);
-    padding: .3rem .9rem .55rem; line-height: 1.6;
-    border-top: 1px solid rgba(255,255,255,.03);
-}
-
-/* Streamlit overrides */
-div[data-testid="stSelectbox"] > div { background:#07101f !important; border-color:rgba(0,212,255,.15) !important; }
-div[data-testid="stNumberInput"] input { background:#07101f !important; color:#e8f4ff !important; border-color:rgba(0,212,255,.15) !important; }
-div[data-testid="stTextInput"] input { background:#07101f !important; color:#e8f4ff !important; border-color:rgba(0,212,255,.15) !important; }
-div[data-testid="stTextArea"] textarea { background:#07101f !important; color:#e8f4ff !important; border-color:rgba(0,212,255,.15) !important; }
-div[data-testid="stSlider"] { color:#00d4ff !important; }
-.stButton > button {
-    font-family:'Share Tech Mono',monospace !important;
-    letter-spacing:2px !important; font-size:.65rem !important;
-    border-radius:4px !important;
-}
-
-@media(max-width:700px) {
-    .sm-price-value { font-size:1.05rem; }
-    .sm-stat-value  { font-size:1.05rem; }
-}
+    letter-spacing: 0.5px;
+}}
+[data-testid="stMetricValue"] {{
+    font-size: 22px !important;
+    font-weight: 700 !important;
+    color: {C_TEXT} !important;
+}}
+/* ── Panel kanan ── */
+.order-panel {{
+    background-color: {C_CARD};
+    border: 1px solid {C_BORDER};
+    border-radius: 10px;
+    padding: 18px 16px;
+}}
+.price-display {{
+    font-size: 26px;
+    font-weight: 800;
+    color: {C_YELLOW};
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}}
+.panel-label {{
+    font-size: 11px;
+    color: {C_MUTED};
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+}}
+/* ── Tombol BUY / SELL ── */
+.btn-buy button {{
+    background-color: {C_GREEN} !important;
+    color: #ffffff !important;
+    font-size: 16px !important;
+    font-weight: 700 !important;
+    border-radius: 8px !important;
+    height: 48px !important;
+    border: none !important;
+    width: 100%;
+}}
+.btn-sell button {{
+    background-color: {C_RED} !important;
+    color: #ffffff !important;
+    font-size: 16px !important;
+    font-weight: 700 !important;
+    border-radius: 8px !important;
+    height: 48px !important;
+    border: none !important;
+    width: 100%;
+}}
+div.stButton > button {{
+    border-radius: 7px;
+    font-weight: 600;
+    border: 1px solid {C_BORDER};
+    background-color: {C_CARD};
+    color: {C_TEXT};
+    height: 40px;
+}}
+div.stButton > button:hover {{
+    border-color: {C_BLUE};
+    color: {C_BLUE};
+}}
+/* ── Input fields ── */
+[data-testid="stNumberInputContainer"], [data-testid="stTextInput"] {{
+    background-color: {C_CARD} !important;
+    border-radius: 6px !important;
+}}
+/* ── Tabel posisi ── */
+.pos-header {{
+    display: grid;
+    grid-template-columns: 80px 70px 110px 110px 110px 80px;
+    gap: 4px;
+    padding: 6px 10px;
+    background-color: {C_CARD};
+    border: 1px solid {C_BORDER};
+    border-radius: 8px 8px 0 0;
+    font-size: 11px;
+    color: {C_MUTED};
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}}
+.pos-row {{
+    display: grid;
+    grid-template-columns: 80px 70px 110px 110px 110px 80px;
+    gap: 4px;
+    padding: 8px 10px;
+    background-color: {C_PANEL};
+    border: 1px solid {C_BORDER};
+    border-top: none;
+    font-size: 13px;
+    align-items: center;
+}}
+.pos-row:last-child {{ border-radius: 0 0 8px 8px; }}
+.tag-buy  {{ color: {C_GREEN}; font-weight: 700; }}
+.tag-sell {{ color: {C_RED};   font-weight: 700; }}
+.pnl-pos  {{ color: {C_GREEN}; font-weight: 600; }}
+.pnl-neg  {{ color: {C_RED};   font-weight: 600; }}
+/* ── Divider ── */
+hr {{ border-color: {C_BORDER} !important; margin: 12px 0; }}
+/* ── Scrollbar tipis ── */
+::-webkit-scrollbar {{ width: 4px; }}
+::-webkit-scrollbar-track {{ background: {C_BG}; }}
+::-webkit-scrollbar-thumb {{ background: {C_BORDER}; border-radius: 4px; }}
 </style>
-""", unsafe_allow_html=True)
+"""
 
 
-# ── TOPBAR ──
-st.markdown(f"""
-<div class="sm-topbar">
-<div class="sm-brand">AEROVULPIS <span>· SIGNAL MATRIX v4.1</span></div>
-<div class="sm-topbar-right">
-</div>
-</div>
-""", unsafe_allow_html=True)
-
-# ── ADMIN TOGGLE BUTTON ──
-col_a1, col_a2 = st.columns([6, 1])
-with col_a2:
-    if st.session_state.admin_mode:
-        if st.button("✕ Tutup Admin", use_container_width=True):
-            st.session_state.admin_mode = False
-            st.rerun()
-    else:
-        if st.button("⚙ Mode Admin", use_container_width=True):
-            st.session_state.admin_mode = True
-            st.rerun()
-
-# ── ADMIN BANNER ──
-if st.session_state.admin_mode:
-    st.markdown("""
-<div class="sm-admin-banner">
-<div class="sm-admin-banner-left">
-<div class="sm-admin-icon">⚙</div>
-<div>
-<div class="sm-admin-title">ADMIN CONTROL PANEL</div>
-<div class="sm-admin-sub">Buat · Edit · Publish sinyal · Update status TP/SL</div>
-</div>
-</div>
-</div>
-""", unsafe_allow_html=True)
+# ─────────────────────────────────────────────────────────
+# GENERATOR HARGA — Random Walk + Macro Drift
+# ─────────────────────────────────────────────────────────
+def _bentuk_candle(open_: float, close_: float, ts: datetime) -> dict:
+    wick_hi = abs(np.random.normal(0, 0.40))
+    wick_lo = abs(np.random.normal(0, 0.40))
+    return {
+        "time":  ts,
+        "open":  open_,
+        "high":  max(open_, close_) + wick_hi,
+        "low":   max(min(open_, close_) - wick_lo, 0.5),
+        "close": close_,
+    }
 
 
-# ── PAGE TITLE ──
-st.markdown("""
-<div class="sm-page-title">SIGNAL <span>ANALYSIS</span></div>
-
-""", unsafe_allow_html=True)
-
-
-# ── STATS ──
-published = [s for s in st.session_state.signals if s.get("published")]
-total     = len(published)
-bull_c    = sum(1 for p in published if p["direction"] == "BULLISH")
-bear_c    = total - bull_c
-tp_c      = sum(1 for p in published if p["tp1_hit"] is True or p["tp2_hit"] is True or p["tp3_hit"] is True)
-sl_c      = sum(1 for p in published if p["sl_hit"] is True)
-avg_conf  = int(sum(p["confidence"] for p in published) / total) if total else 0
-
-st.markdown(f"""
-<div class="sm-stats-row">
-<div class="sm-stat-box" style="--accent:linear-gradient(90deg,#00d4ff,#00ff88)"><div class="sm-stat-label">Total Signal</div><div class="sm-stat-value">{total}</div></div>
-<div class="sm-stat-box" style="--accent:#00ff88"><div class="sm-stat-label">Bullish</div><div class="sm-stat-value bull">{bull_c}</div></div>
-<div class="sm-stat-box" style="--accent:#ff4466"><div class="sm-stat-label">Bearish</div><div class="sm-stat-value bear">{bear_c}</div></div>
-<div class="sm-stat-box" style="--accent:linear-gradient(90deg,#00ff88,#00d4ff)"><div class="sm-stat-label">TP Tercapai</div><div class="sm-stat-value cyan">{tp_c}</div></div>
-<div class="sm-stat-box" style="--accent:#ff4466"><div class="sm-stat-label">SL Terkena</div><div class="sm-stat-value warn">{sl_c}</div></div>
-<div class="sm-stat-box" style="--accent:linear-gradient(90deg,#00d4ff,#7b61ff)"><div class="sm-stat-label">Avg Confidence</div><div class="sm-stat-value">{avg_conf}%</div></div>
-</div>
-""", unsafe_allow_html=True)
+def _generate_histori(n: int = CANDLE_AWAL):
+    rows, harga, drift = [], HARGA_AWAL, 0.0
+    ts = datetime.now() - timedelta(minutes=INTERVAL_MENIT * n)
+    for _ in range(n):
+        drift  = float(np.clip(drift + np.random.normal(0, 0.012), -0.10, 0.10))
+        shock  = float(np.random.normal(drift, 0.50))
+        close_ = max(harga + shock, 1.0)
+        rows.append(_bentuk_candle(harga, close_, ts))
+        harga  = close_
+        ts    += timedelta(minutes=INTERVAL_MENIT)
+    return pd.DataFrame(rows), harga, drift
 
 
-# ════════════════════════════════════════════
-# ADMIN PANEL
-# ════════════════════════════════════════════
-if st.session_state.admin_mode:
+def _tick(df: pd.DataFrame, harga: float, drift: float):
+    drift  = float(np.clip(drift + np.random.normal(0, 0.012), -0.10, 0.10))
+    shock  = float(np.random.normal(drift, 0.50))
+    close_ = max(harga + shock, 1.0)
+    ts_baru = df.iloc[-1]["time"] + timedelta(minutes=INTERVAL_MENIT)
+    candle  = _bentuk_candle(harga, close_, ts_baru)
+    df_baru = pd.concat([df, pd.DataFrame([candle])], ignore_index=True).tail(300).reset_index(drop=True)
+    return df_baru, close_, drift
 
-    # ── BUAT SINYAL BARU ──
-    st.markdown('<div class="admin-panel-title">Buat Sinyal Baru</div>', unsafe_allow_html=True)
-    with st.container():
-        st.markdown('<div class="admin-panel">', unsafe_allow_html=True)
 
-        c1, c2, c3 = st.columns([2, 2, 2])
-        with c1:
-            # Default ke pair valid pertama (skip separator "──")
-            valid_default = next((i for i, p in enumerate(PAIR_OPTIONS) if not p.startswith("──")), 1)
-            sel_pair = st.selectbox("Pair", PAIR_OPTIONS, index=valid_default, key="new_pair")
-            if sel_pair == "CUSTOM":
-                custom_sym  = st.text_input("Symbol custom (cth: SOLUSD)", key="custom_sym")
-                custom_name = st.text_input("Nama pair", key="custom_name")
-            new_direction = st.selectbox("Direction", ["BULLISH", "BEARISH"], key="new_dir")
-        with c2:
-            new_tf      = st.selectbox("Timeframe", TIMEFRAMES, index=3, key="new_tf")
-            new_session = st.selectbox("Session", SESSIONS, key="new_session")
-            new_tag     = st.selectbox("Tag Strategi", TAGS, key="new_tag")
-        with c3:
-            new_conf     = st.slider("Confidence (%)", 10, 99, 70, key="new_conf")
-            new_analyst  = st.selectbox("Analis", ANALYSTS, key="new_analyst")
-            new_upd      = st.text_input("Jam Update", value=datetime.now().strftime("%d %b %Y · %H:%M WIB"), key="new_upd")
+# ─────────────────────────────────────────────────────────
+# SESSION STATE
+# ─────────────────────────────────────────────────────────
+def _init():
+    if "saldo" not in st.session_state:
+        st.session_state.saldo = SALDO_AWAL
+    if "positions" not in st.session_state:
+        st.session_state.positions = []
+    if "df" not in st.session_state:
+        df, harga, drift = _generate_histori()
+        st.session_state.df    = df
+        st.session_state.harga = harga
+        st.session_state.drift = drift
+    if "live" not in st.session_state:
+        st.session_state.live = False
+    if "notif" not in st.session_state:
+        st.session_state.notif = []   # list pesan notifikasi (SL/TP hit)
 
-        st.markdown("**Level Harga**")
-        p1, p2, p3, p4, p5 = st.columns(5)
-        with p1: new_entry_str = st.text_input("Entry", value="", placeholder="cth: 3321.50", key="new_entry")
-        with p2: new_sl_str    = st.text_input("Stop Loss", value="", placeholder="cth: 3305.00", key="new_sl")
-        with p3: new_tp1_str   = st.text_input("TP 1", value="", placeholder="cth: 3338.00", key="new_tp1")
-        with p4: new_tp2_str   = st.text_input("TP 2", value="", placeholder="cth: 3355.50", key="new_tp2")
-        with p5: new_tp3_str   = st.text_input("TP 3", value="", placeholder="cth: 3380.00", key="new_tp3")
-        def to_float(s):
-            try: return float(s.replace(",", ".").strip())
-            except: return 0.0
-        new_entry = to_float(new_entry_str)
-        new_sl    = to_float(new_sl_str)
-        new_tp1   = to_float(new_tp1_str)
-        new_tp2   = to_float(new_tp2_str)
-        new_tp3   = to_float(new_tp3_str)
 
-        new_expl = st.text_area(
-            "Deskripsi Analisis (kenapa Bullish/Bearish?)",
-            height=110, key="new_expl",
-            placeholder="Jelaskan alasan teknikal/fundamental: struktur market, indikator, level kunci, skenario..."
+def _tambah_tick():
+    df, harga, drift = _tick(
+        st.session_state.df,
+        st.session_state.harga,
+        st.session_state.drift,
+    )
+    st.session_state.df    = df
+    st.session_state.harga = harga
+    st.session_state.drift = drift
+    _cek_sl_tp(harga)
+
+
+# ─────────────────────────────────────────────────────────
+# LOGIKA TRADING
+# ─────────────────────────────────────────────────────────
+def _pnl(pos: dict, harga_now: float) -> float:
+    qty = pos["lot"] * KONTRAK_PER_LOT
+    return (harga_now - pos["entry"]) * qty if pos["tipe"] == "BUY" else (pos["entry"] - harga_now) * qty
+
+
+def _buka(tipe: str, lot: float, sl: float, tp: float):
+    st.session_state.positions.append({
+        "id":    str(uuid.uuid4())[:8],
+        "pair":  "DHAV",
+        "tipe":  tipe,
+        "entry": st.session_state.harga,
+        "lot":   lot,
+        "sl":    sl,
+        "tp":    tp,
+        "waktu": datetime.now(),
+    })
+
+
+def _tutup(pos_id: str, alasan: str = "Manual"):
+    for pos in st.session_state.positions:
+        if pos["id"] == pos_id:
+            nilai_pnl = _pnl(pos, st.session_state.harga)
+            st.session_state.saldo += nilai_pnl
+            st.session_state.positions.remove(pos)
+            label = f"{'🟢' if nilai_pnl >= 0 else '🔴'} [{alasan}] {pos['tipe']} DHAV ditutup @ ${st.session_state.harga:,.2f} — PnL: ${nilai_pnl:+,.2f}"
+            st.session_state.notif.insert(0, label)
+            st.session_state.notif = st.session_state.notif[:5]
+            break
+
+
+def _cek_sl_tp(harga_now: float):
+    for pos in list(st.session_state.positions):
+        sl, tp = pos["sl"], pos["tp"]
+        kena_sl = sl > 0 and (
+            (pos["tipe"] == "BUY"  and harga_now <= sl) or
+            (pos["tipe"] == "SELL" and harga_now >= sl)
         )
+        kena_tp = tp > 0 and (
+            (pos["tipe"] == "BUY"  and harga_now >= tp) or
+            (pos["tipe"] == "SELL" and harga_now <= tp)
+        )
+        if kena_sl: _tutup(pos["id"], "SL Hit")
+        elif kena_tp: _tutup(pos["id"], "TP Hit")
 
-        st.markdown("---")
-        st.markdown("**⬡ LIQUIDITY MATRIX — Zona Institusional**")
-        st.caption("Kosongkan range jika zona tidak terdeteksi — tidak akan ditampilkan di card.")
 
-        lm_bear_zones = []
-        lm_bull_zones = []
+# ─────────────────────────────────────────────────────────
+# CHART
+# ─────────────────────────────────────────────────────────
+def _chart() -> go.Figure:
+    df  = st.session_state.df
+    fig = go.Figure()
 
-        lmc1, lmc2 = st.columns(2)
-        with lmc1:
-            st.markdown('<div style="font-family:Share Tech Mono,monospace;font-size:.62rem;letter-spacing:2px;color:#ff4466;margin-bottom:.4rem">▼ BEARISH ZONE</div>', unsafe_allow_html=True)
-            for i in range(1, 4):
-                bc1, bc2, bc3 = st.columns([2, 2, 1])
-                with bc1: lo = st.text_input(f"Low {i}", value="", key=f"lm_bear_lo_{i}", placeholder="cth: 3.320,00")
-                with bc2: hi = st.text_input(f"High {i}", value="", key=f"lm_bear_hi_{i}", placeholder="cth: 3.335,00")
-                with bc3: pc = st.text_input(f"% {i}", value="", key=f"lm_bear_pc_{i}", placeholder="0.58")
-                lm_bear_zones.append({"low": lo.strip(), "high": hi.strip(), "pct": pc.strip()})
-        with lmc2:
-            st.markdown('<div style="font-family:Share Tech Mono,monospace;font-size:.62rem;letter-spacing:2px;color:#00d4ff;margin-bottom:.4rem">▲ BULLISH ZONE</div>', unsafe_allow_html=True)
-            for i in range(1, 4):
-                bc1, bc2, bc3 = st.columns([2, 2, 1])
-                with bc1: lo = st.text_input(f"Low {i}", value="", key=f"lm_bull_lo_{i}", placeholder="cth: 3.280,00")
-                with bc2: hi = st.text_input(f"High {i}", value="", key=f"lm_bull_hi_{i}", placeholder="cth: 3.295,00")
-                with bc3: pc = st.text_input(f"% {i}", value="", key=f"lm_bull_pc_{i}", placeholder="0.61")
-                lm_bull_zones.append({"low": lo.strip(), "high": hi.strip(), "pct": pc.strip()})
+    # Candlestick utama
+    fig.add_trace(go.Candlestick(
+        x=df["time"],
+        open=df["open"], high=df["high"],
+        low=df["low"],   close=df["close"],
+        increasing=dict(line=dict(color=C_GREEN, width=1), fillcolor=C_GREEN),
+        decreasing=dict(line=dict(color=C_RED,   width=1), fillcolor=C_RED),
+        name="DHAV",
+        hovertext=[
+            f"O: {r.open:.2f}  H: {r.high:.2f}  L: {r.low:.2f}  C: {r.close:.2f}"
+            for r in df.itertuples()
+        ],
+        hoverinfo="x+text",
+    ))
 
-        col_pub1, col_pub2 = st.columns([1, 5])
-        with col_pub1:
-            if st.button("🚀 Publish Sinyal", use_container_width=True, key="btn_publish"):
-                sym  = custom_sym.strip().upper() if sel_pair == "CUSTOM" else sel_pair
-                name = custom_name.strip() if sel_pair == "CUSTOM" else PAIR_NAMES.get(sel_pair, sel_pair)
-                if sel_pair.strip().startswith("──") or sel_pair.strip() == "":
-                    st.error("Pilih pair yang valid, bukan kategori.")
-                elif not sym:
-                    st.error("Pilih pair terlebih dahulu.")
-                elif not new_entry_str.strip() or new_entry_str.strip() in ("0", "0.0", ""):
-                    st.error("Isi harga Entry terlebih dahulu.")
-                else:
-                    is_bull  = new_direction == "BULLISH"
-                    bp = new_conf
-                    brp = 100 - new_conf
-                    st.session_state.signals.append({
-                        "id": st.session_state.next_id,
-                        "symbol": sym, "name": name,
-                        "direction": new_direction,
-                        "entry": new_entry, "sl": new_sl,
-                        "tp1": new_tp1, "tp2": new_tp2, "tp3": new_tp3,
-                        "entry_str": new_entry_str.strip(), "sl_str": new_sl_str.strip(),
-                        "tp1_str": new_tp1_str.strip(), "tp2_str": new_tp2_str.strip(),
-                        "tp3_str": new_tp3_str.strip(),
-                        "confidence": new_conf,
-                        "rr1": calc_rr(new_entry, new_sl, new_tp1),
-                        "rr2": calc_rr(new_entry, new_sl, new_tp2),
-                        "rr3": calc_rr(new_entry, new_sl, new_tp3),
-                        "bull_prob": bp, "bear_prob": brp,
-                        "tp1_hit": None, "tp2_hit": None, "tp3_hit": None, "sl_hit": None,
-                        "timeframe": new_tf, "session": new_session, "tag": new_tag,
-                        "explanation": new_expl,
-                        "updated": new_upd,
-                        "analyst": new_analyst,
-                        "published": True,
-                        "lm_bear": lm_bear_zones,
-                        "lm_bull": lm_bull_zones,
-                    })
-                    st.session_state.next_id += 1
-                    st.success(f"✓ Sinyal {sym} berhasil dipublish!")
-                    st.rerun()
+    # Garis entry setiap posisi terbuka
+    for pos in st.session_state.positions:
+        warna = C_GREEN if pos["tipe"] == "BUY" else C_RED
+        fig.add_hline(
+            y=pos["entry"], line_dash="dot",
+            line_color=warna, line_width=1, opacity=0.75,
+            annotation_text=f"{pos['tipe']} #{pos['id']}",
+            annotation_font_color=warna,
+            annotation_font_size=10,
+        )
+        if pos["sl"] > 0:
+            fig.add_hline(y=pos["sl"], line_dash="dash", line_color=C_RED,   line_width=1, opacity=0.45)
+        if pos["tp"] > 0:
+            fig.add_hline(y=pos["tp"], line_dash="dash", line_color=C_GREEN, line_width=1, opacity=0.45)
 
-        st.markdown('</div>', unsafe_allow_html=True)
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor=C_PANEL,
+        plot_bgcolor=C_BG,
+        font=dict(color=C_TEXT, size=12),
+        height=500,
+        margin=dict(l=0, r=0, t=36, b=0),
+        xaxis_rangeslider_visible=False,
+        title=dict(
+            text="<b>DHAV</b>  DynamiHatch AeroVulpis Index  •  5M  •  Simulasi",
+            font=dict(size=13, color=C_TEXT),
+            x=0.01,
+        ),
+        yaxis=dict(title="", gridcolor=C_BORDER, tickfont=dict(size=11)),
+        xaxis=dict(gridcolor=C_BORDER, tickfont=dict(size=10)),
+        legend=dict(bgcolor="rgba(0,0,0,0)"),
+        hovermode="x unified",
+    )
+    return fig
 
-    # ── UPDATE STATUS SINYAL ──
-    st.markdown("")
-    st.markdown('<div class="admin-panel-title">Update Status Sinyal</div>', unsafe_allow_html=True)
 
-    pub_signals = [s for s in st.session_state.signals if s.get("published")]
-    if not pub_signals:
-        st.markdown('<div style="font-family:Share Tech Mono,monospace;font-size:.72rem;color:rgba(136,153,187,.35);padding:.5rem 0">Belum ada sinyal yang dipublish.</div>', unsafe_allow_html=True)
-    else:
-        for sig in pub_signals:
-            is_bull = sig["direction"] == "BULLISH"
-            dir_cls = "admin-result-dir-bull" if is_bull else "admin-result-dir-bear"
-            st.markdown(f"""
-<div class="admin-result-card">
-<div class="admin-result-title">
-{sig['symbol']}
-<span class="{dir_cls}">{sig['direction']}</span>
-<span style="font-family:Share Tech Mono,monospace;font-size:.6rem;color:rgba(136,153,187,.35);font-weight:400">entry {sig['entry']}</span>
-</div>
-</div>
+# ─────────────────────────────────────────────────────────
+# PANEL ORDER (KANAN)
+# ─────────────────────────────────────────────────────────
+def _panel_order():
+    harga_now = st.session_state.harga
+
+    st.markdown(f"""
+<div class="price-display">${harga_now:,.2f}</div>
+<div class="panel-label">Harga DHAV Saat Ini</div>
 """, unsafe_allow_html=True)
 
-            hc1, hc2, hc3, hc4, hc5, hc6 = st.columns(6)
-            sid = sig["id"]
+    st.markdown("---")
+    st.markdown('<div class="panel-label">Lot / Size</div>', unsafe_allow_html=True)
+    lot = st.number_input("lot_input", label_visibility="collapsed",
+                          min_value=0.01, max_value=10.0,
+                          value=0.10, step=0.01, key="k_lot")
 
-            def cycle(val):
-                if val is None: return True
-                if val is True: return False
-                return None
+    col_sl, col_tp = st.columns(2)
+    with col_sl:
+        st.markdown('<div class="panel-label">Stop Loss</div>', unsafe_allow_html=True)
+        sl = st.number_input("sl_input", label_visibility="collapsed",
+                             min_value=0.0, value=round(harga_now * 0.985, 2),
+                             step=1.0, key="k_sl")
+    with col_tp:
+        st.markdown('<div class="panel-label">Take Profit</div>', unsafe_allow_html=True)
+        tp = st.number_input("tp_input", label_visibility="collapsed",
+                             min_value=0.0, value=round(harga_now * 1.015, 2),
+                             step=1.0, key="k_tp")
 
-            def lbl_tp(val, n):
-                if val is True:  return f"✓ TP{n} HIT"
-                if val is False: return f"✗ TP{n} MISS"
-                return f"– TP{n} PENDING"
-
-            def lbl_sl(val):
-                if val is True:  return "✓ SL HIT"
-                if val is False: return "✗ SL MISS"
-                return "– SL PENDING"
-
-            with hc1:
-                if st.button(lbl_tp(sig["tp1_hit"], 1), key=f"tp1_{sid}", use_container_width=True):
-                    sig["tp1_hit"] = cycle(sig["tp1_hit"]); st.rerun()
-            with hc2:
-                if st.button(lbl_tp(sig["tp2_hit"], 2), key=f"tp2_{sid}", use_container_width=True):
-                    sig["tp2_hit"] = cycle(sig["tp2_hit"]); st.rerun()
-            with hc3:
-                if st.button(lbl_tp(sig["tp3_hit"], 3), key=f"tp3_{sid}", use_container_width=True):
-                    sig["tp3_hit"] = cycle(sig["tp3_hit"]); st.rerun()
-            with hc4:
-                if st.button(lbl_sl(sig["sl_hit"]), key=f"sl_{sid}", use_container_width=True):
-                    new_sl_val = cycle(sig["sl_hit"])
-                    sig["sl_hit"] = new_sl_val
-                    # Jika SL kena (True), TP yang masih PENDING → otomatis MISS (False)
-                    # TP yang sudah HIT (True) tetap tidak diubah
-                    if new_sl_val is True:
-                        if sig["tp1_hit"] is None: sig["tp1_hit"] = False
-                        if sig["tp2_hit"] is None: sig["tp2_hit"] = False
-                        if sig["tp3_hit"] is None: sig["tp3_hit"] = False
-                    # Jika SL di-undo kembali ke None/False, kembalikan TP Miss → Pending
-                    elif new_sl_val is None or new_sl_val is False:
-                        if sig["tp1_hit"] is False: sig["tp1_hit"] = None
-                        if sig["tp2_hit"] is False: sig["tp2_hit"] = None
-                        if sig["tp3_hit"] is False: sig["tp3_hit"] = None
-                    st.rerun()
-            with hc5:
-                if st.button("🗑 Hapus", key=f"del_{sid}", use_container_width=True):
-                    st.session_state.signals = [s for s in st.session_state.signals if s["id"] != sid]
-                    st.rerun()
-            with hc6:
-                st.markdown("")  # spacer
+    st.markdown("<br>", unsafe_allow_html=True)
+    col_b, col_s = st.columns(2)
+    with col_b:
+        st.markdown('<div class="btn-buy">', unsafe_allow_html=True)
+        if st.button("▲ BUY", use_container_width=True, key="k_buy"):
+            _buka("BUY", lot, sl, tp)
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+    with col_s:
+        st.markdown('<div class="btn-sell">', unsafe_allow_html=True)
+        if st.button("▼ SELL", use_container_width=True, key="k_sell"):
+            _buka("SELL", lot, sl, tp)
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("---")
 
+    # Live toggle
+    live_val = st.toggle("▶ Live Simulation", value=st.session_state.live, key="k_live")
+    st.session_state.live = live_val
 
-# ════════════════════════════════════════════
-# SIGNAL FEED (USER VIEW)
-# ════════════════════════════════════════════
-col_f1, col_f2, col_f3 = st.columns([1, 1, 2])
-with col_f1:
-    st.markdown('<div class="sm-filter-label">Direction</div>', unsafe_allow_html=True)
-    dir_filter = st.selectbox("dir", ["ALL", "BULLISH", "BEARISH"], label_visibility="collapsed")
-with col_f2:
-    st.markdown('<div class="sm-filter-label">Status</div>', unsafe_allow_html=True)
-    status_filter = st.selectbox("sts", ["ALL", "ACTIVE", "TP HIT", "SL HIT"], label_visibility="collapsed")
-with col_f3:
-    st.markdown('<div class="sm-filter-label">Pairs</div>', unsafe_allow_html=True)
-    all_syms = [p["symbol"] for p in published]
-    sym_filter = st.multiselect("pairs", all_syms, default=all_syms, label_visibility="collapsed")
+    if st.button("⏭ Tick Manual", use_container_width=True, key="k_tick"):
+        _tambah_tick()
+        st.rerun()
 
-filtered = []
-for p in published:
-    if sym_filter and p["symbol"] not in sym_filter: continue
-    if dir_filter != "ALL" and p["direction"] != dir_filter: continue
-    if status_filter == "ACTIVE" and (p["sl_hit"] is True or p["tp3_hit"] is True): continue
-    if status_filter == "TP HIT" and not (p["tp1_hit"] is True or p["tp2_hit"] is True or p["tp3_hit"] is True): continue
-    if status_filter == "SL HIT" and p["sl_hit"] is not True: continue
-    filtered.append(p)
+    if st.button("🔄 Reset Simulasi", use_container_width=True, key="k_reset"):
+        for k in ["saldo","positions","df","harga","drift","live","notif"]:
+            st.session_state.pop(k, None)
+        st.rerun()
 
-st.markdown("")
-st.markdown(f'<div class="sm-section-title">Signal Feed &nbsp;<span style="color:rgba(136,153,187,.3);font-size:.62rem;letter-spacing:2px">({len(filtered)} SINYAL)</span></div>', unsafe_allow_html=True)
 
-if not filtered:
-    st.markdown('<div style="font-family:Share Tech Mono,monospace;font-size:.72rem;color:rgba(136,153,187,.35);text-align:center;padding:3rem 0">— Tidak ada sinyal yang cocok dengan filter —</div>', unsafe_allow_html=True)
+# ─────────────────────────────────────────────────────────
+# TABEL POSISI TERBUKA
+# ─────────────────────────────────────────────────────────
+def _tabel_posisi():
+    posisi    = st.session_state.positions
+    harga_now = st.session_state.harga
 
-for p in filtered:
-    is_bull   = p["direction"] == "BULLISH"
-    card_cls  = ("bull-card" if is_bull else "bear-card") + (" sl-hit" if p["sl_hit"] is True else "")
-    dir_bcls  = "sm-dir-badge-bull" if is_bull else "sm-dir-badge-bear"
-    conf      = p["confidence"]
-    conf_col  = "#00ff88" if conf >= 70 else ("#e8b000" if conf >= 55 else "#ff4466")
+    st.markdown("#### 📋 Posisi Terbuka")
 
-    def tp_badge(hit):
-        if hit is True:  return '<span class="sm-tp-ok">✓ HIT</span>'
-        if hit is False: return '<span class="sm-tp-miss">✗ MISS</span>'
-        return '<span class="sm-tp-pending">– PENDING</span>'
+    if not posisi:
+        st.markdown(
+            f'<div style="color:{C_MUTED}; font-size:13px; padding:10px 0;">Belum ada posisi — tekan BUY / SELL untuk memulai.</div>',
+            unsafe_allow_html=True,
+        )
+        return
 
-    if p["sl_hit"] is True:
-        sl_badge = '<span class="sm-sl-badge">✗ SL HIT</span>'
-    elif p["sl_hit"] is False:
-        sl_badge = '<span class="sm-sl-miss-badge">✗ SL MISS</span>'
-    else:
-        sl_badge = ''
-    
+    st.markdown(
+        '<div class="pos-header">'
+        '<span>Pair</span><span>Tipe</span>'
+        '<span>Entry ($)</span><span>Now ($)</span>'
+        '<span>PnL ($)</span><span>Aksi</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
+    for pos in posisi:
+        pnl       = _pnl(pos, harga_now)
+        tag_cls   = "tag-buy"  if pos["tipe"] == "BUY"  else "tag-sell"
+        pnl_cls   = "pnl-pos"  if pnl >= 0              else "pnl-neg"
+        pnl_sign  = f"+{pnl:,.2f}" if pnl >= 0 else f"{pnl:,.2f}"
+
+        st.markdown(f"""
+<div class="pos-row">
+  <span>{pos["pair"]}</span>
+  <span class="{tag_cls}">{pos["tipe"]}</span>
+  <span>{pos["entry"]:,.2f}</span>
+  <span>{harga_now:,.2f}</span>
+  <span class="{pnl_cls}">{pnl_sign}</span>
+  <span></span>
+</div>
+""", unsafe_allow_html=True)
+
+        # Tombol close sejajar dengan baris (dirender via st.columns di bawah HTML)
+        if st.button(f"Close #{pos['id']}", key=f"cls_{pos['id']}"):
+            _tutup(pos["id"], "Manual")
+            st.rerun()
+
+
+# ─────────────────────────────────────────────────────────
+# NOTIFIKASI SL / TP
+# ─────────────────────────────────────────────────────────
+def _notif_bar():
+    if not st.session_state.notif:
+        return
+    for msg in st.session_state.notif:
+        st.markdown(
+            f'<div style="background:{C_CARD}; border:1px solid {C_BORDER}; '
+            f'border-radius:6px; padding:6px 12px; margin-bottom:4px; font-size:12px;">'
+            f'{msg}</div>',
+            unsafe_allow_html=True,
+        )
+
+
+# ─────────────────────────────────────────────────────────
+# MAIN
+# ─────────────────────────────────────────────────────────
+def main():
+    st.set_page_config(
+        page_title="DH LAB — DHAV Simulation",
+        page_icon="🧪",
+        layout="wide",
+        initial_sidebar_state="collapsed",
+    )
+    st.markdown(CSS, unsafe_allow_html=True)
+    _init()
+
+    # Auto-tick dulu sebelum render, supaya harga selalu fresh saat live
+    if st.session_state.live:
+        _tambah_tick()
+
+    # ── Header ──────────────────────────────────────────
     st.markdown(f"""
-<div class="sm-card {card_cls}">
-<div class="sm-card-header">
-<div class="sm-card-header-left">
-<div class="sm-symbol">{p['symbol']}</div>
-<div class="sm-pair-name">{p['name']}</div>
-</div>
-<div class="sm-card-header-right">
-<span class="{dir_bcls}">{p['direction']}</span>
-<div class="sm-meta-row">
-<span class="sm-meta-pill">{p['timeframe']}</span>
-<span class="sm-meta-pill">{p['session']}</span>
-<span class="sm-tag-pill">{p['tag']}</span>
-</div>
-</div>
-</div>
-{"" if not p.get("analyst") else f"""
-<div style="padding:.35rem 1.1rem .4rem;border-bottom:1px solid rgba(255,255,255,.03);display:flex;align-items:center;gap:.5rem;">
-<span style="font-family:Share Tech Mono,monospace;font-size:.5rem;letter-spacing:2px;color:rgba(136,153,187,.35);">ANALYST</span>
-<span class="analyst-badge" style="color:{ANALYST_COLORS.get(p.get('analyst','FOX'),{}).get('color','#00d4ff')};border-color:{ANALYST_COLORS.get(p.get('analyst','FOX'),{}).get('color','#00d4ff')}33;background:{ANALYST_COLORS.get(p.get('analyst','FOX'),{}).get('glow','rgba(0,212,255,.08)')};box-shadow:0 0 10px {ANALYST_COLORS.get(p.get('analyst','FOX'),{}).get('glow','rgba(0,212,255,.2)')};">
-<span class="analyst-dot" style="background:{ANALYST_COLORS.get(p.get('analyst','FOX'),{}).get('color','#00d4ff')};box-shadow:0 0 6px {ANALYST_COLORS.get(p.get('analyst','FOX'),{}).get('color','#00d4ff')};"></span>
-{p.get('analyst','—')}
-</span>
-</div>
-"""}
-<div class="sm-card-body">
-<div class="sm-price-grid">
-<div><div class="sm-price-label">Entry</div><div class="sm-price-value cyan">{p.get('entry_str', p['entry'])}</div></div>
-<div><div class="sm-price-label">Stop Loss</div><div class="sm-price-value red">{p.get('sl_str', p['sl'])}{sl_badge}</div></div>
-<div><div class="sm-price-label">Risk : Reward</div><div class="sm-price-value" style="font-size:1.05rem">{p['rr1']}</div></div>
-<div><div class="sm-price-label">Confidence</div><div class="sm-price-value" style="color:{conf_col};font-size:1.35rem">{conf}%</div></div>
-</div>
-<div class="sm-conf-row">
-<div class="sm-conf-label">CONFIDENCE</div>
-<div class="sm-conf-bar-wrap"><div class="sm-conf-fill" style="width:{conf}%;background:linear-gradient(90deg,#00d4ff,{conf_col})"></div></div>
-<div class="sm-conf-pct" style="color:{conf_col}">{conf}%</div>
-</div>
-<div class="sm-tp-grid">
-<div class="sm-tp-row"><span class="sm-tp-badge">TP 1</span><span class="sm-tp-price">{p.get('tp1_str', p['tp1'])}</span>{tp_badge(p['tp1_hit'])}<span class="sm-rr-chip">R:R {p['rr1']}</span></div>
-<div class="sm-tp-row"><span class="sm-tp-badge">TP 2</span><span class="sm-tp-price">{p.get('tp2_str', p['tp2'])}</span>{tp_badge(p['tp2_hit'])}<span class="sm-rr-chip">R:R {p['rr2']}</span></div>
-<div class="sm-tp-row"><span class="sm-tp-badge">TP 3</span><span class="sm-tp-price">{p.get('tp3_str', p['tp3'])}</span>{tp_badge(p['tp3_hit'])}<span class="sm-rr-chip">R:R {p['rr3']}</span></div>
-</div>
-<div class="sm-forecast-row">
-<div class="sm-forecast-box sm-forecast-bull"><div style="font-size:.5rem;letter-spacing:2px;opacity:.6;margin-bottom:.18rem">BULLISH PROB</div><div class="sm-forecast-val">[{p['bull_prob']}%]</div></div>
-<div class="sm-forecast-box sm-forecast-bear"><div style="font-size:.5rem;letter-spacing:2px;opacity:.6;margin-bottom:.18rem">BEARISH PROB</div><div class="sm-forecast-val">[{p['bear_prob']}%]</div></div>
-</div>
+<div class="dh-header">
+  <span class="dh-logo">🧪 DH LAB</span>
+  <span style="color:{C_MUTED}; font-size:18px;">|</span>
+  <div>
+    <div style="font-size:15px; font-weight:600;">Trading Simulation</div>
+    <div class="dh-sub">DynamiHatch Identity · Pair: DHAV · Prototipe edukasi, bukan data riil</div>
+  </div>
 </div>
 """, unsafe_allow_html=True)
 
-    # ── LIQUIDITY MATRIX ──
-    lm_bear = p.get("lm_bear", [])
-    lm_bull = p.get("lm_bull", [])
-    bear_active = [z for z in lm_bear if z.get("low") and z.get("high")]
-    bull_active = [z for z in lm_bull if z.get("low") and z.get("high")]
+    # ── Metrics saldo ────────────────────────────────────
+    open_pnl = sum(_pnl(p, st.session_state.harga) for p in st.session_state.positions)
+    equity   = st.session_state.saldo + open_pnl
 
-    if bear_active or bull_active:
-        def lm_bar(pct_str, kind):
-            try:
-                val = float(pct_str.replace(",", ".")) if pct_str else 0
-                val = min(val, 5.0)
-                width = (val / 5.0) * 100
-            except:
-                width = 0
-            return f'<div class="lm-zone-bar-wrap"><div class="lm-zone-bar-{kind}" style="width:{width:.1f}%"></div></div>'
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("💰 Saldo",       f"${st.session_state.saldo:,.2f}")
+    m2.metric("📈 Open PnL",    f"${open_pnl:,.2f}", delta=f"{open_pnl:,.2f}")
+    m3.metric("⚖️ Total Equity", f"${equity:,.2f}")
+    m4.metric("📊 Open Posisi", len(st.session_state.positions))
 
-        bear_rows = ""
-        for z in bear_active:
-            pct_disp = z["pct"] + "%" if z["pct"] else ""
-            bear_rows += f'''
-<div class="lm-zone-row">
-{lm_bar(z["pct"], "bear")}
-<div class="lm-zone-range bear">{z["low"]} – {z["high"]}</div>
-<div class="lm-zone-pct bear">{pct_disp}</div>
-</div>'''
+    st.markdown("---")
 
-        bull_rows = ""
-        for z in bull_active:
-            pct_disp = z["pct"] + "%" if z["pct"] else ""
-            bull_rows += f'''
-<div class="lm-zone-row">
-{lm_bar(z["pct"], "bull")}
-<div class="lm-zone-range bull">{z["low"]} – {z["high"]}</div>
-<div class="lm-zone-pct bull">{pct_disp}</div>
-</div>'''
+    # ── Layout: Chart (kiri) + Panel Order (kanan) ───────
+    col_chart, col_panel = st.columns([3.5, 1], gap="medium")
 
-        bear_section = f'''<div class="lm-section-label bear">▼ Bearish Zone</div>{bear_rows}''' if bear_active else ""
-        bull_section = f'''<div class="lm-section-label bull">▲ Bullish Zone</div>{bull_rows}''' if bull_active else ""
+    with col_chart:
+        st.plotly_chart(_chart(), use_container_width=True)
 
-        st.markdown(f'''
-<div class="lm-wrap">
-<div class="lm-header">
-<div class="lm-title">⬡ Liquidity Matrix</div>
-<div class="lm-subtitle">Institutional Order Flow Detection</div>
-</div>
-<div class="lm-body">
-{bear_section}
-{bull_section}
-</div>
-<div class="lm-detect-text">
-Sistem mendeteksi <strong>zona akumulasi institusional</strong> pada level harga di atas.
-Area ini mencerminkan potensi posisi besar dari smart money berdasarkan struktur FVG dan Order Block yang teridentifikasi.
-</div>
-<div class="lm-disclaimer">
-⚠ Bukan rekomendasi investasi. Validasi zona ini dengan analisis mandiri sebelum mengambil keputusan trading.
-</div>
-</div>
-''', unsafe_allow_html=True)
+    with col_panel:
+        _panel_order()
 
-    st.markdown(f"""
-<div class="sm-explanation" style="margin:0 1.1rem .45rem">
-<div class="sm-expl-label">Signal Analysis Explanation</div>
-<div class="sm-expl-text">{p['explanation'] if p['explanation'] else '—'}</div>
-</div>
-<div class="sm-updated">LAST UPDATE · {p['updated']}</div>
-</div>
-""", unsafe_allow_html=True)
+    st.markdown("---")
 
-# ── FOOTER ──
-st.markdown("""
-<div style="text-align:center;padding:1.4rem 0 .5rem;border-top:1px solid rgba(0,212,255,.06);margin-top:1rem">
-<div style="font-family:'Orbitron',sans-serif;font-size:.62rem;letter-spacing:3px;color:#00d4ff;font-weight:700;margin-bottom:.25rem">AEROVULPIS · SIGNAL MATRIX</div>
-<div style="font-family:'Share Tech Mono',monospace;font-size:.52rem;color:rgba(136,153,187,.3);letter-spacing:1.5px">Prototype · aerovulpis.my.id · 2026</div>
-</div>
-""", unsafe_allow_html=True)
+    # ── Posisi & notifikasi ──────────────────────────────
+    col_pos, col_log = st.columns([2.5, 1], gap="medium")
+    with col_pos:
+        _tabel_posisi()
+    with col_log:
+        st.markdown("#### 🔔 Aktivitas")
+        _notif_bar()
+        if not st.session_state.notif:
+            st.markdown(
+                f'<div style="color:{C_MUTED}; font-size:12px;">Belum ada aktivitas.</div>',
+                unsafe_allow_html=True,
+            )
+
+    # ── Auto-refresh live mode ───────────────────────────
+    if st.session_state.live:
+        time.sleep(LIVE_INTERVAL_SEC)
+        st.rerun()
+
+
+if __name__ == "__main__":
+    main()
