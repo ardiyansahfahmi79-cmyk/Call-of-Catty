@@ -1,563 +1,534 @@
 """
-DH LAB — Trading Simulation (Standalone)
-=========================================
-Prototipe simulasi trading mandiri oleh DynamiHatch Identity.
-Pair simulasi: DHAV (DynamiHatch AeroVulpis Index)
+DH LAB — Trading Simulation untuk AeroVulpis
+============================================
+Aplikasi Streamlit mandiri untuk simulasi trading pair sintetis DHAV.
 
-Jalankan langsung:
+Jalankan:
+    pip install streamlit pandas numpy plotly
     streamlit run dh_lab.py
 
-Dependencies:
-    pip install streamlit pandas numpy plotly
+Catatan: DHAV adalah data simulasi edukasi, bukan data pasar riil.
 """
 
-import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
+from __future__ import annotations
+
 from datetime import datetime, timedelta
-import time
 import uuid
 
-# ─────────────────────────────────────────────────────────
-# KONFIGURASI
-# ─────────────────────────────────────────────────────────
-SALDO_AWAL        = 100.0
-KONTRAK_PER_LOT   = 100      # 1 lot = 100 unit DHAV
-HARGA_AWAL        = 1000.0
-CANDLE_AWAL       = 120
-INTERVAL_MENIT    = 5
-LIVE_INTERVAL_SEC = 1.5      # detik antar auto-tick
-
-# Palet warna TradingView / MT5 dark
-C_BG     = "#0e1117"
-C_PANEL  = "#131722"
-C_CARD   = "#1c2030"
-C_BORDER = "#2a2e39"
-C_TEXT   = "#d1d4dc"
-C_MUTED  = "#787b86"
-C_GREEN  = "#26a69a"
-C_RED    = "#ef5350"
-C_BLUE   = "#3b82f6"
-C_YELLOW = "#f59e0b"
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
 
 
-# ─────────────────────────────────────────────────────────
-# CSS — DARK THEME
-# ─────────────────────────────────────────────────────────
+# ============================================================
+# KONFIGURASI SIMULASI
+# ============================================================
+PAIR = "DHAV"
+PAIR_NAME = "DynamiHatch AeroVulpis Index"
+INITIAL_BALANCE = 100.0
+CONTRACT_SIZE = 100
+START_PRICE = 1_000.0
+HISTORY_CANDLES = 140
+MAX_RENDER_CANDLES = 180
+CANDLE_MINUTES = 5
+LIVE_INTERVAL_SECONDS = 0.75
+
+# Warna dark terminal bergaya TradingView / MT5.
+BG = "#0b0f14"
+PANEL = "#111821"
+CARD = "#18212c"
+BORDER = "#283442"
+TEXT = "#d9e1ea"
+MUTED = "#8190a0"
+GREEN = "#26a69a"
+RED = "#ef5350"
+BLUE = "#4f8cff"
+YELLOW = "#f5b942"
+
+
+# ============================================================
+# CSS
+# ============================================================
 CSS = f"""
 <style>
-/* ── Latar belakang utama ── */
-html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] {{
-    background-color: {C_BG} !important;
-    color: {C_TEXT};
+html, body, .stApp, [data-testid="stAppViewContainer"],
+[data-testid="stMain"] {{
+    background: {BG} !important;
+    color: {TEXT} !important;
 }}
-[data-testid="stSidebar"] {{
-    background-color: {C_PANEL} !important;
-}}
-/* ── Header ── */
+[data-testid="stSidebar"] {{ background: {PANEL} !important; }}
+.block-container {{ max-width: 1500px; padding-top: 1rem; }}
+
 .dh-header {{
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 0 4px 0;
-    border-bottom: 1px solid {C_BORDER};
-    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid {BORDER}; padding-bottom: 12px; margin-bottom: 16px;
 }}
-.dh-logo {{
-    font-size: 22px;
-    font-weight: 800;
-    letter-spacing: 1px;
-    color: {C_BLUE};
-}}
-.dh-sub {{
-    font-size: 12px;
-    color: {C_MUTED};
-}}
-/* ── Metric cards ── */
+.dh-logo {{ color: {BLUE}; font-size: 25px; font-weight: 800; letter-spacing: 1px; }}
+.dh-title {{ color: {TEXT}; font-size: 17px; font-weight: 700; }}
+.dh-subtitle {{ color: {MUTED}; font-size: 12px; margin-top: 2px; }}
+
 [data-testid="stMetric"] {{
-    background-color: {C_CARD} !important;
-    border: 1px solid {C_BORDER} !important;
-    border-radius: 10px !important;
-    padding: 14px 18px !important;
+    background: {CARD}; border: 1px solid {BORDER}; border-radius: 9px;
+    padding: 12px 15px;
 }}
-[data-testid="stMetricLabel"] p {{
-    color: {C_MUTED} !important;
-    font-size: 11px !important;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+[data-testid="stMetricLabel"] p {{ color: {MUTED} !important; font-size: 11px !important; }}
+[data-testid="stMetricValue"] {{ color: {TEXT} !important; font-size: 21px !important; }}
+
+.order-card {{
+    background: {CARD}; border: 1px solid {BORDER}; border-radius: 10px;
+    padding: 15px;
 }}
-[data-testid="stMetricValue"] {{
-    font-size: 22px !important;
-    font-weight: 700 !important;
-    color: {C_TEXT} !important;
-}}
-/* ── Panel kanan ── */
-.order-panel {{
-    background-color: {C_CARD};
-    border: 1px solid {C_BORDER};
-    border-radius: 10px;
-    padding: 18px 16px;
-}}
-.price-display {{
-    font-size: 26px;
-    font-weight: 800;
-    color: {C_YELLOW};
-    letter-spacing: 0.5px;
-    margin-bottom: 4px;
-}}
-.panel-label {{
-    font-size: 11px;
-    color: {C_MUTED};
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 2px;
-}}
-/* ── Tombol BUY / SELL ── */
-.btn-buy button {{
-    background-color: {C_GREEN} !important;
-    color: #ffffff !important;
-    font-size: 16px !important;
-    font-weight: 700 !important;
-    border-radius: 8px !important;
-    height: 48px !important;
-    border: none !important;
-    width: 100%;
-}}
-.btn-sell button {{
-    background-color: {C_RED} !important;
-    color: #ffffff !important;
-    font-size: 16px !important;
-    font-weight: 700 !important;
-    border-radius: 8px !important;
-    height: 48px !important;
-    border: none !important;
-    width: 100%;
-}}
+.price {{ color: {YELLOW}; font-size: 26px; font-weight: 800; }}
+.caption {{ color: {MUTED}; font-size: 11px; text-transform: uppercase; letter-spacing: .6px; }}
+
 div.stButton > button {{
-    border-radius: 7px;
-    font-weight: 600;
-    border: 1px solid {C_BORDER};
-    background-color: {C_CARD};
-    color: {C_TEXT};
-    height: 40px;
+    min-height: 40px; border-radius: 7px; border: 1px solid {BORDER};
+    background: {CARD}; color: {TEXT}; font-weight: 650;
 }}
-div.stButton > button:hover {{
-    border-color: {C_BLUE};
-    color: {C_BLUE};
+div.stButton > button:hover {{ border-color: {BLUE}; color: {BLUE}; }}
+.buy button {{ background: {GREEN} !important; border: 0 !important; color: white !important; font-size: 16px !important; }}
+.sell button {{ background: {RED} !important; border: 0 !important; color: white !important; font-size: 16px !important; }}
+
+.position-head, .position-row {{
+    display: grid; grid-template-columns: 1.0fr .9fr 1.2fr 1.2fr 1.2fr .9fr;
+    gap: 8px; align-items: center;
 }}
-/* ── Input fields ── */
-[data-testid="stNumberInputContainer"], [data-testid="stTextInput"] {{
-    background-color: {C_CARD} !important;
-    border-radius: 6px !important;
+.position-head {{
+    color: {MUTED}; background: {CARD}; border: 1px solid {BORDER};
+    border-radius: 7px 7px 0 0; padding: 8px 10px; font-size: 10px;
+    text-transform: uppercase; letter-spacing: .4px;
 }}
-/* ── Tabel posisi ── */
-.pos-header {{
-    display: grid;
-    grid-template-columns: 80px 70px 110px 110px 110px 80px;
-    gap: 4px;
-    padding: 6px 10px;
-    background-color: {C_CARD};
-    border: 1px solid {C_BORDER};
-    border-radius: 8px 8px 0 0;
-    font-size: 11px;
-    color: {C_MUTED};
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
+.position-row {{
+    background: {PANEL}; border: 1px solid {BORDER}; border-top: 0;
+    padding: 8px 10px; font-size: 12px;
 }}
-.pos-row {{
-    display: grid;
-    grid-template-columns: 80px 70px 110px 110px 110px 80px;
-    gap: 4px;
-    padding: 8px 10px;
-    background-color: {C_PANEL};
-    border: 1px solid {C_BORDER};
-    border-top: none;
-    font-size: 13px;
-    align-items: center;
-}}
-.pos-row:last-child {{ border-radius: 0 0 8px 8px; }}
-.tag-buy  {{ color: {C_GREEN}; font-weight: 700; }}
-.tag-sell {{ color: {C_RED};   font-weight: 700; }}
-.pnl-pos  {{ color: {C_GREEN}; font-weight: 600; }}
-.pnl-neg  {{ color: {C_RED};   font-weight: 600; }}
-/* ── Divider ── */
-hr {{ border-color: {C_BORDER} !important; margin: 12px 0; }}
-/* ── Scrollbar tipis ── */
-::-webkit-scrollbar {{ width: 4px; }}
-::-webkit-scrollbar-track {{ background: {C_BG}; }}
-::-webkit-scrollbar-thumb {{ background: {C_BORDER}; border-radius: 4px; }}
+.buy-text {{ color: {GREEN}; font-weight: 700; }}
+.sell-text {{ color: {RED}; font-weight: 700; }}
+.pos-text {{ color: {GREEN}; font-weight: 700; }}
+.neg-text {{ color: {RED}; font-weight: 700; }}
+.notice {{ background: {CARD}; border: 1px solid {BORDER}; border-radius: 6px; padding: 7px 9px; margin-bottom: 5px; font-size: 11px; }}
+hr {{ border-color: {BORDER} !important; }}
 </style>
 """
 
 
-# ─────────────────────────────────────────────────────────
-# GENERATOR HARGA — Random Walk + Macro Drift
-# ─────────────────────────────────────────────────────────
-def _bentuk_candle(open_: float, close_: float, ts: datetime) -> dict:
-    wick_hi = abs(np.random.normal(0, 0.40))
-    wick_lo = abs(np.random.normal(0, 0.40))
+# ============================================================
+# SESSION STATE DAN DATA SIMULASI
+# ============================================================
+def _make_candle(open_price: float, close_price: float, timestamp: datetime) -> dict:
+    wick_up = abs(float(np.random.normal(0, 0.42)))
+    wick_down = abs(float(np.random.normal(0, 0.42)))
     return {
-        "time":  ts,
-        "open":  open_,
-        "high":  max(open_, close_) + wick_hi,
-        "low":   max(min(open_, close_) - wick_lo, 0.5),
-        "close": close_,
+        "time": timestamp,
+        "open": round(open_price, 4),
+        "high": round(max(open_price, close_price) + wick_up, 4),
+        "low": round(max(0.5, min(open_price, close_price) - wick_down), 4),
+        "close": round(close_price, 4),
     }
 
 
-def _generate_histori(n: int = CANDLE_AWAL):
-    rows, harga, drift = [], HARGA_AWAL, 0.0
-    ts = datetime.now() - timedelta(minutes=INTERVAL_MENIT * n)
-    for _ in range(n):
-        drift  = float(np.clip(drift + np.random.normal(0, 0.012), -0.10, 0.10))
-        shock  = float(np.random.normal(drift, 0.50))
-        close_ = max(harga + shock, 1.0)
-        rows.append(_bentuk_candle(harga, close_, ts))
-        harga  = close_
-        ts    += timedelta(minutes=INTERVAL_MENIT)
-    return pd.DataFrame(rows), harga, drift
-
-
-def _tick(df: pd.DataFrame, harga: float, drift: float):
-    drift  = float(np.clip(drift + np.random.normal(0, 0.012), -0.10, 0.10))
-    shock  = float(np.random.normal(drift, 0.50))
-    close_ = max(harga + shock, 1.0)
-    ts_baru = df.iloc[-1]["time"] + timedelta(minutes=INTERVAL_MENIT)
-    candle  = _bentuk_candle(harga, close_, ts_baru)
-    df_baru = pd.concat([df, pd.DataFrame([candle])], ignore_index=True).tail(300).reset_index(drop=True)
-    return df_baru, close_, drift
-
-
-# ─────────────────────────────────────────────────────────
-# SESSION STATE
-# ─────────────────────────────────────────────────────────
-def _init():
-    if "saldo" not in st.session_state:
-        st.session_state.saldo = SALDO_AWAL
-    if "positions" not in st.session_state:
-        st.session_state.positions = []
-    if "df" not in st.session_state:
-        df, harga, drift = _generate_histori()
-        st.session_state.df    = df
-        st.session_state.harga = harga
-        st.session_state.drift = drift
-    if "live" not in st.session_state:
-        st.session_state.live = False
-    if "notif" not in st.session_state:
-        st.session_state.notif = []   # list pesan notifikasi (SL/TP hit)
-
-
-def _tambah_tick():
-    df, harga, drift = _tick(
-        st.session_state.df,
-        st.session_state.harga,
-        st.session_state.drift,
+def _generate_history(count: int = HISTORY_CANDLES) -> tuple[pd.DataFrame, float, float]:
+    rows: list[dict] = []
+    price = START_PRICE
+    drift = 0.0
+    timestamp = datetime.now().replace(second=0, microsecond=0) - timedelta(
+        minutes=CANDLE_MINUTES * count
     )
-    st.session_state.df    = df
-    st.session_state.harga = harga
-    st.session_state.drift = drift
-    _cek_sl_tp(harga)
+
+    for _ in range(count):
+        drift = float(np.clip(drift + np.random.normal(0, 0.010), -0.09, 0.09))
+        shock = float(np.random.normal(drift, 0.48))
+        close_price = max(1.0, price + shock)
+        rows.append(_make_candle(price, close_price, timestamp))
+        price = close_price
+        timestamp += timedelta(minutes=CANDLE_MINUTES)
+
+    return pd.DataFrame(rows), price, drift
 
 
-# ─────────────────────────────────────────────────────────
-# LOGIKA TRADING
-# ─────────────────────────────────────────────────────────
-def _pnl(pos: dict, harga_now: float) -> float:
-    qty = pos["lot"] * KONTRAK_PER_LOT
-    return (harga_now - pos["entry"]) * qty if pos["tipe"] == "BUY" else (pos["entry"] - harga_now) * qty
+def _next_tick(df: pd.DataFrame, price: float, drift: float) -> tuple[pd.DataFrame, float, float]:
+    drift = float(np.clip(drift + np.random.normal(0, 0.010), -0.09, 0.09))
+    shock = float(np.random.normal(drift, 0.48))
+    close_price = max(1.0, price + shock)
+    timestamp = df.iloc[-1]["time"] + timedelta(minutes=CANDLE_MINUTES)
+    candle = _make_candle(price, close_price, timestamp)
+
+    rows = df.tail(MAX_RENDER_CANDLES - 1).to_dict("records")
+    rows.append(candle)
+    return pd.DataFrame.from_records(rows), close_price, drift
+
+def _init_state() -> None:
+    defaults = {
+        "balance": INITIAL_BALANCE,
+        "positions": [],
+        "notifications": [],
+        "live": False,
+        "price": START_PRICE,
+        "drift": 0.0,
+        "history": None,
+        "last_tick": datetime.now(),
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+    if st.session_state.history is None:
+        history, price, drift = _generate_history()
+        st.session_state.history = history
+        st.session_state.price = price
+        st.session_state.drift = drift
 
 
-def _buka(tipe: str, lot: float, sl: float, tp: float):
-    st.session_state.positions.append({
-        "id":    str(uuid.uuid4())[:8],
-        "pair":  "DHAV",
-        "tipe":  tipe,
-        "entry": st.session_state.harga,
-        "lot":   lot,
-        "sl":    sl,
-        "tp":    tp,
-        "waktu": datetime.now(),
-    })
+def _reset_state() -> None:
+    for key in [
+        "balance", "positions", "notifications", "live", "price",
+        "drift", "history", "last_tick", "lot", "sl", "tp",
+    ]:
+        st.session_state.pop(key, None)
+    st.rerun()
 
 
-def _tutup(pos_id: str, alasan: str = "Manual"):
-    for pos in st.session_state.positions:
-        if pos["id"] == pos_id:
-            nilai_pnl = _pnl(pos, st.session_state.harga)
-            st.session_state.saldo += nilai_pnl
-            st.session_state.positions.remove(pos)
-            label = f"{'🟢' if nilai_pnl >= 0 else '🔴'} [{alasan}] {pos['tipe']} DHAV ditutup @ ${st.session_state.harga:,.2f} — PnL: ${nilai_pnl:+,.2f}"
-            st.session_state.notif.insert(0, label)
-            st.session_state.notif = st.session_state.notif[:5]
+# ============================================================
+# ORDER MANAGEMENT
+# ============================================================
+def _calculate_pnl(position: dict, current_price: float) -> float:
+    quantity = position["lot"] * CONTRACT_SIZE
+    if position["side"] == "BUY":
+        return (current_price - position["entry"]) * quantity
+    return (position["entry"] - current_price) * quantity
+
+
+def _open_position(side: str, lot: float, stop_loss: float, take_profit: float) -> None:
+    entry = float(st.session_state.price)
+    position = {
+        "id": uuid.uuid4().hex[:7].upper(),
+        "pair": PAIR,
+        "side": side,
+        "entry": entry,
+        "lot": float(lot),
+        "sl": float(stop_loss),
+        "tp": float(take_profit),
+        "opened_at": datetime.now().strftime("%H:%M:%S"),
+    }
+    st.session_state.positions.append(position)
+    st.session_state.notifications.insert(
+        0, f"{side} {PAIR} dibuka @ ${entry:,.2f} · {lot:.2f} lot"
+    )
+    st.session_state.notifications = st.session_state.notifications[:6]
+
+
+def _close_position(position_id: str, reason: str = "Manual") -> None:
+    for position in list(st.session_state.positions):
+        if position["id"] == position_id:
+            pnl = _calculate_pnl(position, st.session_state.price)
+            st.session_state.balance += pnl
+            st.session_state.positions.remove(position)
+            st.session_state.notifications.insert(
+                0,
+                f"{reason}: {position['side']} {PAIR} ditutup @ "
+                f"${st.session_state.price:,.2f} · PnL ${pnl:+,.2f}",
+            )
+            st.session_state.notifications = st.session_state.notifications[:6]
             break
 
 
-def _cek_sl_tp(harga_now: float):
-    for pos in list(st.session_state.positions):
-        sl, tp = pos["sl"], pos["tp"]
-        kena_sl = sl > 0 and (
-            (pos["tipe"] == "BUY"  and harga_now <= sl) or
-            (pos["tipe"] == "SELL" and harga_now >= sl)
+def _check_sl_tp() -> None:
+    current = float(st.session_state.price)
+    for position in list(st.session_state.positions):
+        sl_hit = position["sl"] > 0 and (
+            (position["side"] == "BUY" and current <= position["sl"])
+            or (position["side"] == "SELL" and current >= position["sl"])
         )
-        kena_tp = tp > 0 and (
-            (pos["tipe"] == "BUY"  and harga_now >= tp) or
-            (pos["tipe"] == "SELL" and harga_now <= tp)
+        tp_hit = position["tp"] > 0 and (
+            (position["side"] == "BUY" and current >= position["tp"])
+            or (position["side"] == "SELL" and current <= position["tp"])
         )
-        if kena_sl: _tutup(pos["id"], "SL Hit")
-        elif kena_tp: _tutup(pos["id"], "TP Hit")
+        if sl_hit:
+            _close_position(position["id"], "SL Hit")
+        elif tp_hit:
+            _close_position(position["id"], "TP Hit")
 
 
-# ─────────────────────────────────────────────────────────
-# CHART
-# ─────────────────────────────────────────────────────────
-def _chart() -> go.Figure:
-    df  = st.session_state.df
-    fig = go.Figure()
-
-    # Candlestick utama
-    fig.add_trace(go.Candlestick(
-        x=df["time"],
-        open=df["open"], high=df["high"],
-        low=df["low"],   close=df["close"],
-        increasing=dict(line=dict(color=C_GREEN, width=1), fillcolor=C_GREEN),
-        decreasing=dict(line=dict(color=C_RED,   width=1), fillcolor=C_RED),
-        name="DHAV",
-        hovertext=[
-            f"O: {r.open:.2f}  H: {r.high:.2f}  L: {r.low:.2f}  C: {r.close:.2f}"
-            for r in df.itertuples()
-        ],
-        hoverinfo="x+text",
-    ))
-
-    # Garis entry setiap posisi terbuka
-    for pos in st.session_state.positions:
-        warna = C_GREEN if pos["tipe"] == "BUY" else C_RED
-        fig.add_hline(
-            y=pos["entry"], line_dash="dot",
-            line_color=warna, line_width=1, opacity=0.75,
-            annotation_text=f"{pos['tipe']} #{pos['id']}",
-            annotation_font_color=warna,
-            annotation_font_size=10,
-        )
-        if pos["sl"] > 0:
-            fig.add_hline(y=pos["sl"], line_dash="dash", line_color=C_RED,   line_width=1, opacity=0.45)
-        if pos["tp"] > 0:
-            fig.add_hline(y=pos["tp"], line_dash="dash", line_color=C_GREEN, line_width=1, opacity=0.45)
-
-    fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor=C_PANEL,
-        plot_bgcolor=C_BG,
-        font=dict(color=C_TEXT, size=12),
-        height=500,
-        margin=dict(l=0, r=0, t=36, b=0),
-        xaxis_rangeslider_visible=False,
-        title=dict(
-            text="<b>DHAV</b>  DynamiHatch AeroVulpis Index  •  5M  •  Simulasi",
-            font=dict(size=13, color=C_TEXT),
-            x=0.01,
-        ),
-        yaxis=dict(title="", gridcolor=C_BORDER, tickfont=dict(size=11)),
-        xaxis=dict(gridcolor=C_BORDER, tickfont=dict(size=10)),
-        legend=dict(bgcolor="rgba(0,0,0,0)"),
-        hovermode="x unified",
+def _advance_market() -> None:
+    history, price, drift = _next_tick(
+        st.session_state.history,
+        st.session_state.price,
+        st.session_state.drift,
     )
-    return fig
+    st.session_state.history = history
+    st.session_state.price = price
+    st.session_state.drift = drift
+    st.session_state.last_tick = datetime.now()
+    _check_sl_tp()
 
 
-# ─────────────────────────────────────────────────────────
-# PANEL ORDER (KANAN)
-# ─────────────────────────────────────────────────────────
-def _panel_order():
-    harga_now = st.session_state.harga
-
-    st.markdown(f"""
-<div class="price-display">${harga_now:,.2f}</div>
-<div class="panel-label">Harga DHAV Saat Ini</div>
-""", unsafe_allow_html=True)
-
-    st.markdown("---")
-    st.markdown('<div class="panel-label">Lot / Size</div>', unsafe_allow_html=True)
-    lot = st.number_input("lot_input", label_visibility="collapsed",
-                          min_value=0.01, max_value=10.0,
-                          value=0.10, step=0.01, key="k_lot")
-
-    col_sl, col_tp = st.columns(2)
-    with col_sl:
-        st.markdown('<div class="panel-label">Stop Loss</div>', unsafe_allow_html=True)
-        sl = st.number_input("sl_input", label_visibility="collapsed",
-                             min_value=0.0, value=round(harga_now * 0.985, 2),
-                             step=1.0, key="k_sl")
-    with col_tp:
-        st.markdown('<div class="panel-label">Take Profit</div>', unsafe_allow_html=True)
-        tp = st.number_input("tp_input", label_visibility="collapsed",
-                             min_value=0.0, value=round(harga_now * 1.015, 2),
-                             step=1.0, key="k_tp")
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    col_b, col_s = st.columns(2)
-    with col_b:
-        st.markdown('<div class="btn-buy">', unsafe_allow_html=True)
-        if st.button("▲ BUY", use_container_width=True, key="k_buy"):
-            _buka("BUY", lot, sl, tp)
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-    with col_s:
-        st.markdown('<div class="btn-sell">', unsafe_allow_html=True)
-        if st.button("▼ SELL", use_container_width=True, key="k_sell"):
-            _buka("SELL", lot, sl, tp)
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown("---")
-
-    # Live toggle
-    live_val = st.toggle("▶ Live Simulation", value=st.session_state.live, key="k_live")
-    st.session_state.live = live_val
-
-    if st.button("⏭ Tick Manual", use_container_width=True, key="k_tick"):
-        _tambah_tick()
-        st.rerun()
-
-    if st.button("🔄 Reset Simulasi", use_container_width=True, key="k_reset"):
-        for k in ["saldo","positions","df","harga","drift","live","notif"]:
-            st.session_state.pop(k, None)
-        st.rerun()
-
-
-# ─────────────────────────────────────────────────────────
-# TABEL POSISI TERBUKA
-# ─────────────────────────────────────────────────────────
-def _tabel_posisi():
-    posisi    = st.session_state.positions
-    harga_now = st.session_state.harga
-
-    st.markdown("#### 📋 Posisi Terbuka")
-
-    if not posisi:
-        st.markdown(
-            f'<div style="color:{C_MUTED}; font-size:13px; padding:10px 0;">Belum ada posisi — tekan BUY / SELL untuk memulai.</div>',
-            unsafe_allow_html=True,
+# ============================================================
+# CHART DAN UI
+# ============================================================
+def _build_chart() -> go.Figure:
+    df = st.session_state.history.tail(MAX_RENDER_CANDLES)
+    figure = go.Figure(
+        go.Candlestick(
+            x=df["time"],
+            open=df["open"],
+            high=df["high"],
+            low=df["low"],
+            close=df["close"],
+            name=PAIR,
+            increasing={"line": {"color": GREEN}, "fillcolor": GREEN},
+            decreasing={"line": {"color": RED}, "fillcolor": RED},
+            hovertemplate=(
+                "Waktu: %{x|%d %b %H:%M}<br>"
+                "Open: %{open:,.2f}<br>High: %{high:,.2f}<br>"
+                "Low: %{low:,.2f}<br>Close: %{close:,.2f}<extra></extra>"
+            ),
         )
+    )
+
+    for position in st.session_state.positions:
+        color = GREEN if position["side"] == "BUY" else RED
+        figure.add_hline(
+            y=position["entry"], line_dash="dot", line_color=color,
+            opacity=0.85, annotation_text=f"{position['side']} #{position['id']}",
+            annotation_font_color=color,
+        )
+        if position["sl"] > 0:
+            figure.add_hline(y=position["sl"], line_dash="dash", line_color=RED, opacity=0.5)
+        if position["tp"] > 0:
+            figure.add_hline(y=position["tp"], line_dash="dash", line_color=GREEN, opacity=0.5)
+
+    figure.update_layout(
+        template="plotly_dark",
+        height=510,
+        margin={"l": 8, "r": 8, "t": 48, "b": 8},
+        paper_bgcolor=PANEL,
+        plot_bgcolor=BG,
+        font={"color": TEXT, "size": 11},
+        title={"text": f"<b>{PAIR}</b> · {PAIR_NAME} · 5M · SIMULATION", "x": 0.02},
+        xaxis={"gridcolor": BORDER, "rangeslider": {"visible": False}, "showspikes": True},
+        yaxis={"gridcolor": BORDER, "showspikes": True, "side": "right"},
+        hovermode="x unified",
+        uirevision="dhav-terminal",
+        transition={"duration": 0},
+    )
+    return figure
+
+def _render_metrics() -> None:
+    open_pnl = sum(
+        _calculate_pnl(p, st.session_state.price)
+        for p in st.session_state.positions
+    )
+    equity = st.session_state.balance + open_pnl
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Saldo Saat Ini", f"${st.session_state.balance:,.2f}")
+    m2.metric(
+        "Open PnL",
+        f"${open_pnl:+,.2f}",
+        delta=f"${open_pnl:+,.2f}",
+    )
+    m3.metric("Total Equity", f"${equity:,.2f}")
+
+
+def _render_order_panel() -> None:
+    price = float(st.session_state.price)
+
+    st.markdown('<div class="order-card">', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="price">${price:,.2f}</div>'
+        '<div class="caption">Harga DHAV saat ini</div>',
+        unsafe_allow_html=True,
+    )
+    st.divider()
+
+    lot = st.number_input(
+        "Lot / Size",
+        min_value=0.01,
+        max_value=10.0,
+        value=0.10,
+        step=0.01,
+        key="lot",
+    )
+    sl = st.number_input(
+        "Stop Loss",
+        min_value=0.0,
+        value=round(price * 0.985, 2),
+        step=0.50,
+        key="sl",
+    )
+    tp = st.number_input(
+        "Take Profit",
+        min_value=0.0,
+        value=round(price * 1.015, 2),
+        step=0.50,
+        key="tp",
+    )
+
+    left, right = st.columns(2)
+
+    with left:
+        st.markdown('<div class="buy">', unsafe_allow_html=True)
+        if st.button("▲ BUY", use_container_width=True, key="buy"):
+            _open_position("BUY", lot, sl, tp)
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with right:
+        st.markdown('<div class="sell">', unsafe_allow_html=True)
+        if st.button("▼ SELL", use_container_width=True, key="sell"):
+            _open_position("SELL", lot, sl, tp)
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    st.divider()
+
+    st.toggle(
+        "Live Simulation",
+        key="live",
+        help="Update harga simulasi secara otomatis.",
+    )
+
+    if st.button("⏭ Tick Manual", use_container_width=True, key="manual_tick"):
+        _advance_market()
+        st.rerun()
+
+    if st.button("Reset Simulasi", use_container_width=True, key="reset"):
+        _reset_state()
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+def _render_positions() -> None:
+    st.subheader("Posisi Terbuka")
+    positions = st.session_state.positions
+
+    if not positions:
+        st.caption("Belum ada posisi. Atur lot, SL, TP, lalu tekan BUY atau SELL.")
         return
 
     st.markdown(
-        '<div class="pos-header">'
-        '<span>Pair</span><span>Tipe</span>'
-        '<span>Entry ($)</span><span>Now ($)</span>'
-        '<span>PnL ($)</span><span>Aksi</span>'
+        '<div class="position-head">'
+        '<span>Pair</span><span>Tipe</span><span>Entry</span>'
+        '<span>Current</span><span>PnL</span><span>Aksi</span>'
         '</div>',
         unsafe_allow_html=True,
     )
 
-    for pos in posisi:
-        pnl       = _pnl(pos, harga_now)
-        tag_cls   = "tag-buy"  if pos["tipe"] == "BUY"  else "tag-sell"
-        pnl_cls   = "pnl-pos"  if pnl >= 0              else "pnl-neg"
-        pnl_sign  = f"+{pnl:,.2f}" if pnl >= 0 else f"{pnl:,.2f}"
+    for position in positions:
+        pnl = _calculate_pnl(position, st.session_state.price)
+        side_class = "buy-text" if position["side"] == "BUY" else "sell-text"
+        pnl_class = "pos-text" if pnl >= 0 else "neg-text"
 
-        st.markdown(f"""
-<div class="pos-row">
-  <span>{pos["pair"]}</span>
-  <span class="{tag_cls}">{pos["tipe"]}</span>
-  <span>{pos["entry"]:,.2f}</span>
-  <span>{harga_now:,.2f}</span>
-  <span class="{pnl_cls}">{pnl_sign}</span>
-  <span></span>
-</div>
-""", unsafe_allow_html=True)
+        cols = st.columns([1.0, 0.9, 1.2, 1.2, 1.2, 0.9])
+        cols[0].write(position["pair"])
+        cols[1].markdown(
+            f'<span class="{side_class}">{position["side"]}</span>',
+            unsafe_allow_html=True,
+        )
+        cols[2].write(f"${position['entry']:,.2f}")
+        cols[3].write(f"${st.session_state.price:,.2f}")
+        cols[4].markdown(
+            f'<span class="{pnl_class}">${pnl:+,.2f}</span>',
+            unsafe_allow_html=True,
+        )
 
-        # Tombol close sejajar dengan baris (dirender via st.columns di bawah HTML)
-        if st.button(f"Close #{pos['id']}", key=f"cls_{pos['id']}"):
-            _tutup(pos["id"], "Manual")
+        if cols[5].button("Close", key=f"close_{position['id']}"):
+            _close_position(position["id"])
             st.rerun()
 
 
-# ─────────────────────────────────────────────────────────
-# NOTIFIKASI SL / TP
-# ─────────────────────────────────────────────────────────
-def _notif_bar():
-    if not st.session_state.notif:
+def _render_activity() -> None:
+    st.subheader("Aktivitas")
+
+    if not st.session_state.notifications:
+        st.caption("Belum ada aktivitas.")
         return
-    for msg in st.session_state.notif:
+
+    for message in st.session_state.notifications:
         st.markdown(
-            f'<div style="background:{C_CARD}; border:1px solid {C_BORDER}; '
-            f'border-radius:6px; padding:6px 12px; margin-bottom:4px; font-size:12px;">'
-            f'{msg}</div>',
+            f'<div class="notice">{message}</div>',
             unsafe_allow_html=True,
         )
 
 
-# ─────────────────────────────────────────────────────────
-# MAIN
-# ─────────────────────────────────────────────────────────
-def main():
+# ============================================================
+# LIVE FRAGMENT
+# ============================================================
+def _fragment_fallback(func):
+    """Fallback agar file tetap bisa dibuka pada Streamlit lama."""
+    return func
+
+
+fragment = getattr(st, "fragment", _fragment_fallback)
+
+
+@fragment(run_every=LIVE_INTERVAL_SECONDS)
+def _render_terminal() -> None:
+    if st.session_state.live:
+        _advance_market()
+
+    _render_metrics()
+    st.divider()
+
+    chart_col, order_col = st.columns([3.6, 1.15], gap="medium")
+
+    with chart_col:
+        st.plotly_chart(
+            _build_chart(),
+            use_container_width=True,
+            config={
+                "displaylogo": False,
+                "scrollZoom": True,
+                "doubleClick": "reset",
+                "modeBarButtonsToRemove": ["lasso2d", "select2d"],
+            },
+        )
+
+    with order_col:
+        _render_order_panel()
+
+    st.divider()
+
+    pos_col, activity_col = st.columns([2.6, 1.0], gap="medium")
+
+    with pos_col:
+        _render_positions()
+
+    with activity_col:
+        _render_activity()
+
+# ============================================================
+# ENTRY POINT
+# ============================================================
+def main() -> None:
     st.set_page_config(
-        page_title="DH LAB — DHAV Simulation",
+        page_title="DH LAB · AeroVulpis",
         page_icon="🧪",
         layout="wide",
         initial_sidebar_state="collapsed",
     )
+
     st.markdown(CSS, unsafe_allow_html=True)
-    _init()
+    _init_state()
 
-    # Auto-tick dulu sebelum render, supaya harga selalu fresh saat live
-    if st.session_state.live:
-        _tambah_tick()
+    st.markdown(
+        f"""
+        <div class="dh-header">
+            <div class="dh-logo">DH LAB</div>
+            <div style="color:{MUTED}; font-size:20px;">|</div>
+            <div>
+                <div class="dh-title">AeroVulpis Trading Simulation</div>
+                <div class="dh-subtitle">
+                    {PAIR} · {PAIR_NAME} · Prototipe edukasi dengan saldo virtual $100
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    # ── Header ──────────────────────────────────────────
-    st.markdown(f"""
-<div class="dh-header">
-  <span class="dh-logo">🧪 DH LAB</span>
-  <span style="color:{C_MUTED}; font-size:18px;">|</span>
-  <div>
-    <div style="font-size:15px; font-weight:600;">Trading Simulation</div>
-    <div class="dh-sub">DynamiHatch Identity · Pair: DHAV · Prototipe edukasi, bukan data riil</div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-    # ── Metrics saldo ────────────────────────────────────
-    open_pnl = sum(_pnl(p, st.session_state.harga) for p in st.session_state.positions)
-    equity   = st.session_state.saldo + open_pnl
-
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("💰 Saldo",       f"${st.session_state.saldo:,.2f}")
-    m2.metric("📈 Open PnL",    f"${open_pnl:,.2f}", delta=f"{open_pnl:,.2f}")
-    m3.metric("⚖️ Total Equity", f"${equity:,.2f}")
-    m4.metric("📊 Open Posisi", len(st.session_state.positions))
-
-    st.markdown("---")
-
-    # ── Layout: Chart (kiri) + Panel Order (kanan) ───────
-    col_chart, col_panel = st.columns([3.5, 1], gap="medium")
-
-    with col_chart:
-        st.plotly_chart(_chart(), use_container_width=True)
-
-    with col_panel:
-        _panel_order()
-
-    st.markdown("---")
-
-    # ── Posisi & notifikasi ──────────────────────────────
-    col_pos, col_log = st.columns([2.5, 1], gap="medium")
-    with col_pos:
-        _tabel_posisi()
-    with col_log:
-        st.markdown("#### 🔔 Aktivitas")
-        _notif_bar()
-        if not st.session_state.notif:
-            st.markdown(
-                f'<div style="color:{C_MUTED}; font-size:12px;">Belum ada aktivitas.</div>',
-                unsafe_allow_html=True,
-            )
-
-    # ── Auto-refresh live mode ───────────────────────────
-    if st.session_state.live:
-        time.sleep(LIVE_INTERVAL_SEC)
-        st.rerun()
+    _render_terminal()
 
 
 if __name__ == "__main__":
