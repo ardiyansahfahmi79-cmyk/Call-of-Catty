@@ -13,8 +13,8 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from fundamental_data import FundamentalSnapshot, fetch_fundamental_context
-from market_chat import build_agenda_reply, build_reply, follow_up_prompts
-from market_data import MarketSnapshot, detect_instruments, detect_timeframe, fetch_market_snapshot, normalized_comparison
+from market_chat import build_agenda_reply, build_instrument_confirmation, build_reply, build_unknown_input_reply, detect_economic_agenda, follow_up_prompts
+from market_data import MarketSnapshot, detect_instruments, detect_timeframe, detect_unknown_instrument_candidates, fetch_market_snapshot, normalized_comparison
 
 
 MIN_ANALYSIS_SECONDS = 13
@@ -174,10 +174,15 @@ def process_question(question: str, loader_slot) -> None:
     interval = detect_timeframe(question)
     if not instruments:
         agenda_reply = build_agenda_reply(question)
-        st.session_state.messages.append(_message("assistant", agenda_reply or "Aero AI dikhususkan untuk pemindaian market berbasis data. Sistem ini tidak dirancang untuk percakapan umum. Sebutkan instrumen eksplisit seperti **XAUUSD**, EURUSD, BTCUSD, WTI, atau DXY agar saya dapat memulai analisis."))
+        unknown_candidates = detect_unknown_instrument_candidates(question)
+        st.session_state.messages.append(_message("assistant", agenda_reply or build_unknown_input_reply(question, unknown_candidates)))
+        return
+    action_words = ("analisa", "analyze", "scan", "bandingkan", "compare", "tren", "trend", "risiko", "risk", "indikator", "sinyal", "signal", "entry", "level", "fundamental", "forecast", "prediksi")
+    if len(instruments) == 1 and not detect_economic_agenda(question) and not any(word in question.casefold() for word in action_words) and not re.search(r"\b(?:m15|m30|h\d{1,2}|d1|w1|mn)\b", question.casefold()):
+        st.session_state.messages.append(_message("assistant", build_instrument_confirmation(instruments[0].code)))
         return
     started_at, snapshots, fundamentals = time.monotonic(), [], {}
-    stages = [("01 / 05 · MENDETEKSI INSTRUMEN DAN KONTEKS PERTANYAAN", 50, 9, 1.2), ("02 / 05 · MENARIK OHLCV PUBLIK DAN MEMVALIDASI CANDLE", 46, 27, 5.0), ("03 / 05 · MEMINDAI FUNDAMENTAL PUBLIK DAN WAKTU OBSERVASI", 42, 49, 8.0), ("04 / 05 · MENGHITUNG 10 INDIKATOR PYTHON DAN REGIME PASAR", 38, 72, 10.5), ("05 / 05 · MENYUSUN NARASI DAN MEMBANGUN LINE CHART", 34, 92, MIN_ANALYSIS_SECONDS)]
+    stages = [("01 / 05 · MENDETEKSI INSTRUMEN, TIMEFRAME, DAN KONTEKS", 50, 9, 1.2), ("02 / 05 · MENARIK OHLCV PUBLIK DAN MEMVALIDASI CANDLE", 46, 27, 5.0), ("03 / 05 · MEMINDAI FUNDAMENTAL DAN KALENDER EKONOMI PUBLIK", 42, 49, 8.0), ("04 / 05 · MENGHITUNG 10 INDIKATOR PYTHON DAN REGIME PASAR", 38, 72, 10.5), ("05 / 05 · MENYUSUN NARASI DAN MEMBANGUN LINE CHART", 34, 92, MIN_ANALYSIS_SECONDS)]
     for index, (stage, estimate, progress, target_seconds) in enumerate(stages):
         loader_slot.markdown(_loader_markup(stage, estimate, progress), unsafe_allow_html=True)
         if index == 1:
@@ -231,11 +236,20 @@ def contextual_suggestions() -> list[str]:
     if instrument:
         pool = [
             f"Analisa {instrument} pada timeframe M15",
+            f"Analisa {instrument} pada timeframe H2",
+            f"Analisa {instrument} pada timeframe H6",
             f"Analisa {instrument} pada timeframe H4",
+            f"Analisa {instrument} pada timeframe W1",
+            f"Analisa {instrument} pada timeframe MN",
             f"Tentukan Entry, SL, TP1 TP2 TP3 dan Risk untuk {instrument}",
             f"Jelaskan dampak NFP pada {instrument}",
+            f"Jelaskan data Retail Sales untuk {instrument}",
+            f"Jelaskan data CPI untuk {instrument}",
+            f"Jelaskan data PPI untuk {instrument}",
             f"Jelaskan konteks FOMC untuk {instrument}",
+            f"Bandingkan {instrument} dengan DXY pada H4",
             f"Tinjau tren {instrument} pada timeframe D1",
+            f"Apakah Anda ingin saya menganalisa {instrument} lebih lanjut?",
         ]
     else:
         pool = [
@@ -244,6 +258,10 @@ def contextual_suggestions() -> list[str]:
             "Jelaskan dampak NFP untuk DXY",
             "Analisa BTCUSD pada timeframe H4",
             "Jelaskan konteks FOMC untuk XAUUSD",
+            "Analisa IHSG pada timeframe D1",
+            "Jelaskan data Retail Sales",
+            "Jelaskan data CPI AS",
+            "Analisa BBCA pada timeframe W1",
         ]
     return random.sample(pool, k=min(3, len(pool)))
 
@@ -256,9 +274,9 @@ def render_input_panel() -> None:
         if columns[index].button(prompt, key=f"suggestion_{prompt}", use_container_width=True):
             queue_question(prompt)
             st.rerun()
-    st.markdown('<p>Pair dan timeframe dibaca langsung dari pesan Anda. Contoh: <b>Analisa XAGUSD di timeframe M15</b>. Jika timeframe tidak disebut, Aero AI memakai H1 sebagai asumsi awal.</p>', unsafe_allow_html=True)
+    st.markdown('<p>Pair dan timeframe dibaca langsung dari pesan Anda. Contoh: <b>Analisa XAGUSD di timeframe M15</b>, <b>IHSG D1</b>, atau <b>BBCA W1</b>. Timeframe tersedia dari M15/M30, H1–H12, D1, W1, sampai MN; jika tidak disebut, Aero AI memakai H1 sebagai asumsi awal.</p>', unsafe_allow_html=True)
     with st.form("aero_question_form", clear_on_submit=True):
-        question = st.text_area("Tanyakan analisis market", placeholder="Contoh: Analisa XAGUSD di timeframe M15 atau jelaskan dampak NFP pada DXY", height=68, label_visibility="collapsed")
+        question = st.text_area("Tanyakan analisis market", placeholder="Contoh: Analisa XAGUSD di M15, jelaskan NFP, atau cek Retail Sales untuk DXY", height=68, label_visibility="collapsed")
         submitted = st.form_submit_button("Mulai pemindaian Aero AI", use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
     if submitted and question.strip():

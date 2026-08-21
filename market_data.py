@@ -28,30 +28,78 @@ class Instrument:
 INSTRUMENTS: tuple[Instrument, ...] = (
     Instrument("XAUUSD", "Gold / US Dollar", "GC=F", "Komoditas", ("xauusd", "xau/usd", "gold", "emas", "xau"), "Proxy COMEX Gold Futures (GC=F), bukan spot broker."),
     Instrument("XAGUSD", "Silver / US Dollar", "SI=F", "Komoditas", ("xagusd", "xag/usd", "silver", "perak", "xag"), "Proxy COMEX Silver Futures (SI=F)."),
+    Instrument("XAUEUR", "Gold / Euro", "XAUEUR=X", "Komoditas", ("xaueur", "xau/eur", "gold eur", "emas euro"), "Quote publik XAUEUR; ketersediaan bergantung pada Yahoo Finance."),
+    Instrument("XAGEUR", "Silver / Euro", "XAGEUR=X", "Komoditas", ("xageur", "xag/eur", "silver eur", "perak euro"), "Quote publik XAGEUR; ketersediaan bergantung pada Yahoo Finance."),
+    Instrument("XBRUSD", "Brent Crude Oil / US Dollar", "BZ=F", "Komoditas", ("xbrusd", "xbr/usd"), "Proxy Brent futures (BZ=F)."),
+    Instrument("XNGUSD", "Natural Gas / US Dollar", "NG=F", "Komoditas", ("xngusd", "xng/usd", "natural gas", "gas alam"), "Proxy Henry Hub Natural Gas futures (NG=F)."),
+    Instrument("XPDUSD", "Palladium / US Dollar", "PA=F", "Komoditas", ("xpdusd", "xpd/usd", "palladium", "paladium"), "Proxy Palladium futures (PA=F)."),
     Instrument("EURUSD", "Euro / US Dollar", "EURUSD=X", "Forex", ("eurusd", "eur/usd", "euro dollar", "euro usd")),
     Instrument("GBPUSD", "Pound / US Dollar", "GBPUSD=X", "Forex", ("gbpusd", "gbp/usd", "pound dollar", "pound usd")),
-    Instrument("USDJPY", "US Dollar / Yen", "JPY=X", ("Forex"), ("usdjpy", "usd/jpy", "dollar yen", "usd yen")),
+    Instrument("USDJPY", "US Dollar / Yen", "JPY=X", "Forex", ("usdjpy", "usd/jpy", "dollar yen", "usd yen")),
     Instrument("AUDUSD", "Australian Dollar / US Dollar", "AUDUSD=X", "Forex", ("audusd", "aud/usd", "aussie")),
+    Instrument("USDCAD", "US Dollar / Canadian Dollar", "CAD=X", "Forex", ("usdcad", "usd/cad", "dollar cad")),
+    Instrument("USDCHF", "US Dollar / Swiss Franc", "CHF=X", "Forex", ("usdchf", "usd/chf", "dollar franc")),
+    Instrument("NZDUSD", "New Zealand Dollar / US Dollar", "NZDUSD=X", "Forex", ("nzdusd", "nzd/usd", "kiwi dollar")),
+    Instrument("EURGBP", "Euro / Pound", "EURGBP=X", "Forex", ("eurgbp", "eur/gbp", "euro pound")),
+    Instrument("EURJPY", "Euro / Yen", "EURJPY=X", "Forex", ("eurjpy", "eur/jpy", "euro yen")),
+    Instrument("GBPJPY", "Pound / Yen", "GBPJPY=X", "Forex", ("gbpjpy", "gbp/jpy", "pound yen")),
     Instrument("BTCUSD", "Bitcoin / US Dollar", "BTC-USD", "Kripto", ("btcusd", "btc/usd", "bitcoin", "btc")),
     Instrument("ETHUSD", "Ethereum / US Dollar", "ETH-USD", "Kripto", ("ethusd", "eth/usd", "ethereum", "eth")),
+    Instrument("BNBUSD", "BNB / US Dollar", "BNB-USD", "Kripto", ("bnbusd", "bnb/usd", "bnb")),
     Instrument("SOLUSD", "Solana / US Dollar", "SOL-USD", "Kripto", ("solusd", "sol/usd", "solana", "sol")),
+    Instrument("XRPUSD", "XRP / US Dollar", "XRP-USD", "Kripto", ("xrpusd", "xrp/usd", "xrp", "ripple")),
+    Instrument("ADAUSD", "Cardano / US Dollar", "ADA-USD", "Kripto", ("adausd", "ada/usd", "cardano", "ada")),
+    Instrument("DOTUSD", "Polkadot / US Dollar", "DOT-USD", "Kripto", ("dotusd", "dot/usd", "polkadot", "dot")),
+    Instrument("MATICUSD", "Polygon / US Dollar", "MATIC-USD", "Kripto", ("maticusd", "matic/usd", "polygon", "matic")),
+    Instrument("LINKUSD", "Chainlink / US Dollar", "LINK-USD", "Kripto", ("linkusd", "link/usd", "chainlink", "link")),
+    Instrument("AVAXUSD", "Avalanche / US Dollar", "AVAX-USD", "Kripto", ("avaxusd", "avax/usd", "avalanche", "avax")),
     Instrument("WTI", "WTI Crude Oil", "CL=F", "Komoditas", ("wti", "crude oil", "minyak wti", "oil", "minyak"), "Proxy WTI futures (CL=F)."),
     Instrument("BRENT", "Brent Crude Oil", "BZ=F", "Komoditas", ("brent", "brent oil", "minyak brent"), "Proxy Brent futures (BZ=F)."),
     Instrument("DXY", "US Dollar Index", "DX-Y.NYB", "Indeks", ("dxy", "dollar index", "indeks dolar")),
     Instrument("SPX", "S&P 500", "^GSPC", "Indeks", ("spx", "sp500", "s&p 500", "s&p500", "snp500")),
     Instrument("NAS100", "Nasdaq Composite", "^IXIC", "Indeks", ("nas100", "nasdaq", "nasdaq 100")),
+    Instrument("IHSG", "Indeks Harga Saham Gabungan", "^JKSE", "Indeks", ("ihsg", "jakarta composite", "idx composite")),
+    Instrument("BBCA", "Bank Central Asia", "BBCA.JK", "Saham IDX", ("bbca", "bank bca")),
+    Instrument("BBRI", "Bank Rakyat Indonesia", "BBRI.JK", "Saham IDX", ("bbri", "bank bri")),
+    Instrument("TLKM", "Telkom Indonesia", "TLKM.JK", "Saham IDX", ("tlkm", "telkom")),
+    Instrument("ASII", "Astra International", "ASII.JK", "Saham IDX", ("asii", "astra")),
+    Instrument("BMRI", "Bank Mandiri", "BMRI.JK", "Saham IDX", ("bmri", "bank mandiri")),
+    Instrument("UNVR", "Unilever Indonesia", "UNVR.JK", "Saham IDX", ("unvr", "unilever")),
+    Instrument("GGRM", "Gudang Garam", "GGRM.JK", "Saham IDX", ("ggrm", "gudang garam")),
+    Instrument("HMSP", "HM Sampoerna", "HMSP.JK", "Saham IDX", ("hmsp", "sampoerna")),
+    Instrument("ANTM", "Aneka Tambang", "ANTM.JK", "Saham IDX", ("antm", "antam", "aneka tambang")),
 )
 
 _BY_CODE = {instrument.code: instrument for instrument in INSTRUMENTS}
-_CRYPTO_COIN_IDS = {"BTCUSD": "bitcoin", "ETHUSD": "ethereum", "SOLUSD": "solana"}
+_CRYPTO_COIN_IDS = {
+    "BTCUSD": "bitcoin", "ETHUSD": "ethereum", "BNBUSD": "binancecoin", "SOLUSD": "solana",
+    "XRPUSD": "ripple", "ADAUSD": "cardano", "DOTUSD": "polkadot", "MATICUSD": "matic-network",
+    "LINKUSD": "chainlink", "AVAXUSD": "avalanche-2",
+}
 _TIMEFRAME_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("15m", (r"\b(?:m15|15m|15\s*(?:menit|minute|minutes|min))\b",)),
     ("30m", (r"\b(?:m30|30m|30\s*(?:menit|minute|minutes|min))\b",)),
     ("1h", (r"\b(?:h1|1h|1\s*(?:jam|hour|hours))\b",)),
+    ("2h", (r"\b(?:h2|2h|2\s*(?:jam|hour|hours))\b",)),
+    ("3h", (r"\b(?:h3|3h|3\s*(?:jam|hour|hours))\b",)),
     ("4h", (r"\b(?:h4|4h|4\s*(?:jam|hour|hours))\b",)),
+    ("5h", (r"\b(?:h5|5h|5\s*(?:jam|hour|hours))\b",)),
+    ("6h", (r"\b(?:h6|6h|6\s*(?:jam|hour|hours))\b",)),
+    ("7h", (r"\b(?:h7|7h|7\s*(?:jam|hour|hours))\b",)),
+    ("8h", (r"\b(?:h8|8h|8\s*(?:jam|hour|hours))\b",)),
+    ("9h", (r"\b(?:h9|9h|9\s*(?:jam|hour|hours))\b",)),
+    ("10h", (r"\b(?:h10|10h|10\s*(?:jam|hour|hours))\b",)),
+    ("11h", (r"\b(?:h11|11h|11\s*(?:jam|hour|hours))\b",)),
+    ("12h", (r"\b(?:h12|12h|12\s*(?:jam|hour|hours))\b",)),
     ("1d", (r"\b(?:d1|1d|daily|harian|1\s*(?:hari|day|days))\b",)),
+    ("1wk", (r"\b(?:w1|1w|1wk|weekly|mingguan|1\s*(?:minggu|week|weeks))\b",)),
+    ("1mo", (r"\b(?:mn|month|monthly|bulan|bulanan|1\s*(?:bulan|month|months))\b",)),
 )
-_TIMEFRAME_LABELS = {"15m": "M15", "30m": "M30", "1h": "H1", "4h": "H4", "1d": "D1"}
+_TIMEFRAME_LABELS = {
+    "15m": "M15", "30m": "M30", "1h": "H1", "2h": "H2", "3h": "H3", "4h": "H4",
+    "5h": "H5", "6h": "H6", "7h": "H7", "8h": "H8", "9h": "H9", "10h": "H10",
+    "11h": "H11", "12h": "H12", "1d": "D1", "1wk": "W1", "1mo": "MN",
+}
 
 
 @dataclass
@@ -84,6 +132,18 @@ def detect_instruments(question: str) -> list[Instrument]:
     return unique
 
 
+def detect_unknown_instrument_candidates(question: str) -> list[str]:
+    """Temukan kode pair yang tampak eksplisit tetapi belum tersedia di daftar instrumen."""
+    ignored = {"ANALISA", "ANALYZE", "TIMEFRAME", "INSTRUMEN", "FORECAST", "ACTUAL", "PREVIOUS", "RETAIL", "SALES", "PREDIKSI"}
+    candidates: list[str] = []
+    for raw in re.findall(r"\b[A-Za-z]{5,8}\b", question):
+        code = raw.upper()
+        looks_like_pair = code.startswith("X") or code.endswith(("USD", "EUR", "JPY", "GBP", "CAD", "CHF", "NZD"))
+        if looks_like_pair and code not in _BY_CODE and code not in ignored and code not in candidates:
+            candidates.append(code)
+    return candidates
+
+
 def _matched_timeframe(question: str) -> str | None:
     normalized = question.casefold().replace("-", " ")
     for interval, patterns in _TIMEFRAME_RULES:
@@ -111,14 +171,18 @@ def instrument_from_code(code: str) -> Instrument | None:
 
 
 def _period_for_interval(interval: str) -> str:
-    return {"15m": "30d", "30m": "60d", "1h": "60d", "4h": "60d", "1d": "2y"}.get(interval, "60d")
+    if interval in {"15m", "30m"}:
+        return "30d" if interval == "15m" else "60d"
+    if interval.endswith("h"):
+        return "60d"
+    return {"1d": "2y", "1wk": "10y", "1mo": "max"}.get(interval, "60d")
 
 
-def _resample_to_four_hours(candles: pd.DataFrame) -> pd.DataFrame:
-    """Bangun candle H4 dari candle H1 publik, tanpa membuat harga sintetis."""
+def _resample_to_hours(candles: pd.DataFrame, hours: int) -> pd.DataFrame:
+    """Bangun candle H2–H12 dari candle H1 publik, tanpa membuat harga sintetis."""
     if candles.empty:
         return candles
-    aggregated = candles.resample("4h").agg({"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"})
+    aggregated = candles.resample(f"{hours}h").agg({"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"})
     return aggregated.dropna(subset=["open", "high", "low", "close"])
 
 
@@ -242,7 +306,7 @@ def _fetch_coingecko_ohlc(instrument: Instrument, interval: str) -> pd.DataFrame
     if not coin_id:
         return pd.DataFrame()
     try:
-        days = "30" if interval in {"15m", "1h"} else "365"
+        days = "30" if interval in {"15m", "30m"} or interval.endswith("h") else "365"
         response = requests.get(
             f"https://api.coingecko.com/api/v3/coins/{coin_id}/ohlc",
             params={"vs_currency": "usd", "days": days},
@@ -267,15 +331,19 @@ def fetch_market_snapshot(instrument: Instrument, interval: str = "1h") -> Marke
     except ImportError as exc:
         raise RuntimeError("Library yfinance belum terpasang. Jalankan pip install -r requirements.txt.") from exc
     requested_interval = interval if interval in _TIMEFRAME_LABELS else "1h"
-    yahoo_interval = "1h" if requested_interval == "4h" else requested_interval
+    hour_match = re.fullmatch(r"(\d+)h", requested_interval)
+    resample_hours = int(hour_match.group(1)) if hour_match and requested_interval != "1h" else 0
+    yahoo_interval = "1h" if resample_hours else requested_interval
     try:
         frame = yf.download(instrument.yahoo_symbol, period=_period_for_interval(requested_interval), interval=yahoo_interval, auto_adjust=False, progress=False, threads=False)
     except Exception as exc:
         raise RuntimeError(f"Gagal menghubungi sumber data: {exc}") from exc
     candles = _normalize_history(frame)
-    if requested_interval == "4h":
-        candles = _resample_to_four_hours(candles)
+    if resample_hours:
+        candles = _resample_to_hours(candles, resample_hours)
     source = f"Yahoo Finance chart via yfinance · {instrument.yahoo_symbol}"
+    if resample_hours:
+        source = f"{source} · candle {timeframe_label(requested_interval)} diagregasi dari H1 publik"
     if len(candles) < 55:
         fallback = _fetch_coingecko_ohlc(instrument, requested_interval)
         if len(fallback) >= 55:
@@ -284,6 +352,8 @@ def fetch_market_snapshot(instrument: Instrument, interval: str = "1h") -> Marke
     if len(candles) < 55:
         raise RuntimeError("Sumber data belum mengembalikan cukup candle untuk analisis indikator.")
     warning = "Data publik untuk riset/edukasi; dapat tertunda dan bukan harga eksekusi broker."
+    if resample_hours:
+        warning = f"Timeframe {timeframe_label(requested_interval)} diagregasi dari candle H1 publik. {warning}"
     if source.startswith("CoinGecko"):
         warning = "CoinGecko keyless memiliki batas rate bersama dan candle historis; bukan feed eksekusi broker."
     if instrument.note:
