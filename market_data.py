@@ -1,4 +1,4 @@
-"""Mesin data market publik dan indikator teknikal untuk prototipe Call-of-Catty.
+"""Mesin data harga publik dan indikator Python untuk Aero AI.
 
 Sumber default memakai yfinance/Yahoo Finance tanpa API key untuk riset dan edukasi.
 Data dapat tertunda, tidak ber-SLA, dan bukan harga eksekusi broker.
@@ -48,15 +48,16 @@ _BY_CODE = {instrument.code: instrument for instrument in INSTRUMENTS}
 class MarketSnapshot:
     instrument: Instrument
     candles: pd.DataFrame
-    indicators: dict[str, float | str]
+    indicators: dict[str, float | str | dict[str, str]]
     fetched_at: datetime
     last_candle_at: datetime
     source: str
     warning: str
+    interval: str = "1h"
 
 
 def detect_instruments(question: str) -> list[Instrument]:
-    """Temukan instrumen dari bahasa alami tanpa bergantung pada pilihan terminal lain."""
+    """Temukan instrumen dari bahasa alami tanpa bergantung pada terminal lain."""
     normalized = re.sub(r"[^a-z0-9/=^&$\- ]", " ", question.casefold())
     matches: list[tuple[int, Instrument]] = []
     for instrument in INSTRUMENTS:
@@ -104,10 +105,28 @@ def _rsi(close: pd.Series, length: int = 14) -> pd.Series:
     return (100 - (100 / (1 + ratio))).fillna(50.0)
 
 
-def calculate_indicators(candles: pd.DataFrame) -> dict[str, float | str]:
-    close = candles["close"]
-    high = candles["high"]
-    low = candles["low"]
+def _state(value: bool, opposite: bool) -> str:
+    if value:
+        return "BUY"
+    if opposite:
+        return "SELL"
+    return "NEUTRAL"
+
+
+def _market_state(bullish_votes: int, bearish_votes: int) -> str:
+    if bullish_votes == 5:
+        return "STRONG BULLISH"
+    if bullish_votes >= 4:
+        return "BULLISH"
+    if bearish_votes == 5:
+        return "STRONG BEARISH"
+    if bearish_votes >= 4:
+        return "BEARISH"
+    return "NEUTRAL"
+
+
+def calculate_indicators(candles: pd.DataFrame) -> dict[str, float | str | dict[str, str]]:
+    close, high, low = candles["close"], candles["high"], candles["low"]
     ma20 = close.rolling(20, min_periods=10).mean()
     ma50 = close.rolling(50, min_periods=20).mean()
     ma200 = close.rolling(200, min_periods=50).mean()
@@ -123,36 +142,38 @@ def calculate_indicators(candles: pd.DataFrame) -> dict[str, float | str]:
     change_1 = ((close.iloc[-1] / close.iloc[-2]) - 1) * 100 if len(close) > 1 else 0.0
     change_20 = ((close.iloc[-1] / close.iloc[-21]) - 1) * 100 if len(close) > 20 else 0.0
     last = float(close.iloc[-1])
+    ma20_value = float(ma20.iloc[-1]) if pd.notna(ma20.iloc[-1]) else last
     ma50_value = float(ma50.iloc[-1]) if pd.notna(ma50.iloc[-1]) else last
     ma200_value = float(ma200.iloc[-1]) if pd.notna(ma200.iloc[-1]) else last
     rsi_value = float(_rsi(close).iloc[-1])
     macd_value = float(macd.iloc[-1])
     signal_value = float(signal.iloc[-1])
-    votes = [last > ma20.iloc[-1], last > ma50_value, last > ma200_value, rsi_value >= 52, macd_value > signal_value]
-    bearish_votes = [last < ma20.iloc[-1], last < ma50_value, last < ma200_value, rsi_value <= 48, macd_value < signal_value]
-    if sum(votes) >= 4:
-        bias = "BUY"
-    elif sum(bearish_votes) >= 4:
-        bias = "SELL"
-    else:
-        bias = "NEUTRAL"
-    confidence = round(max(sum(votes), sum(bearish_votes)) / 5 * 100)
+    bullish = [last > ma20_value, last > ma50_value, last > ma200_value, rsi_value >= 52, macd_value > signal_value]
+    bearish = [last < ma20_value, last < ma50_value, last < ma200_value, rsi_value <= 48, macd_value < signal_value]
+    bullish_votes, bearish_votes = sum(bullish), sum(bearish)
+    bias = "BUY" if bullish_votes >= 4 else "SELL" if bearish_votes >= 4 else "NEUTRAL"
+    states = {
+        "Harga vs MA 20": _state(last > ma20_value, last < ma20_value),
+        "Harga vs MA 50": _state(last > ma50_value, last < ma50_value),
+        "Harga vs MA 200": _state(last > ma200_value, last < ma200_value),
+        "RSI 14": "BUY" if rsi_value >= 52 else "SELL" if rsi_value <= 48 else "NEUTRAL",
+        "MACD": _state(macd_value > signal_value, macd_value < signal_value),
+        "Perubahan 20 candle": "BUY" if change_20 > 0 else "SELL" if change_20 < 0 else "NEUTRAL",
+        "High/Low 20": "BUY" if last >= float(high.tail(20).mean()) else "SELL",
+        "Volatilitas 20": "NEUTRAL",
+        "ATR 14": "NEUTRAL",
+        "Keselarasan tren": "BUY" if bullish_votes >= 4 else "SELL" if bearish_votes >= 4 else "NEUTRAL",
+    }
     return {
-        "price": last,
-        "change_1": float(change_1),
-        "change_20": float(change_20),
-        "ma20": float(ma20.iloc[-1]) if pd.notna(ma20.iloc[-1]) else last,
-        "ma50": ma50_value,
-        "ma200": ma200_value,
-        "rsi14": rsi_value,
-        "macd": macd_value,
-        "macd_signal": signal_value,
+        "price": last, "change_1": float(change_1), "change_20": float(change_20),
+        "ma20": ma20_value, "ma50": ma50_value, "ma200": ma200_value,
+        "rsi14": rsi_value, "macd": macd_value, "macd_signal": signal_value,
         "atr14": float(atr.iloc[-1]) if pd.notna(atr.iloc[-1]) else 0.0,
-        "high20": float(high.tail(20).max()),
-        "low20": float(low.tail(20).min()),
+        "high20": float(high.tail(20).max()), "low20": float(low.tail(20).min()),
         "volatility20": float(volatility.iloc[-1]) if pd.notna(volatility.iloc[-1]) else 0.0,
-        "bias": bias,
-        "confluence": confidence,
+        "bias": bias, "market_state": _market_state(bullish_votes, bearish_votes),
+        "confluence": round(max(bullish_votes, bearish_votes) / 5 * 100),
+        "indicator_states": states,
     }
 
 
@@ -163,14 +184,7 @@ def fetch_market_snapshot(instrument: Instrument, interval: str = "1h") -> Marke
     except ImportError as exc:
         raise RuntimeError("Library yfinance belum terpasang. Jalankan pip install -r requirements.txt.") from exc
     try:
-        frame = yf.download(
-            instrument.yahoo_symbol,
-            period=_period_for_interval(interval),
-            interval=interval,
-            auto_adjust=False,
-            progress=False,
-            threads=False,
-        )
+        frame = yf.download(instrument.yahoo_symbol, period=_period_for_interval(interval), interval=interval, auto_adjust=False, progress=False, threads=False)
     except Exception as exc:
         raise RuntimeError(f"Gagal menghubungi sumber data: {exc}") from exc
     candles = _normalize_history(frame)
@@ -180,13 +194,9 @@ def fetch_market_snapshot(instrument: Instrument, interval: str = "1h") -> Marke
     if instrument.note:
         warning = f"{instrument.note} {warning}"
     return MarketSnapshot(
-        instrument=instrument,
-        candles=candles,
-        indicators=calculate_indicators(candles),
-        fetched_at=datetime.now(timezone.utc),
-        last_candle_at=candles.index[-1].to_pydatetime(),
-        source=f"Yahoo Finance chart via yfinance · {instrument.yahoo_symbol}",
-        warning=warning,
+        instrument=instrument, candles=candles, indicators=calculate_indicators(candles),
+        fetched_at=datetime.now(timezone.utc), last_candle_at=candles.index[-1].to_pydatetime(),
+        source=f"Yahoo Finance chart via yfinance · {instrument.yahoo_symbol}", warning=warning, interval=interval,
     )
 
 
@@ -196,6 +206,4 @@ def normalized_comparison(snapshots: Iterable[MarketSnapshot]) -> pd.DataFrame:
         series = snapshot.candles["close"].rename(snapshot.instrument.code).dropna()
         if not series.empty:
             frames.append((series / series.iloc[0] * 100).rename(snapshot.instrument.code))
-    if not frames:
-        return pd.DataFrame()
-    return pd.concat(frames, axis=1).dropna(how="all").ffill()
+    return pd.concat(frames, axis=1).dropna(how="all").ffill() if frames else pd.DataFrame()
