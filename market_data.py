@@ -120,9 +120,9 @@ def detect_instruments(question: str) -> list[Instrument]:
     matches: list[tuple[int, Instrument]] = []
     for instrument in INSTRUMENTS:
         for alias in instrument.aliases:
-            position = normalized.find(alias.casefold())
-            if position >= 0:
-                matches.append((position, instrument))
+            matched = re.search(rf"(?<![a-z0-9]){re.escape(alias.casefold())}(?![a-z0-9])", normalized)
+            if matched:
+                matches.append((matched.start(), instrument))
                 break
     matches.sort(key=lambda item: item[0])
     unique: list[Instrument] = []
