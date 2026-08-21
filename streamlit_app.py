@@ -21,6 +21,7 @@ APP_CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Share+Tech+Mono&display=swap');
 :root { --ink:#050609; --line:#262b35; --text:#f5f6f8; --cyan:#18d9f5; --green:#31d47a; --yellow:#f0c447; }
 html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] { background:var(--ink)!important; color:var(--text)!important; font-family:Manrope,sans-serif; }
+.stApp { background-image:linear-gradient(rgba(24,217,245,.026) 1px,transparent 1px),linear-gradient(90deg,rgba(24,217,245,.026) 1px,transparent 1px)!important; background-size:34px 34px!important; }
 .block-container { max-width:940px; padding:1.15rem 1rem 2rem; }
 .brand-kicker { color:var(--cyan); font: .65rem 'Share Tech Mono',monospace; letter-spacing:1.6px; }
 .title-row { display:flex; justify-content:space-between; align-items:flex-end; border-bottom:1px solid var(--line); padding:0 0 1rem; margin-bottom:1rem; }.title-row h1 { font-size:clamp(1.65rem,6vw,2.7rem); margin:.3rem 0 0; letter-spacing:-1.8px; }.engine { color:#aab2c0; font:.63rem 'Share Tech Mono',monospace; text-align:right; line-height:1.55; }.engine b { color:var(--green); }
@@ -29,10 +30,19 @@ html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
 .data-proof { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; background:#0a0d12; border:1px solid var(--line); padding:11px 13px; border-radius:10px; color:#b5bdcb; font:.64rem 'Share Tech Mono',monospace; }.metric-box { border-left:2px solid var(--cyan); padding:8px 0 8px 11px; }.metric-box .name { color:#7e899a; font:.57rem 'Share Tech Mono',monospace; letter-spacing:1.2px; }.metric-box .val { font-weight:800; font-size:1rem; margin-top:4px; }.signal-buy { color:var(--green); }.signal-sell { color:#ff6672; }.signal-neutral { color:var(--yellow); }
 .indicator-table { border:1px solid var(--line); border-radius:10px; overflow:hidden; margin-top:10px; }.indicator-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:9px 11px; border-bottom:1px solid #1e2430; font-size:.77rem; }.indicator-row:last-child { border-bottom:0; }.indicator-row.header { background:#11151d; color:var(--cyan); font:.59rem 'Share Tech Mono',monospace; letter-spacing:1px; }.indicator-row span:last-child { text-align:right; color:#e5eaf2; font-family:'Share Tech Mono',monospace; }
 .chart-guide { display:flex; justify-content:space-between; flex-wrap:wrap; gap:7px; color:#9ba5b6; font:.62rem 'Share Tech Mono',monospace; padding:7px 2px 10px; }.scroll-cue { text-align:center; color:var(--cyan); font:.65rem 'Share Tech Mono',monospace; letter-spacing:1px; margin:15px 0 2px; }
+div[data-testid="stPlotlyChart"], div[data-testid="stPlotlyChart"] .plot-container, div[data-testid="stPlotlyChart"] .svg-container { touch-action:pan-y!important; pointer-events:none!important; -webkit-user-select:none; user-select:none; }
 div[data-testid="stChatInput"] { position:static; margin-top:1.25rem; padding:0; background:transparent; } div[data-testid="stChatInput"] textarea { background:#11141b!important; border:1px solid #3a414e!important; border-radius:17px!important; color:var(--text)!important; } div.stButton > button { background:#11141b; color:#e8edf5; border:1px solid #343b47; border-radius:10px; font-weight:700; min-height:38px; } div.stButton > button:hover { border-color:var(--cyan); color:var(--cyan); }
 @media (max-width:640px) { .block-container { padding:1rem .85rem 1.5rem; }.title-row { display:block; }.engine { text-align:left; margin-top:8px; }.data-proof { font-size:.56rem; }.reply-card { font-size:.92rem; padding:15px; }.chart-guide { font-size:.56rem; } }
 </style>
 """
+
+STATIC_CHART_CONFIG = {
+    "displaylogo": False,
+    "displayModeBar": False,
+    "scrollZoom": False,
+    "responsive": True,
+    "staticPlot": True,
+}
 
 
 def init_state() -> None:
@@ -64,9 +74,9 @@ def render_candle_chart(snapshot: MarketSnapshot) -> None:
     figure.add_trace(go.Candlestick(x=candles.index, open=candles["open"], high=candles["high"], low=candles["low"], close=candles["close"], name=snapshot.instrument.code, increasing_line_color="#31d47a", decreasing_line_color="#e14c56"))
     figure.add_trace(go.Scatter(x=candles.index, y=candles["ma50"], name="MA 50", line={"color":"#18d9f5", "width":1.55}))
     figure.add_trace(go.Scatter(x=candles.index, y=candles["ma200"], name="MA 200", line={"color":"#f0c447", "width":1.35, "dash":"dot"}))
-    figure.update_layout(template="plotly_dark", paper_bgcolor="#0a0d12", plot_bgcolor="#0a0d12", height=430, margin={"l":10, "r":12, "t":10, "b":8}, dragmode="pan", hovermode="x unified", xaxis={"rangeslider":{"visible":True, "thickness":.07}, "gridcolor":"#202632"}, yaxis={"side":"right", "gridcolor":"#202632"}, legend={"orientation":"h", "x":0, "y":1.02, "xanchor":"left", "yanchor":"bottom"}, font={"family":"Manrope", "color":"#eaf0f7"})
-    st.markdown(f'<div class="brand-kicker">{snapshot.instrument.code} · CANDLESTICK 1H</div><div class="chart-guide"><span>Geser grafik untuk pan</span><span>Scroll/cubit untuk zoom</span><span>Double-click untuk reset</span></div>', unsafe_allow_html=True)
-    st.plotly_chart(figure, use_container_width=True, config={"displaylogo":False, "scrollZoom":True, "responsive":True, "doubleClick":"reset+autosize", "modeBarButtonsToRemove":["select2d", "lasso2d"]})
+    figure.update_layout(template="plotly_dark", paper_bgcolor="#0a0d12", plot_bgcolor="#0a0d12", height=430, margin={"l":10, "r":12, "t":10, "b":8}, hovermode=False, xaxis={"rangeslider":{"visible":False}, "gridcolor":"#202632", "fixedrange":True}, yaxis={"side":"right", "gridcolor":"#202632", "fixedrange":True}, legend={"orientation":"h", "x":0, "y":1.02, "xanchor":"left", "yanchor":"bottom"}, font={"family":"Manrope", "color":"#eaf0f7"})
+    st.markdown(f'<div class="brand-kicker">{snapshot.instrument.code} · STATIC MARKET CHART · CANDLESTICK 1H</div><div class="chart-guide"><span>Visual statis · zoom dan pan dinonaktifkan</span><span>Data dan indikator berada di bawah grafik</span></div>', unsafe_allow_html=True)
+    st.plotly_chart(figure, use_container_width=True, config=STATIC_CHART_CONFIG)
 
 
 def render_snapshot(snapshot: MarketSnapshot) -> None:
@@ -101,9 +111,9 @@ def render_comparison(snapshots: list[MarketSnapshot]) -> None:
     figure = go.Figure()
     for column in frame.columns:
         figure.add_trace(go.Scatter(x=frame.index, y=frame[column], name=column, mode="lines"))
-    figure.update_layout(template="plotly_dark", paper_bgcolor="#0a0d12", plot_bgcolor="#0a0d12", height=330, margin={"l":10,"r":10,"t":15,"b":8}, dragmode="pan", xaxis={"rangeslider":{"visible":True,"thickness":.08},"gridcolor":"#202632"}, yaxis={"gridcolor":"#202632"}, legend={"orientation":"h","y":1.02,"yanchor":"bottom"})
+    figure.update_layout(template="plotly_dark", paper_bgcolor="#0a0d12", plot_bgcolor="#0a0d12", height=330, margin={"l":10,"r":10,"t":15,"b":8}, xaxis={"rangeslider":{"visible":False},"gridcolor":"#202632","fixedrange":True}, yaxis={"gridcolor":"#202632","fixedrange":True}, legend={"orientation":"h","y":1.02,"yanchor":"bottom"})
     with st.expander("Perbandingan performa relatif · basis 100", expanded=True):
-        st.plotly_chart(figure, use_container_width=True, config={"displaylogo":False, "scrollZoom":True, "responsive":True, "doubleClick":"reset+autosize"})
+        st.plotly_chart(figure, use_container_width=True, config=STATIC_CHART_CONFIG)
 
 
 def wait_until(started_at: float, seconds: float) -> None:
