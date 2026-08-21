@@ -44,6 +44,14 @@ INSTRUMENTS: tuple[Instrument, ...] = (
 
 _BY_CODE = {instrument.code: instrument for instrument in INSTRUMENTS}
 _CRYPTO_COIN_IDS = {"BTCUSD": "bitcoin", "ETHUSD": "ethereum", "SOLUSD": "solana"}
+_TIMEFRAME_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("15m", (r"\b(?:m15|15m|15\s*(?:menit|minute|minutes|min))\b",)),
+    ("30m", (r"\b(?:m30|30m|30\s*(?:menit|minute|minutes|min))\b",)),
+    ("1h", (r"\b(?:h1|1h|1\s*(?:jam|hour|hours))\b",)),
+    ("4h", (r"\b(?:h4|4h|4\s*(?:jam|hour|hours))\b",)),
+    ("1d", (r"\b(?:d1|1d|daily|harian|1\s*(?:hari|day|days))\b",)),
+)
+_TIMEFRAME_LABELS = {"15m": "M15", "30m": "M30", "1h": "H1", "4h": "H4", "1d": "D1"}
 
 
 @dataclass
@@ -76,12 +84,42 @@ def detect_instruments(question: str) -> list[Instrument]:
     return unique
 
 
+def _matched_timeframe(question: str) -> str | None:
+    normalized = question.casefold().replace("-", " ")
+    for interval, patterns in _TIMEFRAME_RULES:
+        if any(re.search(pattern, normalized) for pattern in patterns):
+            return interval
+    return None
+
+
+def detect_timeframe(question: str) -> str:
+    """Baca timeframe dari pesan pengguna tanpa menampilkan pemilih timeframe."""
+    return _matched_timeframe(question) or "1h"
+
+
+def timeframe_was_explicit(question: str) -> bool:
+    """Tandai apakah timeframe tertulis eksplisit agar asumsi H1 dapat dijelaskan."""
+    return _matched_timeframe(question) is not None
+
+
+def timeframe_label(interval: str) -> str:
+    return _TIMEFRAME_LABELS.get(interval, interval.upper())
+
+
 def instrument_from_code(code: str) -> Instrument | None:
     return _BY_CODE.get(code.upper())
 
 
 def _period_for_interval(interval: str) -> str:
-    return {"15m": "30d", "1h": "60d", "1d": "2y"}.get(interval, "60d")
+    return {"15m": "30d", "30m": "60d", "1h": "60d", "4h": "60d", "1d": "2y"}.get(interval, "60d")
+
+
+def _resample_to_four_hours(candles: pd.DataFrame) -> pd.DataFrame:
+    """Bangun candle H4 dari candle H1 publik, tanpa membuat harga sintetis."""
+    if candles.empty:
+        return candles
+    aggregated = candles.resample("4h").agg({"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"})
+    return aggregated.dropna(subset=["open", "high", "low", "close"])
 
 
 def _normalize_history(frame: pd.DataFrame) -> pd.DataFrame:
@@ -228,14 +266,18 @@ def fetch_market_snapshot(instrument: Instrument, interval: str = "1h") -> Marke
         import yfinance as yf
     except ImportError as exc:
         raise RuntimeError("Library yfinance belum terpasang. Jalankan pip install -r requirements.txt.") from exc
+    requested_interval = interval if interval in _TIMEFRAME_LABELS else "1h"
+    yahoo_interval = "1h" if requested_interval == "4h" else requested_interval
     try:
-        frame = yf.download(instrument.yahoo_symbol, period=_period_for_interval(interval), interval=interval, auto_adjust=False, progress=False, threads=False)
+        frame = yf.download(instrument.yahoo_symbol, period=_period_for_interval(requested_interval), interval=yahoo_interval, auto_adjust=False, progress=False, threads=False)
     except Exception as exc:
         raise RuntimeError(f"Gagal menghubungi sumber data: {exc}") from exc
     candles = _normalize_history(frame)
+    if requested_interval == "4h":
+        candles = _resample_to_four_hours(candles)
     source = f"Yahoo Finance chart via yfinance · {instrument.yahoo_symbol}"
     if len(candles) < 55:
-        fallback = _fetch_coingecko_ohlc(instrument, interval)
+        fallback = _fetch_coingecko_ohlc(instrument, requested_interval)
         if len(fallback) >= 55:
             candles = fallback
             source = f"CoinGecko OHLC keyless · {_CRYPTO_COIN_IDS[instrument.code]}"
@@ -246,7 +288,7 @@ def fetch_market_snapshot(instrument: Instrument, interval: str = "1h") -> Marke
         warning = "CoinGecko keyless memiliki batas rate bersama dan candle historis; bukan feed eksekusi broker."
     if instrument.note:
         warning = f"{instrument.note} {warning}"
-    return MarketSnapshot(instrument, candles, calculate_indicators(candles), datetime.now(timezone.utc), candles.index[-1].to_pydatetime(), source, warning, interval)
+    return MarketSnapshot(instrument, candles, calculate_indicators(candles), datetime.now(timezone.utc), candles.index[-1].to_pydatetime(), source, warning, requested_interval)
 
 
 def normalized_comparison(snapshots: Iterable[MarketSnapshot]) -> pd.DataFrame:

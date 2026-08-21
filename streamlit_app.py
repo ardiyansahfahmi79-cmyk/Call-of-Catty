@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import timezone
 import html
+import random
 import re
 import time
 from uuid import uuid4
@@ -12,8 +13,8 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from fundamental_data import FundamentalSnapshot, fetch_fundamental_context
-from market_chat import build_reply, follow_up_prompts
-from market_data import MarketSnapshot, detect_instruments, fetch_market_snapshot, normalized_comparison
+from market_chat import build_agenda_reply, build_reply, follow_up_prompts
+from market_data import MarketSnapshot, detect_instruments, detect_timeframe, fetch_market_snapshot, normalized_comparison
 
 
 MIN_ANALYSIS_SECONDS = 13
@@ -33,7 +34,7 @@ html,body,.stApp,[data-testid="stAppViewContainer"],[data-testid="stMain"] { bac
 .analysis-shell { border:1px solid var(--line); border-top:2px solid rgba(24,217,245,.68); background:rgba(9,12,18,.76); padding:14px; border-radius:13px; margin:14px 0 4px; }.data-proof { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px 12px; color:#aeb8c7; font:.59rem 'Share Tech Mono',monospace; margin-bottom:13px; }.data-proof span { overflow-wrap:anywhere; }.metric-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; }.metric-box { border-left:2px solid var(--cyan); padding:8px 0 8px 10px; background:rgba(17,23,34,.54); }.metric-box .name { color:#8793a5; font:.55rem 'Share Tech Mono',monospace; letter-spacing:1.1px; }.metric-box .val { margin-top:4px; font-size:.95rem; font-weight:800; }.signal-buy { color:var(--green); }.signal-sell { color:var(--red); }.signal-neutral { color:var(--yellow); }
 .chart-guide { display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; padding:2px 0 9px; color:#aeb8c7; font:.6rem 'Share Tech Mono',monospace; }.indicator-table { margin-top:12px; overflow:hidden; border:1px solid var(--line); border-radius:9px; }.indicator-row { display:grid; grid-template-columns:1.1fr 1fr .7fr; gap:8px; padding:9px 10px; border-bottom:1px solid #202734; font-size:.73rem; }.indicator-row:last-child { border-bottom:0; }.indicator-row.header { background:#111722; color:var(--cyan); font:.56rem 'Share Tech Mono',monospace; letter-spacing:1px; }.indicator-row span:nth-child(2),.indicator-row span:nth-child(3) { text-align:right; font-family:'Share Tech Mono',monospace; }.indicator-buy { color:var(--green); }.indicator-sell { color:var(--red); }.indicator-neutral { color:var(--yellow); }
 .fundamental-title { color:var(--cyan); font:.61rem 'Share Tech Mono',monospace; letter-spacing:1.5px; margin:18px 0 8px; }.fundamental-card { border:1px solid #2c3542; background:#10151e; border-radius:9px; padding:10px 11px; margin:7px 0; }.fundamental-card b { color:#eef3f8; }.fundamental-meta { color:#8f9bac; font:.57rem 'Share Tech Mono',monospace; margin-top:5px; overflow-wrap:anywhere; }.fundamental-meta a{color:var(--cyan);text-decoration:none;}.fundamental-meta a:hover{text-decoration:underline;}
-.scroll-cue { text-align:center; color:var(--cyan); font:.6rem 'Share Tech Mono',monospace; letter-spacing:1.4px; margin:18px 0 3px; }.input-panel { margin-top:1.25rem; padding:13px; border:1px solid #2d3948; background:rgba(12,16,24,.94); border-radius:14px; }.input-panel p { color:var(--muted); margin:0 0 9px; font-size:.74rem; }.stTextArea textarea { background:#111620!important; color:var(--text)!important; border:1px solid #384557!important; border-radius:10px!important; }.stButton>button { background:#121923!important; color:#eaf0f7!important; border:1px solid #364355!important; border-radius:9px!important; font-weight:700!important; min-height:38px!important; }.stButton>button:hover { color:var(--cyan)!important; border-color:var(--cyan)!important; }
+	.scroll-cue { text-align:center; color:var(--cyan); font:.6rem 'Share Tech Mono',monospace; letter-spacing:1.4px; margin:18px 0 3px; }.input-panel { margin-top:1.25rem; padding:13px; border:1px solid #2d3948; background:rgba(12,16,24,.94); border-radius:14px; }.input-panel p { color:var(--muted); margin:0 0 9px; font-size:.74rem; }.suggestion-kicker { color:#8794a8; font:.58rem 'Share Tech Mono',monospace; letter-spacing:1.35px; margin:0 0 7px; }.stTextArea textarea { background:#111620!important; color:var(--text)!important; border:1px solid #384557!important; border-radius:10px!important; }.stButton>button { background:#121923!important; color:#eaf0f7!important; border:1px solid #364355!important; border-radius:9px!important; font-weight:700!important; min-height:38px!important; }.stButton>button:hover { color:var(--cyan)!important; border-color:var(--cyan)!important; }
 div[data-testid="stPlotlyChart"],div[data-testid="stPlotlyChart"] .plot-container,div[data-testid="stPlotlyChart"] .svg-container { touch-action:pan-y!important; pointer-events:none!important; -webkit-user-select:none; user-select:none; }
 @media(max-width:640px){ .block-container { padding:.8rem .62rem 1.5rem; }.app-shell { padding:0 .6rem 1rem; }.title-row { display:block; }.engine { text-align:left; margin-top:8px; }.user-message { margin-left:8%; }.reply-card { padding:15px; font-size:.91rem; }.metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.data-proof { grid-template-columns:1fr; }.indicator-row { grid-template-columns:1fr .9fr .65fr; font-size:.68rem; }.context-band { padding:11px; } }
 </style>
@@ -51,6 +52,7 @@ def init_state() -> None:
         "messages": [_message("assistant", "Aero AI adalah sistem pemindaian market. Sebutkan instrumen seperti **XAUUSD**, EURUSD, BTCUSD, WTI, atau DXY untuk memulai analisis berbasis data." )],
         "latest_response_id": None,
         "typed_message_ids": set(),
+        "pending_question": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -161,11 +163,18 @@ def _wait_until(started_at: float, seconds: float) -> None:
         time.sleep(remaining)
 
 
+def queue_question(question: str) -> None:
+    """Render pesan pengguna dahulu; pemindaian pada rerun berikutnya berada tepat setelahnya."""
+    st.session_state.messages.append(_message("user", question))
+    st.session_state.pending_question = question
+
+
 def process_question(question: str, loader_slot) -> None:
     instruments = detect_instruments(question)
-    st.session_state.messages.append(_message("user", question))
+    interval = detect_timeframe(question)
     if not instruments:
-        st.session_state.messages.append(_message("assistant", "Aero AI dikhususkan untuk pemindaian market berbasis data. Sistem ini tidak dirancang untuk percakapan umum. Sebutkan instrumen eksplisit seperti **XAUUSD**, EURUSD, BTCUSD, WTI, atau DXY agar saya dapat memulai analisis."))
+        agenda_reply = build_agenda_reply(question)
+        st.session_state.messages.append(_message("assistant", agenda_reply or "Aero AI dikhususkan untuk pemindaian market berbasis data. Sistem ini tidak dirancang untuk percakapan umum. Sebutkan instrumen eksplisit seperti **XAUUSD**, EURUSD, BTCUSD, WTI, atau DXY agar saya dapat memulai analisis."))
         return
     started_at, snapshots, fundamentals = time.monotonic(), [], {}
     stages = [("01 / 05 · MENDETEKSI INSTRUMEN DAN KONTEKS PERTANYAAN", 50, 9, 1.2), ("02 / 05 · MENARIK OHLCV PUBLIK DAN MEMVALIDASI CANDLE", 46, 27, 5.0), ("03 / 05 · MEMINDAI FUNDAMENTAL PUBLIK DAN WAKTU OBSERVASI", 42, 49, 8.0), ("04 / 05 · MENGHITUNG 10 INDIKATOR PYTHON DAN REGIME PASAR", 38, 72, 10.5), ("05 / 05 · MENYUSUN NARASI DAN MEMBANGUN LINE CHART", 34, 92, MIN_ANALYSIS_SECONDS)]
@@ -174,7 +183,7 @@ def process_question(question: str, loader_slot) -> None:
         if index == 1:
             for instrument in instruments[:2]:
                 try:
-                    snapshots.append(fetch_market_snapshot(instrument, interval="1h"))
+                    snapshots.append(fetch_market_snapshot(instrument, interval=interval))
                 except RuntimeError as exc:
                     st.warning(f"{instrument.code}: {exc}")
         elif index == 2:
@@ -203,12 +212,58 @@ def render_analysis_message(message: dict) -> None:
     for snapshot in snapshots:
         render_snapshot(snapshot, fundamentals.get(snapshot.instrument.code, []))
     st.markdown('<div class="brand-kicker" style="margin-top:18px">PERTANYAAN LANJUTAN · PILIH FOKUS ANALISIS</div>', unsafe_allow_html=True)
-    for prompt in follow_up_prompts(snapshots[0].instrument.code):
+    for prompt in follow_up_prompts(snapshots[0].instrument.code, snapshots[0].interval):
         if st.button(prompt, key=f"prompt_{message['id']}_{prompt}", use_container_width=True):
-            process_question(prompt, st.empty())
+            queue_question(prompt)
             st.rerun()
     if message["id"] == st.session_state.get("latest_response_id"):
         st.markdown('<div class="scroll-cue">↓ RESPONS TERBARU, DATA, DAN GRAFIK BERLANJUT DI BAWAH PESAN ANDA ↓</div>', unsafe_allow_html=True)
+
+
+def contextual_suggestions() -> list[str]:
+    """Ambil maksimal tiga saran yang relevan tanpa menyediakan menu pair atau timeframe."""
+    instrument = None
+    for message in reversed(st.session_state.messages):
+        snapshots = message.get("snapshots", [])
+        if snapshots:
+            instrument = snapshots[0].instrument.code
+            break
+    if instrument:
+        pool = [
+            f"Analisa {instrument} pada timeframe M15",
+            f"Analisa {instrument} pada timeframe H4",
+            f"Tentukan Entry, SL, TP1 TP2 TP3 dan Risk untuk {instrument}",
+            f"Jelaskan dampak NFP pada {instrument}",
+            f"Jelaskan konteks FOMC untuk {instrument}",
+            f"Tinjau tren {instrument} pada timeframe D1",
+        ]
+    else:
+        pool = [
+            "Analisa XAUUSD pada timeframe H1",
+            "Analisa EURUSD di M15",
+            "Jelaskan dampak NFP untuk DXY",
+            "Analisa BTCUSD pada timeframe H4",
+            "Jelaskan konteks FOMC untuk XAUUSD",
+        ]
+    return random.sample(pool, k=min(3, len(pool)))
+
+
+def render_input_panel() -> None:
+    st.markdown('<div class="input-panel"><div class="suggestion-kicker">SARAN KONTEKSTUAL · PILIH UNTUK MEMINDAI</div>', unsafe_allow_html=True)
+    suggestions = contextual_suggestions()
+    columns = st.columns(len(suggestions))
+    for index, prompt in enumerate(suggestions):
+        if columns[index].button(prompt, key=f"suggestion_{prompt}", use_container_width=True):
+            queue_question(prompt)
+            st.rerun()
+    st.markdown('<p>Pair dan timeframe dibaca langsung dari pesan Anda. Contoh: <b>Analisa XAGUSD di timeframe M15</b>. Jika timeframe tidak disebut, Aero AI memakai H1 sebagai asumsi awal.</p>', unsafe_allow_html=True)
+    with st.form("aero_question_form", clear_on_submit=True):
+        question = st.text_area("Tanyakan analisis market", placeholder="Contoh: Analisa XAGUSD di timeframe M15 atau jelaskan dampak NFP pada DXY", height=68, label_visibility="collapsed")
+        submitted = st.form_submit_button("Mulai pemindaian Aero AI", use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+    if submitted and question.strip():
+        queue_question(question.strip())
+        st.rerun()
 
 
 def main() -> None:
@@ -216,23 +271,22 @@ def main() -> None:
     st.markdown(APP_CSS, unsafe_allow_html=True)
     init_state()
     st.markdown('<div class="app-shell">', unsafe_allow_html=True)
-    st.markdown('<div class="title-row"><div><div class="brand-kicker">AEROVULPIS / MARKET SCANNING SYSTEM</div><h1 class="aero-title"><span class="aero-white">Aero</span> <span class="ai-neon">AI</span><span class="aero-white">.</span></h1></div><div class="engine"><b>●</b> PYTHON DATA ENGINE<br>MARKET SIGNALS · TRACEABLE CONTEXT</div></div>', unsafe_allow_html=True)
+    st.markdown('<div class="title-row"><div><div class="brand-kicker">AEROVULPIS / MARKET SCANNING SYSTEM</div><h1 class="aero-title"><span class="aero-white">Aero</span> <span class="ai-neon">AI</span></h1></div><div class="engine"><b>●</b> PYTHON DATA ENGINE<br>MARKET SIGNALS · TRACEABLE CONTEXT</div></div>', unsafe_allow_html=True)
     st.markdown('<div class="market-only"><b>Aero AI adalah sistem pemindaian market berbasis data.</b> Sistem ini dikhususkan untuk instrumen, struktur harga, indikator, risiko, dan konteks fundamental market; bukan chatbot umum untuk topik di luar market.</div>', unsafe_allow_html=True)
-    loader_slot = st.empty()
     st.markdown('<div class="context-band"><p>Aero AI mendeteksi instrumen langsung dari pertanyaan dan menampilkan sumber, basis harga, waktu candle, indikator Python, serta konteks fundamental yang tersedia.</p><div><span class="market-chip"><span class="dot"></span>XAUUSD</span><span class="market-chip"><span class="dot"></span>EURUSD</span><span class="market-chip"><span class="dot"></span>BTCUSD</span><span class="market-chip"><span class="dot"></span>WTI</span></div></div>', unsafe_allow_html=True)
     for message in st.session_state.messages:
         if message["role"] == "assistant":
             render_analysis_message(message)
         else:
             render_message(message)
-    st.markdown('<div class="input-panel"><p>Respons baru akan ditempatkan di bawah pertanyaan Anda. Sebutkan satu atau dua instrumen untuk analisis atau perbandingan.</p>', unsafe_allow_html=True)
-    with st.form("aero_question_form", clear_on_submit=True):
-        question = st.text_area("Tanyakan analisis market", placeholder="Contoh: Analisa XAUUSD sekarang atau bandingkan EURUSD dan DXY", height=68, label_visibility="collapsed")
-        submitted = st.form_submit_button("Mulai pemindaian Aero AI", use_container_width=True)
-    st.markdown('</div></div>', unsafe_allow_html=True)
-    if submitted and question.strip():
-        process_question(question.strip(), loader_slot)
+    pending_question = st.session_state.get("pending_question")
+    if pending_question:
+        loader_slot = st.empty()
+        process_question(pending_question, loader_slot)
+        st.session_state.pending_question = None
         st.rerun()
+    render_input_panel()
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
