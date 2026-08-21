@@ -19,6 +19,8 @@ from market_data import MarketSnapshot, detect_instruments, detect_timeframe, de
 
 MIN_ANALYSIS_SECONDS = 13
 TYPEWRITER_CHUNK = 40
+CONFIRMATION_WORDS = {"ya", "iya", "yes", "y", "ok", "oke", "analisa", "analisis", "lanjut", "lanjutkan", "boleh", "silakan", "tolong", "saya", "mau", "ingin", "dong", "lah", "aja"}
+CONFIRMATION_MARKERS = {"ya", "iya", "yes", "y", "ok", "oke", "analisa", "analisis", "lanjut", "lanjutkan", "boleh", "silakan"}
 
 APP_CSS = """
 <style>
@@ -34,7 +36,7 @@ html,body,.stApp,[data-testid="stAppViewContainer"],[data-testid="stMain"] { bac
 .analysis-shell { border:1px solid var(--line); border-top:2px solid rgba(24,217,245,.68); background:rgba(9,12,18,.76); padding:14px; border-radius:13px; margin:14px 0 4px; }.data-proof { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px 12px; color:#aeb8c7; font:.59rem 'Share Tech Mono',monospace; margin-bottom:13px; }.data-proof span { overflow-wrap:anywhere; }.metric-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; }.metric-box { border-left:2px solid var(--cyan); padding:8px 0 8px 10px; background:rgba(17,23,34,.54); }.metric-box .name { color:#8793a5; font:.55rem 'Share Tech Mono',monospace; letter-spacing:1.1px; }.metric-box .val { margin-top:4px; font-size:.95rem; font-weight:800; }.signal-buy { color:var(--green); }.signal-sell { color:var(--red); }.signal-neutral { color:var(--yellow); }
 .chart-guide { display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; padding:2px 0 9px; color:#aeb8c7; font:.6rem 'Share Tech Mono',monospace; }.indicator-table { margin-top:12px; overflow:hidden; border:1px solid var(--line); border-radius:9px; }.indicator-row { display:grid; grid-template-columns:1.1fr 1fr .7fr; gap:8px; padding:9px 10px; border-bottom:1px solid #202734; font-size:.73rem; }.indicator-row:last-child { border-bottom:0; }.indicator-row.header { background:#111722; color:var(--cyan); font:.56rem 'Share Tech Mono',monospace; letter-spacing:1px; }.indicator-row span:nth-child(2),.indicator-row span:nth-child(3) { text-align:right; font-family:'Share Tech Mono',monospace; }.indicator-buy { color:var(--green); }.indicator-sell { color:var(--red); }.indicator-neutral { color:var(--yellow); }
 .fundamental-title { color:var(--cyan); font:.61rem 'Share Tech Mono',monospace; letter-spacing:1.5px; margin:18px 0 8px; }.fundamental-card { border:1px solid #2c3542; background:#10151e; border-radius:9px; padding:10px 11px; margin:7px 0; }.fundamental-card b { color:#eef3f8; }.fundamental-meta { color:#8f9bac; font:.57rem 'Share Tech Mono',monospace; margin-top:5px; overflow-wrap:anywhere; }.fundamental-meta a{color:var(--cyan);text-decoration:none;}.fundamental-meta a:hover{text-decoration:underline;}
-	.scroll-cue { text-align:center; color:var(--cyan); font:.6rem 'Share Tech Mono',monospace; letter-spacing:1.4px; margin:18px 0 3px; }.input-panel { margin-top:1.25rem; padding:13px; border:1px solid #2d3948; background:rgba(12,16,24,.94); border-radius:14px; }.input-panel p { color:var(--muted); margin:0 0 9px; font-size:.74rem; }.suggestion-kicker { color:#8794a8; font:.58rem 'Share Tech Mono',monospace; letter-spacing:1.35px; margin:0 0 7px; }.stTextArea textarea { background:#111620!important; color:var(--text)!important; border:1px solid #384557!important; border-radius:10px!important; }.stButton>button { background:#121923!important; color:#eaf0f7!important; border:1px solid #364355!important; border-radius:9px!important; font-weight:700!important; min-height:38px!important; }.stButton>button:hover { color:var(--cyan)!important; border-color:var(--cyan)!important; }
+	.scroll-cue { text-align:center; color:var(--cyan); font:.6rem 'Share Tech Mono',monospace; letter-spacing:1.4px; margin:18px 0 3px; }.input-panel { margin-top:1.25rem; padding:13px; border:1px solid #2d3948; background:rgba(12,16,24,.94); border-radius:14px; }.suggestion-kicker { color:#8794a8; font:.58rem 'Share Tech Mono',monospace; letter-spacing:1.35px; margin:0 0 7px; }[class*="st-key-chip-carousel-"] { overflow-x:auto!important; padding:1px 0 8px!important; scrollbar-width:thin; scrollbar-color:#34465a transparent; }[class*="st-key-chip-carousel-"] [data-testid="stButton"] { flex:0 0 min(78vw,310px)!important; min-width:min(78vw,310px)!important; }[class*="st-key-chip-carousel-"] .stButton>button { min-height:58px!important; white-space:normal!important; text-align:left!important; line-height:1.45!important; padding:10px 13px!important; }.stTextArea textarea { background:#111620!important; color:var(--text)!important; border:1px solid #384557!important; border-radius:10px!important; }.stButton>button { background:#121923!important; color:#eaf0f7!important; border:1px solid #364355!important; border-radius:9px!important; font-weight:700!important; min-height:38px!important; }.stButton>button:hover { color:var(--cyan)!important; border-color:var(--cyan)!important; }
 div[data-testid="stPlotlyChart"],div[data-testid="stPlotlyChart"] .plot-container,div[data-testid="stPlotlyChart"] .svg-container { touch-action:pan-y!important; pointer-events:none!important; -webkit-user-select:none; user-select:none; }
 @media(max-width:640px){ .block-container { padding:.8rem .62rem 1.5rem; }.app-shell { padding:0 .6rem 1rem; }.title-row { display:block; }.engine { text-align:left; margin-top:8px; }.user-message { margin-left:8%; }.reply-card { padding:15px; font-size:.91rem; }.metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.data-proof { grid-template-columns:1fr; }.indicator-row { grid-template-columns:1fr .9fr .65fr; font-size:.68rem; }.context-band { padding:11px; } }
 </style>
@@ -53,6 +55,8 @@ def init_state() -> None:
         "latest_response_id": None,
         "typed_message_ids": set(),
         "pending_question": None,
+        "opening_suggestions": None,
+        "pending_instrument_confirmation": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -169,7 +173,24 @@ def queue_question(question: str) -> None:
     st.session_state.pending_question = question
 
 
+def resolve_confirmation_context(question: str, pending: dict | None) -> str | None:
+    """Teruskan pair yang baru dikonfirmasi ketika pengguna memberi jawaban singkat."""
+    if not pending:
+        return None
+    words = re.findall(r"[a-z]+", question.casefold())
+    is_short_confirmation = bool(words) and len(words) <= 6 and all(word in CONFIRMATION_WORDS for word in words) and any(word in CONFIRMATION_MARKERS for word in words)
+    if not is_short_confirmation:
+        return None
+    return f"Analisa {pending['instrument']} pada timeframe {pending['interval']}"
+
+
 def process_question(question: str, loader_slot) -> None:
+    resolved_question = resolve_confirmation_context(question, st.session_state.get("pending_instrument_confirmation"))
+    if resolved_question:
+        question = resolved_question
+        st.session_state.pending_instrument_confirmation = None
+    elif detect_instruments(question):
+        st.session_state.pending_instrument_confirmation = None
     instruments = detect_instruments(question)
     interval = detect_timeframe(question)
     if not instruments:
@@ -179,6 +200,7 @@ def process_question(question: str, loader_slot) -> None:
         return
     action_words = ("analisa", "analyze", "scan", "bandingkan", "compare", "tren", "trend", "risiko", "risk", "indikator", "sinyal", "signal", "entry", "level", "fundamental", "forecast", "prediksi")
     if len(instruments) == 1 and not detect_economic_agenda(question) and not any(word in question.casefold() for word in action_words) and not re.search(r"\b(?:m15|m30|h\d{1,2}|d1|w1|mn)\b", question.casefold()):
+        st.session_state.pending_instrument_confirmation = {"instrument": instruments[0].code, "interval": interval}
         st.session_state.messages.append(_message("assistant", build_instrument_confirmation(instruments[0].code)))
         return
     started_at, snapshots, fundamentals = time.monotonic(), [], {}
@@ -216,11 +238,11 @@ def render_analysis_message(message: dict) -> None:
         render_comparison(snapshots)
     for snapshot in snapshots:
         render_snapshot(snapshot, fundamentals.get(snapshot.instrument.code, []))
-    st.markdown('<div class="brand-kicker" style="margin-top:18px">PERTANYAAN LANJUTAN · PILIH FOKUS ANALISIS</div>', unsafe_allow_html=True)
-    for prompt in follow_up_prompts(snapshots[0].instrument.code, snapshots[0].interval):
-        if st.button(prompt, key=f"prompt_{message['id']}_{prompt}", use_container_width=True):
-            queue_question(prompt)
-            st.rerun()
+    st.markdown('<div class="brand-kicker" style="margin-top:18px">PERTANYAAN LANJUTAN · GESER DAN PILIH FOKUS</div>', unsafe_allow_html=True)
+    render_prompt_carousel(
+        follow_up_prompts(snapshots[0].instrument.code, snapshots[0].interval),
+        scope=f"followup_{message['id']}",
+    )
     if message["id"] == st.session_state.get("latest_response_id"):
         st.markdown('<div class="scroll-cue">↓ RESPONS TERBARU, DATA, DAN GRAFIK BERLANJUT DI BAWAH PESAN ANDA ↓</div>', unsafe_allow_html=True)
 
@@ -266,15 +288,32 @@ def contextual_suggestions() -> list[str]:
     return random.sample(pool, k=min(3, len(pool)))
 
 
-def render_input_panel() -> None:
-    st.markdown('<div class="input-panel"><div class="suggestion-kicker">SARAN KONTEKSTUAL · PILIH UNTUK MEMINDAI</div>', unsafe_allow_html=True)
-    suggestions = contextual_suggestions()
-    columns = st.columns(len(suggestions))
-    for index, prompt in enumerate(suggestions):
-        if columns[index].button(prompt, key=f"suggestion_{prompt}", use_container_width=True):
+def select_prompt_chips(prompts: list[str]) -> list[str]:
+    """Pilih maksimal tiga chip tanpa mengubah pool prompt yang tersedia."""
+    return random.sample(prompts, k=min(3, len(prompts)))
+
+
+def should_show_opening_suggestions(messages: list[dict]) -> bool:
+    return not any(message["role"] == "user" for message in messages)
+
+
+def render_prompt_carousel(prompts: list[str], scope: str) -> None:
+    """Render maksimal tiga prompt sebagai chip horizontal yang dapat digeser dan diklik."""
+    selected = select_prompt_chips(prompts)
+    carousel = st.container(horizontal=True, wrap=False, horizontal_alignment="left", gap="small", key=f"chip-carousel-{scope}")
+    for index, prompt in enumerate(selected):
+        if carousel.button(prompt, key=f"{scope}_{index}_{prompt}", use_container_width=False):
             queue_question(prompt)
             st.rerun()
-    st.markdown('<p>Pair dan timeframe dibaca langsung dari pesan Anda. Contoh: <b>Analisa XAGUSD di timeframe M15</b>, <b>IHSG D1</b>, atau <b>BBCA W1</b>. Timeframe tersedia dari M15/M30, H1–H12, D1, W1, sampai MN; jika tidak disebut, Aero AI memakai H1 sebagai asumsi awal.</p>', unsafe_allow_html=True)
+
+
+def render_input_panel() -> None:
+    st.markdown('<div class="input-panel">', unsafe_allow_html=True)
+    if should_show_opening_suggestions(st.session_state.messages):
+        if st.session_state.opening_suggestions is None:
+            st.session_state.opening_suggestions = contextual_suggestions()
+        st.markdown('<div class="suggestion-kicker">SARAN PEMBUKA · GESER DAN PILIH UNTUK MEMINDAI</div>', unsafe_allow_html=True)
+        render_prompt_carousel(st.session_state.opening_suggestions, scope="opening")
     with st.form("aero_question_form", clear_on_submit=True):
         question = st.text_area("Tanyakan analisis market", placeholder="Contoh: Analisa XAGUSD di M15, jelaskan NFP, atau cek Retail Sales untuk DXY", height=68, label_visibility="collapsed")
         submitted = st.form_submit_button("Mulai pemindaian Aero AI", use_container_width=True)

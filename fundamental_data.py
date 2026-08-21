@@ -7,8 +7,10 @@ satu sumber tidak boleh menghentikan analisis teknikal utama.
 
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from io import StringIO
 import time
 from typing import Any
 
@@ -62,6 +64,16 @@ def _get_json(url: str, params: dict[str, Any] | None = None) -> Any:
     )
     response.raise_for_status()
     return response.json()
+
+
+def _get_text(url: str) -> str:
+    response = requests.get(
+        url,
+        timeout=REQUEST_TIMEOUT,
+        headers={"Accept": "text/csv", "Accept-Encoding": "identity", "User-Agent": "AeroAI-Research/1.0"},
+    )
+    response.raise_for_status()
+    return response.text
 
 
 def _cached(key: str, ttl_seconds: int, loader) -> list[FundamentalSnapshot]:
@@ -123,6 +135,43 @@ def _latest_us_cpi(instrument_code: str) -> list[FundamentalSnapshot]:
     return _cached("worldbank_us_cpi", 24 * 60 * 60, load)
 
 
+def _latest_fred_macro(instrument_code: str) -> list[FundamentalSnapshot]:
+    """Ambil seri harian publik FRED untuk konteks lintas aset, bukan prediksi market."""
+    definitions = (
+        ("DGS2", "Imbal hasil US Treasury 2Y", "%", "Board of Governors of the Federal Reserve System (US) via FRED"),
+        ("DGS10", "Imbal hasil US Treasury 10Y", "%", "Board of Governors of the Federal Reserve System (US) via FRED"),
+        ("VIXCLS", "VIX / volatilitas implisit ekuitas AS", "indeks", "Chicago Board Options Exchange via FRED"),
+    )
+
+    def load() -> list[FundamentalSnapshot]:
+        snapshots: list[FundamentalSnapshot] = []
+        fetched_at = _utc_now()
+        for series_id, title, unit, source_name in definitions:
+            csv_url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+            rows = list(csv.DictReader(StringIO(_get_text(csv_url))))
+            point = next((row for row in reversed(rows) if row.get(series_id) not in (None, "", ".")), None)
+            if not point:
+                continue
+            observed_at = datetime.strptime(point["observation_date"], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            snapshots.append(FundamentalSnapshot(
+                category="Kondisi pasar AS",
+                instrument_code=instrument_code,
+                title=title,
+                value=point[series_id],
+                unit=unit,
+                observed_at=observed_at,
+                released_at=None,
+                fetched_at=fetched_at,
+                source_name=source_name,
+                source_url=f"https://fred.stlouisfed.org/series/{series_id}",
+                freshness="Seri harian publik; bukan harga intraday atau sinyal arah harga.",
+                warning="Gunakan hanya sebagai konteks kondisi pasar lintas aset, bukan dasar tunggal keputusan transaksi.",
+            ))
+        return snapshots
+
+    return _cached("fred_market_context", 15 * 60, load)
+
+
 def _crypto_structure(instrument_code: str) -> list[FundamentalSnapshot]:
     coin_ids = {"BTCUSD": "bitcoin", "ETHUSD": "ethereum", "SOLUSD": "solana"}
     coin_id = coin_ids.get(instrument_code)
@@ -175,8 +224,10 @@ def _crypto_structure(instrument_code: str) -> list[FundamentalSnapshot]:
 def fetch_fundamental_context(instrument: Instrument) -> list[FundamentalSnapshot]:
     """Ambil konteks fundamental yang relevan tanpa membuat angka pengganti."""
     snapshots: list[FundamentalSnapshot] = []
+    snapshots.extend(_latest_fred_macro(instrument.code))
     snapshots.extend(_crypto_structure(instrument.code))
-    # Makro USD relevan sebagai konteks lintas FX, logam, energi, indeks, dan kripto.
-    snapshots.extend(_latest_us_unemployment(instrument.code))
-    snapshots.extend(_latest_us_cpi(instrument.code))
+    # Makro USD relevan untuk FX, logam, energi, indeks, dan saham; kripto sudah memakai konteks pasar serta struktur asetnya.
+    if instrument.code not in {"BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "XRPUSD", "ADAUSD", "DOTUSD", "MATICUSD", "LINKUSD", "AVAXUSD"}:
+        snapshots.extend(_latest_us_unemployment(instrument.code))
+        snapshots.extend(_latest_us_cpi(instrument.code))
     return snapshots
