@@ -5,3 +5,4 @@ python-dotenv>=1.0.0
 deep-translator>=1.11.4
 pytz
 plotly>=5.18.0
+yfinance>=0.2.65
