@@ -50,6 +50,7 @@ class MarketSnapshot:
     candles: pd.DataFrame
     indicators: dict[str, float | str]
     fetched_at: datetime
+    last_candle_at: datetime
     source: str
     warning: str
 
@@ -77,7 +78,7 @@ def instrument_from_code(code: str) -> Instrument | None:
 
 
 def _period_for_interval(interval: str) -> str:
-    return {"15m": "60d", "1h": "365d", "1d": "2y"}.get(interval, "365d")
+    return {"15m": "30d", "1h": "60d", "1d": "2y"}.get(interval, "60d")
 
 
 def _normalize_history(frame: pd.DataFrame) -> pd.DataFrame:
@@ -183,7 +184,8 @@ def fetch_market_snapshot(instrument: Instrument, interval: str = "1h") -> Marke
         candles=candles,
         indicators=calculate_indicators(candles),
         fetched_at=datetime.now(timezone.utc),
-        source=f"Yahoo Finance via yfinance · {instrument.yahoo_symbol}",
+        last_candle_at=candles.index[-1].to_pydatetime(),
+        source=f"Yahoo Finance chart via yfinance · {instrument.yahoo_symbol}",
         warning=warning,
     )
 

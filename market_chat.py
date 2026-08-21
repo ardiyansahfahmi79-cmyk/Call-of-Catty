@@ -1,8 +1,4 @@
-"""Persona Neuro dan Aime untuk prototipe chatbot market Call-of-Catty.
-
-Narasi sengaja memakai hasil perhitungan Python yang diberikan market_data,
-bukan membuat angka harga atau prediksi profit secara fiktif.
-"""
+"""Narasi formal Aero AI yang hanya memakai hasil hitungan market_data."""
 
 from __future__ import annotations
 
@@ -23,35 +19,27 @@ def _momentum_name(indicators: dict) -> str:
     return "momentum masih campuran"
 
 
-def build_reply(question: str, snapshot: MarketSnapshot, persona: str) -> str:
+def build_reply(question: str, snapshot: MarketSnapshot) -> str:
     data = snapshot.indicators
     instrument = snapshot.instrument.code
     bias = str(data["bias"])
-    direction = {"BUY": "bias naik", "SELL": "bias turun", "NEUTRAL": "bias netral"}[bias]
     price = _fmt(float(data["price"]))
     change = float(data["change_20"])
-    change_word = "naik" if change >= 0 else "turun"
     momentum = _momentum_name(data)
     levels = f"range 20 candle {_fmt(float(data['low20']))}–{_fmt(float(data['high20']))}"
     rsi = float(data["rsi14"])
     confluence = int(data["confluence"])
 
-    if persona == "Neuro":
-        return (
-            f"Bro, **{instrument}** kebaca di **{price}**. Dalam 20 candle terakhir harganya {change_word} "
-            f"**{abs(change):.2f}%**, jadi mesin Python nangkep {direction} dengan konfluensi **{confluence}/100**. "
-            f"RSI(14) di **{rsi:.1f}** dan MACD lagi kasih sinyal bahwa {momentum}.\n\n"
-            f"Yang wajib lo pantau sekarang itu {levels}. Harga di atas MA50/MA200 atau malah balik nembus levelnya "
-            f"lebih penting daripada ngejar candle. Ini pembacaan kondisi, bukan lampu hijau buat masuk buta-buta. "
-            f"Mau gue bedah support-resistance, bandingin sama instrumen lain, atau cek timeframe lain?"
-        )
     return (
-        f"Berdasarkan data **{instrument}**, harga terakhir tercatat di **{price}** dengan perubahan 20 candle sebesar "
-        f"**{change:+.2f}%**. Kombinasi posisi harga terhadap moving average, RSI(14) **{rsi:.1f}**, dan MACD "
-        f"menghasilkan klasifikasi **{bias}** dengan tingkat konfluensi indikator **{confluence}/100**.\n\n"
-        f"Area observasi terdekat berada pada {levels}. Momentum saat ini menunjukkan {momentum}; karena itu, "
-        f"konfirmasi struktur harga dan batas risiko tetap diperlukan sebelum mengambil keputusan. Analisis ini bersifat "
-        f"edukatif dan tidak merupakan rekomendasi transaksi individual."
+        f"**RINGKASAN KONDISI**\n\n"
+        f"Berdasarkan data **{instrument}**, harga terakhir tercatat pada **{price}** dengan perubahan 20 candle sebesar "
+        f"**{change:+.2f}%**. Posisi harga terhadap moving average, RSI(14) **{rsi:.1f}**, dan MACD menghasilkan "
+        f"klasifikasi teknikal **{bias}**. Keselarasan indikator saat ini adalah **{confluence}/100**; angka ini menunjukkan "
+        f"jumlah kondisi indikator yang searah, bukan probabilitas keberhasilan transaksi.\n\n"
+        f"**BUKTI DAN AREA OBSERVASI**\n\n"
+        f"Area high-low 20 candle berada pada {levels}. Momentum saat ini menunjukkan {momentum}. Konfirmasi struktur harga, "
+        f"likuiditas, dan batas risiko tetap diperlukan sebelum mengambil keputusan. Data ini bersifat riset dan edukatif, "
+        f"bukan rekomendasi transaksi individual."
     )
 
 
