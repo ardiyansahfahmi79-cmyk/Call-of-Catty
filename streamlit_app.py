@@ -14,6 +14,7 @@ import streamlit as st
 
 from fundamental_data import FundamentalSnapshot, fetch_fundamental_context
 from market_chat import agenda_clarification_prompts, build_agenda_reply, build_instrument_confirmation, build_multi_instrument_clarification, build_reply, build_source_unavailable_reply, build_unknown_input_reply, detect_economic_agenda, follow_up_prompts, multi_instrument_clarification_prompts
+from market_intelligence import normalization_section, normalize_market_language
 from market_data import MarketSnapshot, detect_instruments, detect_timeframe, detect_unknown_instrument_candidates, fetch_market_snapshot, normalized_comparison
 
 
@@ -265,8 +266,15 @@ def update_context_thread(instrument: str, interval: str, question: str) -> None
     }
 
 
+def _with_normalization(content: str, normalized_note: str) -> str:
+    return f"{normalized_note}\n\n{content}" if normalized_note else content
+
+
 def process_question(question: str, loader_slot) -> None:
     started_at = time.monotonic()
+    normalization = normalize_market_language(question)
+    question = normalization.normalized_question
+    normalized_note = normalization_section(normalization)
     resolved_question = resolve_confirmation_context(question, st.session_state.get("pending_instrument_confirmation"))
     if resolved_question:
         question = resolved_question
@@ -283,7 +291,8 @@ def process_question(question: str, loader_slot) -> None:
         def build_context_reply() -> tuple[str, list[str]]:
             agenda_reply = build_agenda_reply(question)
             unknown_candidates = detect_unknown_instrument_candidates(question)
-            return agenda_reply or build_unknown_input_reply(question, unknown_candidates), agenda_clarification_prompts(question) if agenda_reply else []
+            content = agenda_reply or build_unknown_input_reply(question, unknown_candidates)
+            return _with_normalization(content, normalized_note), agenda_clarification_prompts(question) if agenda_reply else []
 
         reply, prompt_chips = _run_context_loader(loader_slot, started_at, build_context_reply)
         st.session_state.messages.append(_message("assistant", reply, prompt_chips=prompt_chips))
@@ -293,7 +302,7 @@ def process_question(question: str, loader_slot) -> None:
         reply, prompt_chips = _run_context_loader(
             loader_slot,
             started_at,
-            lambda: (build_multi_instrument_clarification(codes), multi_instrument_clarification_prompts(codes)),
+            lambda: (_with_normalization(build_multi_instrument_clarification(codes), normalized_note), multi_instrument_clarification_prompts(codes)),
         )
         st.session_state.messages.append(_message(
             "assistant",
@@ -304,7 +313,7 @@ def process_question(question: str, loader_slot) -> None:
     action_words = ("analisa", "analyze", "scan", "bandingkan", "compare", "tren", "trend", "risiko", "risk", "indikator", "sinyal", "signal", "entry", "level", "fundamental", "forecast", "prediksi")
     if len(instruments) == 1 and not detect_economic_agenda(question) and not any(word in question.casefold() for word in action_words) and not re.search(r"\b(?:m15|m30|h\d{1,2}|d1|w1|mn)\b", question.casefold()):
         st.session_state.pending_instrument_confirmation = {"instrument": instruments[0].code, "interval": interval}
-        st.session_state.messages.append(_message("assistant", build_instrument_confirmation(instruments[0].code)))
+        st.session_state.messages.append(_message("assistant", _with_normalization(build_instrument_confirmation(instruments[0].code), normalized_note)))
         return
     snapshots, fundamentals, unavailable_codes = [], {}, []
     stages = [("01 / 05 · MENDETEKSI INSTRUMEN, TIMEFRAME, DAN KONTEKS", 50, 9, 1.2), ("02 / 05 · MENARIK OHLCV PUBLIK DAN MEMVALIDASI CANDLE", 46, 27, 5.0), ("03 / 05 · MEMINDAI FUNDAMENTAL DAN KALENDER EKONOMI PUBLIK", 42, 49, 8.0), ("04 / 05 · MENGHITUNG 10 INDIKATOR PYTHON DAN REGIME PASAR", 38, 72, 10.5), ("05 / 05 · MENYUSUN NARASI DAN MEMBANGUN LINE CHART", 34, 92, MIN_ANALYSIS_SECONDS)]
@@ -324,11 +333,11 @@ def process_question(question: str, loader_slot) -> None:
     time.sleep(.35)
     loader_slot.empty()
     if not snapshots:
-        st.session_state.messages.append(_message("assistant", build_source_unavailable_reply(unavailable_codes or [instrument.code for instrument in instruments])))
+        st.session_state.messages.append(_message("assistant", _with_normalization(build_source_unavailable_reply(unavailable_codes or [instrument.code for instrument in instruments]), normalized_note)))
         return
     response = _message(
         "assistant",
-        build_reply(question, snapshots[0], fundamentals.get(snapshots[0].instrument.code, [])),
+        _with_normalization(build_reply(question, snapshots[0], fundamentals.get(snapshots[0].instrument.code, [])), normalized_note),
         snapshots=snapshots,
         fundamentals=fundamentals,
         prompt_chips=agenda_clarification_prompts(question, snapshots[0].instrument.code),

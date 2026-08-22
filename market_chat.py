@@ -7,6 +7,7 @@ import re
 
 from economic_calendar import calendar_fetch_status, find_calendar_events
 from fundamental_data import FundamentalSnapshot
+from market_intelligence import evidence_section, historical_section, macro_router_section, regime_section
 from market_data import MarketSnapshot, instrument_economic_currencies, timeframe_label, timeframe_was_explicit
 
 
@@ -524,11 +525,19 @@ def build_reply(question: str, snapshot: MarketSnapshot, fundamentals: list[Fund
     scenario_section = f"\n\n**SKENARIO LEVEL TEKNIKAL**\n\n{_entry_scenario(data)}" if intent == "levels_entry" else ""
     freshness_section = _freshness_section(snapshot, fundamentals)
     reaction_section = _release_reaction_section(question, agenda, snapshot)
+    macro_section = macro_router_section(snapshot.instrument.code)
+    trust_section = evidence_section(snapshot, fundamentals, calendar_fetch_status().state)
+    regime_summary = regime_section(snapshot)
+    history_summary = historical_section(snapshot)
     return (
         f"**STATUS PASAR · {snapshot.instrument.code}**\n\n"
         f"{timeframe_note} Harga referensi terakhir adalah **{price}** dengan perubahan **{change_20:+.2f}%** dalam 20 candle. Kondisi pada timeframe data saat ini adalah **{data['market_state']}** dengan keselarasan teknikal **{int(data['confluence'])}/100**. Nilai tersebut menunjukkan jumlah indikator yang searah, bukan probabilitas keberhasilan transaksi.\n\n"
         f"**FOKUS PEMINDAIAN**\n\n{_focus_line(intent, data)}\n\n"
         f"**STRUKTUR DAN MOMENTUM**\n\n{_trend_description(data)} RSI(14) berada pada **{rsi:.1f}**, ADX(14) pada **{adx:.1f}**, dan relative volume pada **{volume:.2f}x**. ADX mengukur kekuatan tren, bukan arahnya; volume relatif bernilai netral bila penyedia tidak menyediakan volume yang bermakna.\n\n"
+        f"{regime_summary}\n\n"
+        f"{macro_section}\n\n"
+        f"{trust_section}\n\n"
+        f"{history_summary}\n\n"
         f"**AREA OBSERVASI DAN RISIKO**\n\nRange 20 candle berada pada **{_fmt(float(data['low20']))}** sampai **{_fmt(float(data['high20']))}**. ATR(14) adalah **{_fmt(float(data['atr14']))}** dan volatilitas 20 candle **{float(data['volatility20']):.2f}%**. Bias harus dievaluasi ulang bila struktur harga bergerak melawan MA 50/MA 200 atau keluar dari range observasi.{agenda_section}{scenario_section}\n\n"
         f"**STATUS KETERBARUAN DATA**\n\n{freshness_section}\n\n"
         f"**KONTEKS FUNDAMENTAL PUBLIK**\n\n{_fundamental_section(fundamentals)}"

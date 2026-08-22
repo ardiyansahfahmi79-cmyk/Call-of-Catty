@@ -17,7 +17,7 @@ from typing import Any
 
 import requests
 
-from market_data import Instrument
+from market_data import Instrument, instrument_economic_currencies
 
 
 REQUEST_TIMEOUT = 8
@@ -32,6 +32,14 @@ CFTC_CONTRACTS = {
     "XAGUSD": "SILVER - COMMODITY EXCHANGE INC.",
     "WTI": "WTI FINANCIAL CRUDE OIL - NEW YORK MERCANTILE EXCHANGE",
 }
+WORLD_BANK_COUNTRY_BY_CURRENCY = {
+    "USD": ("USA", "AS"), "EUR": ("EMU", "Euro Area"), "CAD": ("CAN", "Kanada"),
+    "GBP": ("GBR", "Inggris"), "JPY": ("JPN", "Jepang"), "AUD": ("AUS", "Australia"),
+    "CHF": ("CHE", "Swiss"), "NZD": ("NZL", "Selandia Baru"), "IDR": ("IDN", "Indonesia"),
+}
+ECB_EURUSD_URL = "https://data-api.ecb.europa.eu/service/data/EXR/D.USD.EUR.SP00.A?format=csvdata&lastNObservations=1"
+BOC_USDCAD_URL = "https://www.bankofcanada.ca/valet/observations/FXUSDCAD/json?recent=1"
+RBA_AUDUSD_URL = "https://www.rba.gov.au/statistics/tables/csv/f11.1-data.csv"
 
 
 @dataclass(frozen=True)
@@ -123,27 +131,117 @@ def _latest_us_unemployment(instrument_code: str) -> list[FundamentalSnapshot]:
     return _cached("bls_unemployment", 6 * 60 * 60, load)
 
 
-def _latest_us_cpi(instrument_code: str) -> list[FundamentalSnapshot]:
+def _latest_worldbank_inflation(instrument: Instrument) -> list[FundamentalSnapshot]:
+    """Ambil CPI tahunan lintas mata uang sebagai konteks struktural yang dapat ditelusuri."""
+    snapshots: list[FundamentalSnapshot] = []
+    for currency in dict.fromkeys(instrument_economic_currencies(instrument.code)):
+        mapping = WORLD_BANK_COUNTRY_BY_CURRENCY.get(currency)
+        if not mapping:
+            continue
+        country_code, country_name = mapping
+
+        def load() -> list[FundamentalSnapshot]:
+            source_url = f"https://api.worldbank.org/v2/country/{country_code}/indicator/FP.CPI.TOTL.ZG?format=json&per_page=8"
+            payload = _get_json(source_url)
+            rows = payload[1]
+            point = next(row for row in rows if row.get("value") is not None)
+            return [FundamentalSnapshot(
+                category=f"Makro {country_name}",
+                instrument_code=instrument.code,
+                title=f"Inflasi konsumen {country_name}",
+                value=f"{float(point['value']):.1f}",
+                unit="% tahunan",
+                observed_at=_to_datetime(point.get("date")),
+                released_at=None,
+                fetched_at=_utc_now(),
+                source_name="World Bank Indicators",
+                source_url=source_url,
+                freshness="Seri tahunan lintas negara; konteks struktural, bukan pembaruan market harian.",
+                warning="Gunakan bersama kalender rilis yang lebih baru. Nilai ini tidak menggantikan actual, forecast, atau previous dari event berjalan.",
+            )]
+
+        snapshots.extend(_cached(f"worldbank_cpi_{country_code}", 24 * 60 * 60, load))
+    return snapshots
+
+
+def _latest_ecb_eurusd_reference(instrument_code: str) -> list[FundamentalSnapshot]:
+    if instrument_code != "EURUSD":
+        return []
+
     def load() -> list[FundamentalSnapshot]:
-        source_url = "https://api.worldbank.org/v2/country/USA/indicator/FP.CPI.TOTL.ZG?format=json&per_page=8"
-        payload = _get_json(source_url)
-        rows = payload[1]
-        point = next(row for row in rows if row.get("value") is not None)
+        rows = list(csv.DictReader(StringIO(_get_text(ECB_EURUSD_URL))))
+        point = next((row for row in reversed(rows) if row.get("OBS_VALUE") and row.get("TIME_PERIOD")), None)
+        if not point:
+            return []
         return [FundamentalSnapshot(
-            category="Makro AS",
+            category="Referensi bank sentral",
             instrument_code=instrument_code,
-            title="Inflasi konsumen AS",
-            value=f"{float(point['value']):.1f}",
-            unit="% tahunan",
-            observed_at=_to_datetime(point.get("date")),
+            title="ECB reference exchange rate USD/EUR",
+            value=str(point["OBS_VALUE"]),
+            unit="USD per EUR",
+            observed_at=_to_datetime(point["TIME_PERIOD"]),
             released_at=None,
             fetched_at=_utc_now(),
-            source_name="World Bank Indicators",
-            source_url=source_url,
-            freshness="Seri tahunan; konteks struktural, bukan pembaruan market harian.",
-            warning="Gunakan bersama data rilis yang lebih baru bila diperlukan.",
+            source_name="European Central Bank Data Portal",
+            source_url=ECB_EURUSD_URL,
+            freshness="Referensi harian ECB; bukan harga eksekusi atau tick intraday.",
+            warning="Kurs referensi ECB tidak harus sama dengan harga Yahoo Finance pada saat pemindaian.",
         )]
-    return _cached("worldbank_us_cpi", 24 * 60 * 60, load)
+    return _cached("ecb_eurusd_reference", 6 * 60 * 60, load)
+
+
+def _latest_boc_usdcad_reference(instrument_code: str) -> list[FundamentalSnapshot]:
+    if instrument_code != "USDCAD":
+        return []
+
+    def load() -> list[FundamentalSnapshot]:
+        payload = _get_json(BOC_USDCAD_URL)
+        observations = payload.get("observations", [])
+        point = next((row for row in reversed(observations) if row.get("FXUSDCAD", {}).get("v") and row.get("d")), None)
+        if not point:
+            return []
+        return [FundamentalSnapshot(
+            category="Referensi bank sentral",
+            instrument_code=instrument_code,
+            title="Bank of Canada daily average USD/CAD",
+            value=str(point["FXUSDCAD"]["v"]),
+            unit="CAD per USD",
+            observed_at=_to_datetime(point["d"]),
+            released_at=None,
+            fetched_at=_utc_now(),
+            source_name="Bank of Canada Valet API",
+            source_url=BOC_USDCAD_URL,
+            freshness="Rata-rata harian Bank of Canada; bukan harga eksekusi atau tick intraday.",
+            warning="Referensi harian dapat berbeda dari harga Yahoo Finance pada saat pemindaian.",
+        )]
+    return _cached("boc_usdcad_reference", 6 * 60 * 60, load)
+
+
+def _latest_rba_audusd_reference(instrument_code: str) -> list[FundamentalSnapshot]:
+    if instrument_code != "AUDUSD":
+        return []
+
+    def load() -> list[FundamentalSnapshot]:
+        rows = list(csv.reader(StringIO(_get_text(RBA_AUDUSD_URL))))
+        point = next((row for row in reversed(rows) if len(row) >= 2 and re.fullmatch(r"\d{2}-[A-Za-z]{3}-\d{4}", row[0].strip()) and row[1].strip()), None)
+        if not point:
+            return []
+        observed_at = datetime.strptime(point[0].strip(), "%d-%b-%Y").replace(tzinfo=timezone.utc)
+        return [FundamentalSnapshot(
+            category="Referensi bank sentral",
+            instrument_code=instrument_code,
+            title="RBA indicative AUD/USD reference",
+            value=point[1].strip(),
+            unit="USD per AUD",
+            observed_at=observed_at,
+            released_at=None,
+            fetched_at=_utc_now(),
+            source_name="Reserve Bank of Australia statistical table F11.1",
+            source_url=RBA_AUDUSD_URL,
+            freshness="Referensi harian RBA; bukan harga eksekusi atau tick intraday.",
+            warning="Nilai indikatif RBA dapat berbeda dari harga Yahoo Finance pada saat pemindaian.",
+        )]
+    return _cached("rba_audusd_reference", 6 * 60 * 60, load)
 
 
 def _latest_fred_macro(instrument_code: str) -> list[FundamentalSnapshot]:
@@ -385,8 +483,11 @@ def fetch_fundamental_context(instrument: Instrument) -> list[FundamentalSnapsho
     snapshots.extend(_latest_fred_macro(instrument.code))
     snapshots.extend(_latest_new_york_fed_rates(instrument.code))
     snapshots.extend(_crypto_structure(instrument.code))
-    # Makro USD relevan untuk FX, logam, energi, indeks, dan saham; kripto sudah memakai konteks pasar serta struktur asetnya.
+    snapshots.extend(_latest_worldbank_inflation(instrument))
+    snapshots.extend(_latest_ecb_eurusd_reference(instrument.code))
+    snapshots.extend(_latest_boc_usdcad_reference(instrument.code))
+    snapshots.extend(_latest_rba_audusd_reference(instrument.code))
+    # Pengangguran BLS tetap dibatasi pada aset yang berdenominasi/berkaitan USD.
     if instrument.code not in {"BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "XRPUSD", "ADAUSD", "DOTUSD", "MATICUSD", "LINKUSD", "AVAXUSD"}:
         snapshots.extend(_latest_us_unemployment(instrument.code))
-        snapshots.extend(_latest_us_cpi(instrument.code))
     return snapshots
