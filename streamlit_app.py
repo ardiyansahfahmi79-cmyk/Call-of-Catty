@@ -99,7 +99,8 @@ def render_line_chart(snapshot: MarketSnapshot) -> None:
     figure.add_trace(go.Scatter(x=candles.index, y=candles["ma200"], name="MA 200", mode="lines", line={"color":"#e7bd52", "width":1.35, "dash":"dot"}))
     figure.update_layout(template="plotly_dark", paper_bgcolor="#0a0d12", plot_bgcolor="#0a0d12", height=365, margin={"l":8,"r":10,"t":10,"b":8}, hovermode=False, xaxis={"rangeslider":{"visible":False},"gridcolor":"#202734","fixedrange":True}, yaxis={"side":"right","gridcolor":"#202734","fixedrange":True}, legend={"orientation":"h","x":0,"y":1.02,"xanchor":"left","yanchor":"bottom"}, font={"family":"Manrope","color":"#eaf0f7"})
     st.markdown(f'<div class="brand-kicker">{snapshot.instrument.code} · STATIC LINE MARKET CHART · {snapshot.interval.upper()}</div><div class="chart-guide"><span>Line chart statis · interaksi dinonaktifkan</span><span>Harga penutupan, MA 50, MA 200</span></div>', unsafe_allow_html=True)
-    st.plotly_chart(figure, use_container_width=True, config=STATIC_CHART_CONFIG)
+    chart_key = f"market-chart-{snapshot.instrument.code}-{snapshot.interval}-{int(snapshot.fetched_at.timestamp() * 1_000_000)}"
+    st.plotly_chart(figure, use_container_width=True, config=STATIC_CHART_CONFIG, key=chart_key)
 
 
 def _format_number(value) -> str:
@@ -155,7 +156,8 @@ def render_comparison(snapshots: list[MarketSnapshot]) -> None:
         figure.add_trace(go.Scatter(x=frame.index, y=frame[column], name=column, mode="lines"))
     figure.update_layout(template="plotly_dark", paper_bgcolor="#0a0d12", plot_bgcolor="#0a0d12", height=310, margin={"l":8,"r":8,"t":15,"b":8}, hovermode=False, xaxis={"rangeslider":{"visible":False},"gridcolor":"#202734","fixedrange":True}, yaxis={"gridcolor":"#202734","fixedrange":True}, legend={"orientation":"h","y":1.02,"yanchor":"bottom"})
     st.markdown('<div class="brand-kicker">PERBANDINGAN RELATIF · BASIS 100 · LINE CHART STATIS</div>', unsafe_allow_html=True)
-    st.plotly_chart(figure, use_container_width=True, config=STATIC_CHART_CONFIG)
+    comparison_key = "comparison-chart-" + "-".join(f"{snapshot.instrument.code}-{int(snapshot.fetched_at.timestamp() * 1_000_000)}" for snapshot in snapshots)
+    st.plotly_chart(figure, use_container_width=True, config=STATIC_CHART_CONFIG, key=comparison_key)
 
 
 def _loader_markup(stage: str, estimate: int, progress: int) -> str:
@@ -172,6 +174,21 @@ def queue_question(question: str) -> None:
     """Render pesan pengguna dahulu; pemindaian pada rerun berikutnya berada tepat setelahnya."""
     st.session_state.messages.append(_message("user", question))
     st.session_state.pending_question = question
+
+
+def queue_chip_question(question: str, scope: str) -> None:
+    """Callback atomik untuk chip: simpan prompt sebelum rerun Streamlit merender ulang tombol.
+
+    Callback widget dipanggil sebelum body skrip dijalankan kembali. Dengan demikian,
+    pending_question sudah tersedia ketika main() sampai pada pipeline pemindaian dan
+    pilihan chip lama tidak pernah digantikan secara acak sebelum klik diproses.
+    """
+    if st.session_state.get("pending_question"):
+        return
+    st.session_state.stable_prompt_chips.pop(scope, None)
+    if scope == "opening":
+        st.session_state.opening_suggestions = None
+    queue_question(question)
 
 
 def resolve_confirmation_context(question: str, pending: dict | None) -> str | None:
@@ -314,9 +331,13 @@ def render_prompt_carousel(prompts: list[str], scope: str) -> None:
     selected = select_stable_prompt_chips(st.session_state.stable_prompt_chips, scope, prompts)
     carousel = st.container(horizontal=True, wrap=False, horizontal_alignment="left", gap="small", key=f"chip-carousel-{scope}")
     for index, prompt in enumerate(selected):
-        if carousel.button(prompt, key=f"{scope}_{index}_{prompt}", use_container_width=False):
-            queue_question(prompt)
-            st.rerun()
+        carousel.button(
+            prompt,
+            key=f"{scope}_{index}_{prompt}",
+            use_container_width=False,
+            on_click=queue_chip_question,
+            args=(prompt, scope),
+        )
 
 
 def render_input_panel() -> None:
