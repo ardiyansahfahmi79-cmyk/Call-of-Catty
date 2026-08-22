@@ -58,6 +58,7 @@ def init_state() -> None:
         "opening_suggestions": None,
         "stable_prompt_chips": {},
         "pending_instrument_confirmation": None,
+        "context_thread": {"instrument": None, "interval": None, "agenda": None},
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -202,6 +203,43 @@ def resolve_confirmation_context(question: str, pending: dict | None) -> str | N
     return f"Analisa {pending['instrument']} pada timeframe {pending['interval']}"
 
 
+def resolve_thread_context(question: str, thread: dict | None) -> str | None:
+    """Lanjutkan pertanyaan market singkat menggunakan tiga nilai kecil dari sesi aktif.
+
+    Tidak ada riwayat tambahan atau penyimpanan database. Resolver hanya bekerja
+    ketika instrumen baru tidak disebutkan dan selalu mempertahankan timeframe
+    terakhir yang tersimpan pada sesi browser yang sama.
+    """
+    if not thread or not thread.get("instrument") or detect_instruments(question):
+        return None
+    instrument, interval = str(thread["instrument"]), str(thread.get("interval") or "1h")
+    text = question.casefold()
+    suffix = f"untuk {instrument} pada timeframe {interval}"
+    if any(token in text for token in ("fomc", "federal reserve", "the fed", "fed meeting")):
+        return f"Jelaskan konteks FOMC {suffix}"
+    if any(token in text for token in ("retail sales", "penjualan ritel")):
+        return f"Jelaskan {question.strip()} {suffix}"
+    if any(token in text for token in ("nfp", "non farm", "nonfarm")):
+        return f"Jelaskan dampak NFP {suffix}"
+    if any(token in text for token in ("cpi", "inflasi", "ppi", "pce")):
+        return f"Jelaskan {question.strip()} {suffix}"
+    if any(token in text for token in ("risiko", "risk", "atr", "volatil")):
+        return f"Tinjau risiko {suffix}"
+    if any(token in text for token in ("tren", "trend", "momentum", "indikator", "sinyal")):
+        return f"Jelaskan {question.strip()} {suffix}"
+    return None
+
+
+def update_context_thread(instrument: str, interval: str, question: str) -> None:
+    """Simpan hanya konteks terakhir untuk sesi aktif, bukan percakapan atau data market."""
+    agenda = detect_economic_agenda(question)
+    st.session_state.context_thread = {
+        "instrument": instrument,
+        "interval": interval,
+        "agenda": agenda[1] if agenda else None,
+    }
+
+
 def process_question(question: str, loader_slot) -> None:
     resolved_question = resolve_confirmation_context(question, st.session_state.get("pending_instrument_confirmation"))
     if resolved_question:
@@ -209,6 +247,10 @@ def process_question(question: str, loader_slot) -> None:
         st.session_state.pending_instrument_confirmation = None
     elif detect_instruments(question):
         st.session_state.pending_instrument_confirmation = None
+    else:
+        resolved_thread_question = resolve_thread_context(question, st.session_state.get("context_thread"))
+        if resolved_thread_question:
+            question = resolved_thread_question
     instruments = detect_instruments(question)
     interval = detect_timeframe(question)
     if not instruments:
@@ -244,6 +286,7 @@ def process_question(question: str, loader_slot) -> None:
     response = _message("assistant", build_reply(question, snapshots[0], fundamentals.get(snapshots[0].instrument.code, [])), snapshots=snapshots, fundamentals=fundamentals, animate=True)
     st.session_state.messages.append(response)
     st.session_state.latest_response_id = response["id"]
+    update_context_thread(snapshots[0].instrument.code, snapshots[0].interval, question)
 
 
 def render_analysis_message(message: dict) -> None:

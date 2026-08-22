@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import re
 
 from economic_calendar import EconomicCalendarEvent, find_calendar_events
@@ -168,6 +169,68 @@ def _calendar_section(agenda: AgendaDefinition, question: str = "") -> str:
     return "\n\n".join(rows)
 
 
+def _age_label(moment: datetime) -> str:
+    seconds = max(0, int((datetime.now(timezone.utc) - moment.astimezone(timezone.utc)).total_seconds()))
+    if seconds < 60:
+        return "kurang dari satu menit"
+    if seconds < 3600:
+        return f"{seconds // 60} menit"
+    if seconds < 86_400:
+        return f"{seconds // 3600} jam"
+    return f"{seconds // 86_400} hari"
+
+
+def _freshness_section(snapshot: MarketSnapshot, fundamentals: list[FundamentalSnapshot]) -> str:
+    candle_at = snapshot.last_candle_at.astimezone(timezone.utc)
+    source_at = snapshot.fetched_at.astimezone(timezone.utc)
+    fundamental_note = "Tidak ada konteks fundamental tambahan dari sumber publik pada pemindaian ini."
+    if fundamentals:
+        unique_sources = list(dict.fromkeys(item.source_name for item in fundamentals))
+        fundamental_note = f"{len(fundamentals)} observasi tambahan dari {len(unique_sources)} sumber publik; frekuensi tiap seri ditampilkan pada kartu sumber."
+    return (
+        f"Candle terakhir: **{candle_at.strftime('%d %b %Y %H:%M UTC')}** ({_age_label(candle_at)} lalu). "
+        f"Snapshot harga diambil: **{source_at.strftime('%H:%M:%S UTC')}**. {fundamental_note}"
+    )
+
+
+def _release_reaction_section(question: str, agenda: AgendaDefinition | None, snapshot: MarketSnapshot) -> str:
+    """Ukur perubahan close di sekitar rilis hanya bila timestamp event dan candle beririsan."""
+    text = question.casefold()
+    if not agenda or not any(token in text for token in ("reaksi", "reaction", "setelah rilis", "pasca rilis")):
+        return ""
+    event = next((item for item in find_calendar_events(agenda[3]) if item.release_at and item.actual), None)
+    if not event or not event.release_at:
+        return (
+            "**RELEASE REACTION LENS**\n\n"
+            "Tidak ada event yang memiliki timestamp dan nilai actual dari feed publik pada saat pemindaian. Aero AI tidak akan membentuk reaksi rilis dari jadwal atau forecast saja."
+        )
+    candles = snapshot.candles
+    if candles.empty or "close" not in candles:
+        return ""
+    event_at = event.release_at
+    candle_index = candles.index
+    if getattr(candle_index, "tz", None) is None:
+        event_at = event_at.replace(tzinfo=None)
+    position = int(candle_index.searchsorted(event_at, side="left"))
+    if position == 0 or position >= len(candles):
+        return (
+            "**RELEASE REACTION LENS**\n\n"
+            "Timestamp agenda berada di luar jendela candle yang tersedia pada snapshot ini, sehingga reaksi historis tidak dihitung."
+        )
+    before_close = float(candles["close"].iloc[position - 1])
+    first_close = float(candles["close"].iloc[position])
+    horizon_position = min(position + 3, len(candles) - 1)
+    horizon_close = float(candles["close"].iloc[horizon_position])
+    first_change = (first_close / before_close - 1) * 100 if before_close else 0.0
+    horizon_change = (horizon_close / before_close - 1) * 100 if before_close else 0.0
+    return (
+        "**RELEASE REACTION LENS**\n\n"
+        f"Event **{event.title}** ({event.actual}) dijadwalkan pada **{event.release_at.strftime('%d %b %Y %H:%M UTC')}**. "
+        f"Close candle pertama pada/ setelah jadwal berubah **{first_change:+.2f}%** dari close candle sebelumnya; perubahan sampai tiga candle setelahnya adalah **{horizon_change:+.2f}%**. "
+        "Ini adalah observasi candle pada jendela data yang tersedia, bukan bukti sebab-akibat atau prediksi reaksi rilis berikutnya."
+    )
+
+
 def build_agenda_reply(question: str) -> str | None:
     """Buat jawaban agenda jika pengguna belum menyebut instrumen market."""
     agenda = detect_economic_agenda(question)
@@ -179,7 +242,8 @@ def build_agenda_reply(question: str) -> str | None:
         f"**KONTEKS AGENDA EKONOMI · {name}**\n\n"
         f"{context} {_agenda_market_channel()}\n\n"
         f"**DATA KALENDER PUBLIK**\n\n{_calendar_section(agenda, question)}\n\n"
-        "Forecast atau consensus di atas adalah nilai yang tersedia dari sumber kalender, bukan prediksi yang dibuat Aero AI. Untuk memindai respons harga, sebutkan instrumen dan timeframe, misalnya **Analisa XAUUSD pada H1 setelah NFP**.\n\n"
+        "Forecast atau consensus di atas adalah nilai yang tersedia dari sumber kalender, bukan prediksi yang dibuat Aero AI. "
+        f"Apakah Anda ingin Aero AI menganalisa respons harga terhadap **{name}**? Sebutkan instrumen dan timeframe, misalnya **Analisa XAUUSD pada H1 setelah {name}**.\n\n"
         "**BATAS ANALISIS**\n\nIni adalah konteks riset dan edukasi, bukan nasihat finansial personal atau instruksi transaksi."
     )
 
@@ -197,12 +261,12 @@ def build_unknown_input_reply(question: str, unknown_candidates: list[str] | Non
     compact = re.sub(r"\s+", "", question)
     if len(compact) >= 6 and not re.search(r"(?:analisa|market|agenda|indikator|risiko|trend|fundamental)", question.casefold()):
         return (
-            "Pesan Anda belum dapat dipahami sebagai pertanyaan market. Mohon tulis instrumen atau agenda secara jelas, "
-            "misalnya **Analisa XAUUSD pada H1**, **Jelaskan Retail Sales**, atau **NFP untuk DXY**."
+            "Pesan ini belum dapat dipahami sebagai pertanyaan market yang didukung. Aero AI masih berada dalam tahap pengembangan sebagai sistem pemindaian market berbasis data dan tidak dirancang untuk percakapan umum di luar konteks market. "
+            "Mohon tulis instrumen atau agenda secara jelas, misalnya **Analisa XAUUSD pada H1**, **Jelaskan Retail Sales**, atau **NFP untuk DXY**."
         )
     return (
-        "Aero AI dikhususkan untuk pemindaian market berbasis data. Mohon sebutkan instrumen, timeframe, atau agenda ekonomi yang jelas. "
-        "Contoh: **Analisa XAGUSD di M15**, **Bandingkan EURUSD dengan DXY pada H4**, atau **Jelaskan CPI AS**."
+        "Pesan ini belum dapat dipetakan ke instrumen, timeframe, atau agenda ekonomi yang didukung. Aero AI masih berada dalam tahap pengembangan sebagai sistem pemindaian market berbasis data dan tidak dirancang untuk percakapan umum di luar konteks market. "
+        "Silakan sebutkan instrumen, timeframe, atau agenda yang jelas. Contoh: **Analisa XAGUSD di M15**, **Bandingkan EURUSD dengan DXY pada H4**, **Jelaskan FOMC**, atau **Jelaskan Retail Sales MoM**."
     )
 
 
@@ -286,19 +350,24 @@ def build_reply(question: str, snapshot: MarketSnapshot, fundamentals: list[Fund
         else f"Timeframe tidak disebutkan; Aero AI menggunakan asumsi default **{timeframe_label(snapshot.interval)}**."
     )
     agenda = detect_economic_agenda(question)
+    fundamentals = fundamentals or []
     agenda_section = ""
     if agenda:
         _, _, context, _ = agenda
         name = agenda_display_name(agenda, question)
         agenda_section = f"\n\n**KONTEKS AGENDA EKONOMI · {name}**\n\n{context} {_agenda_market_channel(snapshot.instrument.code)}\n\n**DATA KALENDER PUBLIK**\n\n{_calendar_section(agenda, question)}"
     scenario_section = f"\n\n**SKENARIO LEVEL TEKNIKAL**\n\n{_entry_scenario(data)}" if intent == "levels_entry" else ""
+    freshness_section = _freshness_section(snapshot, fundamentals)
+    reaction_section = _release_reaction_section(question, agenda, snapshot)
     return (
         f"**STATUS PASAR · {snapshot.instrument.code}**\n\n"
         f"{timeframe_note} Harga referensi terakhir adalah **{price}** dengan perubahan **{change_20:+.2f}%** dalam 20 candle. Kondisi pada timeframe data saat ini adalah **{data['market_state']}** dengan keselarasan teknikal **{int(data['confluence'])}/100**. Nilai tersebut menunjukkan jumlah indikator yang searah, bukan probabilitas keberhasilan transaksi.\n\n"
         f"**FOKUS PEMINDAIAN**\n\n{_focus_line(intent, data)}\n\n"
         f"**STRUKTUR DAN MOMENTUM**\n\n{_trend_description(data)} RSI(14) berada pada **{rsi:.1f}**, ADX(14) pada **{adx:.1f}**, dan relative volume pada **{volume:.2f}x**. ADX mengukur kekuatan tren, bukan arahnya; volume relatif bernilai netral bila penyedia tidak menyediakan volume yang bermakna.\n\n"
         f"**AREA OBSERVASI DAN RISIKO**\n\nRange 20 candle berada pada **{_fmt(float(data['low20']))}** sampai **{_fmt(float(data['high20']))}**. ATR(14) adalah **{_fmt(float(data['atr14']))}** dan volatilitas 20 candle **{float(data['volatility20']):.2f}%**. Bias harus dievaluasi ulang bila struktur harga bergerak melawan MA 50/MA 200 atau keluar dari range observasi.{agenda_section}{scenario_section}\n\n"
-        f"**KONTEKS FUNDAMENTAL PUBLIK**\n\n{_fundamental_section(fundamentals or [])}\n\n"
+        f"**STATUS KETERBARUAN DATA**\n\n{freshness_section}\n\n"
+        f"**KONTEKS FUNDAMENTAL PUBLIK**\n\n{_fundamental_section(fundamentals)}"
+        f"{f'\n\n{reaction_section}' if reaction_section else ''}\n\n"
         f"**BATAS DATA**\n\n{snapshot.warning} Analisis ini dibuat untuk riset dan edukasi, bukan nasihat finansial personal."
     )
 
