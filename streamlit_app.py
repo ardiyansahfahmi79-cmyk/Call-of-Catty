@@ -55,6 +55,7 @@ def init_state() -> None:
         "latest_response_id": None,
         "typed_message_ids": set(),
         "pending_question": None,
+        "pending_loader_ready": False,
         "opening_suggestions": None,
         "stable_prompt_chips": {},
         "pending_instrument_confirmation": None,
@@ -171,10 +172,34 @@ def _wait_until(started_at: float, seconds: float) -> None:
         time.sleep(remaining)
 
 
+def _run_context_loader(loader_slot, started_at: float, response_builder):
+    """Tampilkan pipeline untuk agenda, klarifikasi, dan input yang tidak memerlukan snapshot harga."""
+    stages = [
+        ("01 / 04 · MEMVALIDASI INTENT, AGENDA, DAN KONTEKS PESAN", 28, 12, 1.1),
+        ("02 / 04 · MEMETAKAN NEGARA, MATA UANG, DAN RELEVANSI", 22, 38, 4.0),
+        ("03 / 04 · MEMERIKSA SUMBER KALENDER PUBLIK DAN BATAS DATA", 17, 69, 8.0),
+        ("04 / 04 · MENYUSUN RESPONS MARKET YANG DAPAT DITELUSURI", 9, 92, MIN_ANALYSIS_SECONDS),
+    ]
+    response = None
+    for index, (stage, estimate, progress, target_seconds) in enumerate(stages):
+        loader_slot.markdown(_loader_markup(stage, estimate, progress), unsafe_allow_html=True)
+        if index == 2:
+            response = response_builder()
+        _wait_until(started_at, target_seconds)
+    loader_slot.markdown(_loader_markup("PIPELINE SELESAI · MENYIAPKAN RESPONS TERBARU", 0, 100), unsafe_allow_html=True)
+    time.sleep(.35)
+    loader_slot.empty()
+    return response if response is not None else response_builder()
+
+
 def queue_question(question: str) -> None:
-    """Render pesan pengguna dahulu; pemindaian pada rerun berikutnya berada tepat setelahnya."""
-    st.session_state.messages.append(_message("user", question))
-    st.session_state.pending_question = question
+    """Antrekan satu pesan agar rerun berikutnya selalu memindainya tepat di bawah chat."""
+    normalized = question.strip()
+    if not normalized or st.session_state.get("pending_question"):
+        return
+    st.session_state.messages.append(_message("user", normalized))
+    st.session_state.pending_question = normalized
+    st.session_state.pending_loader_ready = False
 
 
 def queue_chip_question(question: str, scope: str) -> None:
@@ -184,12 +209,12 @@ def queue_chip_question(question: str, scope: str) -> None:
     pending_question sudah tersedia ketika main() sampai pada pipeline pemindaian dan
     pilihan chip lama tidak pernah digantikan secara acak sebelum klik diproses.
     """
-    if st.session_state.get("pending_question"):
+    queue_question(question)
+    if st.session_state.get("pending_question") != question.strip():
         return
     st.session_state.stable_prompt_chips.pop(scope, None)
     if scope == "opening":
         st.session_state.opening_suggestions = None
-    queue_question(question)
 
 
 def resolve_confirmation_context(question: str, pending: dict | None) -> str | None:
@@ -241,6 +266,7 @@ def update_context_thread(instrument: str, interval: str, question: str) -> None
 
 
 def process_question(question: str, loader_slot) -> None:
+    started_at = time.monotonic()
     resolved_question = resolve_confirmation_context(question, st.session_state.get("pending_instrument_confirmation"))
     if resolved_question:
         question = resolved_question
@@ -254,17 +280,25 @@ def process_question(question: str, loader_slot) -> None:
     instruments = detect_instruments(question)
     interval = detect_timeframe(question)
     if not instruments:
-        agenda_reply = build_agenda_reply(question)
-        unknown_candidates = detect_unknown_instrument_candidates(question)
-        prompt_chips = agenda_clarification_prompts(question) if agenda_reply else []
-        st.session_state.messages.append(_message("assistant", agenda_reply or build_unknown_input_reply(question, unknown_candidates), prompt_chips=prompt_chips))
+        def build_context_reply() -> tuple[str, list[str]]:
+            agenda_reply = build_agenda_reply(question)
+            unknown_candidates = detect_unknown_instrument_candidates(question)
+            return agenda_reply or build_unknown_input_reply(question, unknown_candidates), agenda_clarification_prompts(question) if agenda_reply else []
+
+        reply, prompt_chips = _run_context_loader(loader_slot, started_at, build_context_reply)
+        st.session_state.messages.append(_message("assistant", reply, prompt_chips=prompt_chips))
         return
     if len(instruments) > 2:
         codes = [instrument.code for instrument in instruments]
+        reply, prompt_chips = _run_context_loader(
+            loader_slot,
+            started_at,
+            lambda: (build_multi_instrument_clarification(codes), multi_instrument_clarification_prompts(codes)),
+        )
         st.session_state.messages.append(_message(
             "assistant",
-            build_multi_instrument_clarification(codes),
-            prompt_chips=multi_instrument_clarification_prompts(codes),
+            reply,
+            prompt_chips=prompt_chips,
         ))
         return
     action_words = ("analisa", "analyze", "scan", "bandingkan", "compare", "tren", "trend", "risiko", "risk", "indikator", "sinyal", "signal", "entry", "level", "fundamental", "forecast", "prediksi")
@@ -272,7 +306,7 @@ def process_question(question: str, loader_slot) -> None:
         st.session_state.pending_instrument_confirmation = {"instrument": instruments[0].code, "interval": interval}
         st.session_state.messages.append(_message("assistant", build_instrument_confirmation(instruments[0].code)))
         return
-    started_at, snapshots, fundamentals, unavailable_codes = time.monotonic(), [], {}, []
+    snapshots, fundamentals, unavailable_codes = [], {}, []
     stages = [("01 / 05 · MENDETEKSI INSTRUMEN, TIMEFRAME, DAN KONTEKS", 50, 9, 1.2), ("02 / 05 · MENARIK OHLCV PUBLIK DAN MEMVALIDASI CANDLE", 46, 27, 5.0), ("03 / 05 · MEMINDAI FUNDAMENTAL DAN KALENDER EKONOMI PUBLIK", 42, 49, 8.0), ("04 / 05 · MENGHITUNG 10 INDIKATOR PYTHON DAN REGIME PASAR", 38, 72, 10.5), ("05 / 05 · MENYUSUN NARASI DAN MEMBANGUN LINE CHART", 34, 92, MIN_ANALYSIS_SECONDS)]
     for index, (stage, estimate, progress, target_seconds) in enumerate(stages):
         loader_slot.markdown(_loader_markup(stage, estimate, progress), unsafe_allow_html=True)
@@ -436,9 +470,13 @@ def main() -> None:
             render_message(message)
     pending_question = st.session_state.get("pending_question")
     if pending_question:
+        if not st.session_state.get("pending_loader_ready"):
+            st.session_state.pending_loader_ready = True
+            st.rerun()
         loader_slot = st.empty()
         process_question(pending_question, loader_slot)
         st.session_state.pending_question = None
+        st.session_state.pending_loader_ready = False
         st.rerun()
     render_input_panel()
     st.markdown('</div>', unsafe_allow_html=True)

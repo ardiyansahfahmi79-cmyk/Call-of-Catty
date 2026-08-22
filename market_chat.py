@@ -67,7 +67,7 @@ ECONOMIC_AGENDAS: tuple[AgendaDefinition, ...] = (
 )
 
 _CURRENCY_COUNTRY_ALIASES: dict[str, tuple[str, ...]] = {
-    "USD": ("as", "us", "u s", "amerika", "amerika serikat", "united states"),
+    "USD": ("as", "us", "usa", "u s", "u s a", "amerika", "amerika serikat", "american", "united states", "united states of america"),
     "EUR": ("euro area", "eurozone", "zona euro", "eropa", "europe"),
     "CAD": ("kanada", "canada"),
     "GBP": ("inggris", "britania", "united kingdom", "uk"),
