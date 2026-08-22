@@ -70,6 +70,29 @@ INSTRUMENTS: tuple[Instrument, ...] = (
     Instrument("ANTM", "Aneka Tambang", "ANTM.JK", "Saham IDX", ("antm", "antam", "aneka tambang")),
 )
 
+# Pemetaan ini hanya menyatakan sisi mata uang/ekonomi yang dapat dipakai sebagai
+# filter agenda. Pemetaan tidak menyimpulkan arah harga ataupun dampak rilis.
+_INSTRUMENT_ECONOMIC_CURRENCIES: dict[str, tuple[str, ...]] = {
+    "XAUUSD": ("USD",), "XAGUSD": ("USD",), "XAUEUR": ("EUR",), "XAGEUR": ("EUR",),
+    "XBRUSD": ("USD",), "XNGUSD": ("USD",), "XPDUSD": ("USD",),
+    "EURUSD": ("EUR", "USD"), "GBPUSD": ("GBP", "USD"), "USDJPY": ("USD", "JPY"),
+    "AUDUSD": ("AUD", "USD"), "USDCAD": ("USD", "CAD"), "USDCHF": ("USD", "CHF"),
+    "NZDUSD": ("NZD", "USD"), "EURGBP": ("EUR", "GBP"), "EURJPY": ("EUR", "JPY"),
+    "GBPJPY": ("GBP", "JPY"),
+    "BTCUSD": ("USD",), "ETHUSD": ("USD",), "BNBUSD": ("USD",), "SOLUSD": ("USD",),
+    "XRPUSD": ("USD",), "ADAUSD": ("USD",), "DOTUSD": ("USD",), "MATICUSD": ("USD",),
+    "LINKUSD": ("USD",), "AVAXUSD": ("USD",),
+    "WTI": ("USD",), "BRENT": ("USD",), "DXY": ("USD",), "SPX": ("USD",), "NAS100": ("USD",),
+    "IHSG": ("IDR",), "BBCA": ("IDR",), "BBRI": ("IDR",), "TLKM": ("IDR",), "ASII": ("IDR",),
+    "BMRI": ("IDR",), "UNVR": ("IDR",), "GGRM": ("IDR",), "HMSP": ("IDR",), "ANTM": ("IDR",),
+}
+
+
+def instrument_economic_currencies(instrument_code: str) -> tuple[str, ...]:
+    """Kembalikan mata uang ekonomi terkait tanpa menebak negara atau sentimen."""
+    return _INSTRUMENT_ECONOMIC_CURRENCIES.get(instrument_code.upper(), ())
+
+
 _BY_CODE = {instrument.code: instrument for instrument in INSTRUMENTS}
 _CRYPTO_COIN_IDS = {
     "BTCUSD": "bitcoin", "ETHUSD": "ethereum", "BNBUSD": "binancecoin", "SOLUSD": "solana",

@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import re
 
-from economic_calendar import EconomicCalendarEvent, find_calendar_events
+from economic_calendar import calendar_fetch_status, find_calendar_events
 from fundamental_data import FundamentalSnapshot
-from market_data import MarketSnapshot, timeframe_label, timeframe_was_explicit
+from market_data import MarketSnapshot, instrument_economic_currencies, timeframe_label, timeframe_was_explicit
 
 
 AgendaDefinition = tuple[tuple[str, ...], str, str, tuple[str, ...]]
@@ -66,6 +66,33 @@ ECONOMIC_AGENDAS: tuple[AgendaDefinition, ...] = (
     (("rbnz", "reserve bank of new zealand"), "Reserve Bank of New Zealand", "Keputusan RBNZ terutama relevan untuk NZD dan ekspektasi suku bunga Selandia Baru.", ("rbnz", "new zealand")),
 )
 
+_CURRENCY_COUNTRY_ALIASES: dict[str, tuple[str, ...]] = {
+    "USD": ("as", "us", "u s", "amerika", "amerika serikat", "united states"),
+    "EUR": ("euro area", "eurozone", "zona euro", "eropa", "europe"),
+    "CAD": ("kanada", "canada"),
+    "GBP": ("inggris", "britania", "united kingdom", "uk"),
+    "JPY": ("jepang", "japan"),
+    "AUD": ("australia",),
+    "CHF": ("swiss", "switzerland", "swis"),
+    "NZD": ("selandia baru", "new zealand"),
+    "IDR": ("indonesia", "indonesian"),
+}
+_CURRENCY_DISPLAY_NAMES = {
+    "USD": "AS", "EUR": "Euro Area", "CAD": "Kanada", "GBP": "Inggris", "JPY": "Jepang",
+    "AUD": "Australia", "CHF": "Swiss", "NZD": "Selandia Baru", "IDR": "Indonesia",
+}
+_FIXED_AGENDA_CURRENCIES = {
+    "NFP / Non-Farm Payrolls": ("USD",), "ADP Employment Change": ("USD",),
+    "Initial Jobless Claims": ("USD",), "JOLTS Job Openings": ("USD",),
+    "Employment Cost Index": ("USD",), "Core PCE Price Index": ("USD",), "PCE Price Index": ("USD",),
+    "EIA Crude Oil Inventories": ("USD",), "EIA Natural Gas Storage": ("USD",), "Baker Hughes Rig Count": ("USD",),
+    "FOMC / Federal Reserve": ("USD",), "Federal Reserve Speech": ("USD",),
+    "US Interest Rate Decision": ("USD",), "Federal Reserve Dot Plot": ("USD",),
+    "Bank of Japan": ("JPY",), "European Central Bank": ("EUR",), "Reserve Bank of Australia": ("AUD",),
+    "Bank of England": ("GBP",), "Bank of Canada": ("CAD",), "Swiss National Bank": ("CHF",),
+    "Reserve Bank of New Zealand": ("NZD",),
+}
+
 
 def _fmt(value: float) -> str:
     return f"{value:,.5f}" if abs(value) < 20 else f"{value:,.2f}"
@@ -95,6 +122,79 @@ def agenda_display_name(agenda: AgendaDefinition, question: str) -> str:
     if period and name in {"Retail Sales", "Core Retail Sales"}:
         return f"{name} ({period})"
     return name
+
+
+def _phrase_in_text(text: str, phrase: str) -> bool:
+    return bool(re.search(rf"(?<![a-z0-9]){re.escape(phrase)}(?![a-z0-9])", text))
+
+
+def _currencies_mentioned(question: str) -> tuple[str, ...]:
+    text = re.sub(r"[^a-z0-9 ]+", " ", question.casefold())
+    matched: list[str] = []
+    for currency, aliases in _CURRENCY_COUNTRY_ALIASES.items():
+        if any(_phrase_in_text(text, alias) for alias in aliases):
+            matched.append(currency)
+    return tuple(matched)
+
+
+def _agenda_calendar_currencies(
+    agenda: AgendaDefinition,
+    question: str,
+    instrument_code: str | None = None,
+) -> tuple[str, ...]:
+    """Tentukan filter hanya dari negara eksplisit, pair tunggal, atau agenda institusional."""
+    explicit = _currencies_mentioned(question)
+    if explicit:
+        return explicit
+    if instrument_code:
+        related = instrument_economic_currencies(instrument_code)
+        if len(related) == 1:
+            return related
+    return _FIXED_AGENDA_CURRENCIES.get(agenda[1], ())
+
+
+def _needs_currency_clarification(agenda: AgendaDefinition, question: str, instrument_code: str | None = None) -> bool:
+    if _agenda_calendar_currencies(agenda, question, instrument_code):
+        return False
+    if instrument_code and len(instrument_economic_currencies(instrument_code)) >= 2:
+        return True
+    return agenda[1] not in _FIXED_AGENDA_CURRENCIES
+
+
+def agenda_clarification_prompts(question: str, instrument_code: str | None = None) -> list[str]:
+    """Sediakan maksimal tiga prompt fokus tanpa mengirim data kalender negara lain."""
+    agenda = detect_economic_agenda(question)
+    if not agenda or not _needs_currency_clarification(agenda, question, instrument_code):
+        return []
+    name = agenda_display_name(agenda, question)
+    related = instrument_economic_currencies(instrument_code or "")
+    if instrument_code and len(related) >= 2:
+        left, right = related[:2]
+        left_name = _CURRENCY_DISPLAY_NAMES.get(left, left)
+        right_name = _CURRENCY_DISPLAY_NAMES.get(right, right)
+        return [
+            f"Jelaskan {name} {left_name} untuk {instrument_code}",
+            f"Jelaskan {name} {right_name} untuk {instrument_code}",
+            f"Bandingkan {name} {left_name} dan {right_name} untuk {instrument_code}",
+        ]
+    return [f"Jelaskan {name} AS", f"Jelaskan {name} Euro Area", f"Jelaskan {name} Kanada"]
+
+
+def _agenda_clarification_section(agenda: AgendaDefinition, question: str, instrument_code: str | None = None) -> str:
+    name = agenda_display_name(agenda, question)
+    prompts = agenda_clarification_prompts(question, instrument_code)
+    if instrument_code and len(instrument_economic_currencies(instrument_code)) >= 2:
+        sides = " dan ".join(_CURRENCY_DISPLAY_NAMES.get(currency, currency) for currency in instrument_economic_currencies(instrument_code)[:2])
+        context = (
+            f"**{instrument_code}** memiliki dua sisi ekonomi, yaitu **{sides}**. "
+            "Aero AI tidak akan memilih salah satunya atau menampilkan kalender negara lain tanpa fokus yang jelas."
+        )
+    else:
+        context = (
+            "Agenda ini tersedia untuk beberapa negara. Aero AI memerlukan fokus negara atau instrumen agar kalender yang ditampilkan tidak salah relevansi."
+        )
+    choices = "; ".join(f"**{prompt.replace('Jelaskan ', '')}**" for prompt in prompts[:3])
+    return f"**KLARIFIKASI AGENDA EKONOMI · {name}**\n\n{context}\n\nPilih salah satu fokus berikut: {choices}."
 
 
 def infer_intent(question: str) -> str:
@@ -134,9 +234,21 @@ def _agenda_market_channel(instrument: str | None = None) -> str:
     return "Dampak potensial perlu dibaca bersama instrumen, nilai aktual rilis, revisi data, dan ekspektasi pasar sebelum rilis."
 
 
-def _calendar_section(agenda: AgendaDefinition, question: str = "") -> str:
-    events = find_calendar_events(agenda[3])
+def _calendar_section(agenda: AgendaDefinition, question: str = "", currency_filter: tuple[str, ...] = ()) -> str:
+    events = find_calendar_events(agenda[3], currency_filter=currency_filter)
+    status = calendar_fetch_status()
     if not events:
+        focus = ", ".join(_CURRENCY_DISPLAY_NAMES.get(currency, currency) for currency in currency_filter)
+        if status.state == "tidak_tersedia":
+            return (
+                "Sumber kalender publik dan fallback belum mengembalikan data pada pemindaian ini. "
+                "Aero AI tidak akan membuat nilai forecast, previous, atau actual pengganti."
+            )
+        if focus:
+            return (
+                f"Tidak ada data kalender yang cocok untuk **{agenda_display_name(agenda, question)}** pada fokus **{focus}** di feed publik saat ini. "
+                "Aero AI tidak akan menggantinya dengan rilis negara lain atau angka pengganti."
+            )
         return (
             "Kalender publik mingguan belum memuat event yang cocok atau tidak menyediakan konsensus pada saat pemindaian. "
             "Aero AI tidak akan membuat nilai forecast, previous, atau actual pengganti."
@@ -165,6 +277,10 @@ def _calendar_section(agenda: AgendaDefinition, question: str = "") -> str:
             0,
             f"Anda meminta **Retail Sales {requested_period}**. Feed kalender tidak menuliskan basis periode secara eksplisit pada judul event yang ditemukan; "
             "Aero AI menampilkan data sumber apa adanya dan tidak mengasumsikan MoM atau YoY dari nilai tersebut.",
+        )
+    if status.state == "cache_kedaluwarsa":
+        rows.append(
+            "**STATUS SUMBER KALENDER** — sumber publik sedang tidak merespons; data di atas berasal dari cache sesi terakhir yang tersedia dan tidak boleh dibaca sebagai pembaruan langsung."
         )
     return "\n\n".join(rows)
 
@@ -198,7 +314,10 @@ def _release_reaction_section(question: str, agenda: AgendaDefinition | None, sn
     text = question.casefold()
     if not agenda or not any(token in text for token in ("reaksi", "reaction", "setelah rilis", "pasca rilis")):
         return ""
-    event = next((item for item in find_calendar_events(agenda[3]) if item.release_at and item.actual), None)
+    currency_filter = _agenda_calendar_currencies(agenda, question, snapshot.instrument.code)
+    if _needs_currency_clarification(agenda, question, snapshot.instrument.code):
+        return ""
+    event = next((item for item in find_calendar_events(agenda[3], currency_filter=currency_filter) if item.release_at and item.actual), None)
     if not event or not event.release_at:
         return (
             "**RELEASE REACTION LENS**\n\n"
@@ -238,10 +357,16 @@ def build_agenda_reply(question: str) -> str | None:
         return None
     _, _, context, _ = agenda
     name = agenda_display_name(agenda, question)
+    if _needs_currency_clarification(agenda, question):
+        return (
+            f"{_agenda_clarification_section(agenda, question)}\n\n"
+            "**BATAS ANALISIS**\n\nIni adalah konteks riset dan edukasi, bukan nasihat finansial personal atau instruksi transaksi."
+        )
+    currency_filter = _agenda_calendar_currencies(agenda, question)
     return (
         f"**KONTEKS AGENDA EKONOMI · {name}**\n\n"
         f"{context} {_agenda_market_channel()}\n\n"
-        f"**DATA KALENDER PUBLIK**\n\n{_calendar_section(agenda, question)}\n\n"
+        f"**DATA KALENDER PUBLIK**\n\n{_calendar_section(agenda, question, currency_filter)}\n\n"
         "Forecast atau consensus di atas adalah nilai yang tersedia dari sumber kalender, bukan prediksi yang dibuat Aero AI. "
         f"Apakah Anda ingin Aero AI menganalisa respons harga terhadap **{name}**? Sebutkan instrumen dan timeframe, misalnya **Analisa XAUUSD pada H1 setelah {name}**.\n\n"
         "**BATAS ANALISIS**\n\nIni adalah konteks riset dan edukasi, bukan nasihat finansial personal atau instruksi transaksi."
@@ -270,10 +395,43 @@ def build_unknown_input_reply(question: str, unknown_candidates: list[str] | Non
     )
 
 
+def build_source_unavailable_reply(instruments: list[str]) -> str:
+    """Tampilkan kegagalan sumber publik tanpa mengungkap detail teknis atau membuat angka."""
+    shown = ", ".join(f"**{instrument}**" for instrument in instruments[:2]) or "instrumen yang diminta"
+    return (
+        f"Sumber harga publik belum mengembalikan candle yang memadai untuk {shown} pada pemindaian ini. "
+        "Aero AI tidak akan membuat harga, indikator, forecast, atau level pengganti ketika sumber eksternal terlambat atau tidak tersedia. "
+        "Silakan coba kembali beberapa saat lagi, gunakan timeframe lain, atau pilih instrumen lain. Analisis Aero AI tetap ditujukan untuk riset dan edukasi, bukan nasihat finansial personal."
+    )
+
+
 def build_instrument_confirmation(instrument: str) -> str:
     return (
         f"Anda menyebut **{instrument}**. Apakah Anda ingin saya menganalisa instrumen tersebut? "
         f"Tambahkan timeframe agar pemindaian lebih spesifik, misalnya **Analisa {instrument} di M15**, **H4**, **D1**, **W1**, atau **MN**."
+    )
+
+
+def multi_instrument_clarification_prompts(instruments: list[str]) -> list[str]:
+    """Buat tiga opsi fokus dari urutan instrumen yang memang ditulis pengguna."""
+    codes = instruments[:3]
+    if len(codes) < 3:
+        return []
+    return [
+        f"Bandingkan {codes[0]} dengan {codes[1]} pada H1",
+        f"Analisa {codes[0]} pada H1",
+        f"Analisa {codes[2]} pada H1",
+    ]
+
+
+def build_multi_instrument_clarification(instruments: list[str]) -> str:
+    """Hentikan pemindaian sebelum sistem mengabaikan instrumen ketiga atau berikutnya."""
+    shown = ", ".join(f"**{code}**" for code in instruments[:5])
+    extra = "" if len(instruments) <= 5 else f" serta {len(instruments) - 5} instrumen lainnya"
+    return (
+        f"Aero AI mendeteksi lebih dari dua instrumen: {shown}{extra}. "
+        "Agar perbandingan tetap terbaca dan tidak ada instrumen yang diabaikan, pilih maksimal dua instrumen utama atau minta analisis satu per satu. "
+        "Sistem belum akan menarik data sampai fokus tersebut jelas."
     )
 
 
@@ -355,7 +513,14 @@ def build_reply(question: str, snapshot: MarketSnapshot, fundamentals: list[Fund
     if agenda:
         _, _, context, _ = agenda
         name = agenda_display_name(agenda, question)
-        agenda_section = f"\n\n**KONTEKS AGENDA EKONOMI · {name}**\n\n{context} {_agenda_market_channel(snapshot.instrument.code)}\n\n**DATA KALENDER PUBLIK**\n\n{_calendar_section(agenda, question)}"
+        if _needs_currency_clarification(agenda, question, snapshot.instrument.code):
+            agenda_section = f"\n\n{_agenda_clarification_section(agenda, question, snapshot.instrument.code)}"
+        else:
+            currency_filter = _agenda_calendar_currencies(agenda, question, snapshot.instrument.code)
+            agenda_section = (
+                f"\n\n**KONTEKS AGENDA EKONOMI · {name}**\n\n{context} {_agenda_market_channel(snapshot.instrument.code)}\n\n"
+                f"**DATA KALENDER PUBLIK**\n\n{_calendar_section(agenda, question, currency_filter)}"
+            )
     scenario_section = f"\n\n**SKENARIO LEVEL TEKNIKAL**\n\n{_entry_scenario(data)}" if intent == "levels_entry" else ""
     freshness_section = _freshness_section(snapshot, fundamentals)
     reaction_section = _release_reaction_section(question, agenda, snapshot)

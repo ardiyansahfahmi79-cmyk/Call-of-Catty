@@ -37,6 +37,16 @@ class EconomicCalendarEvent:
     source_url: str
 
 
+@dataclass(frozen=True)
+class CalendarFetchStatus:
+    state: str
+    checked_at: datetime
+    detail: str
+
+
+_CALENDAR_STATUS = CalendarFetchStatus("belum_dipindai", datetime.fromtimestamp(0, timezone.utc), "Kalender belum diminta pada sesi ini.")
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -115,26 +125,46 @@ def _fetch_public_html_fallback() -> list[EconomicCalendarEvent]:
 
 def fetch_public_calendar() -> list[EconomicCalendarEvent]:
     """Ambil kalender publik dengan cache dan fallback, tanpa mengubah nilai sumber."""
-    global _CACHE
+    global _CACHE, _CALENDAR_STATUS
     now_monotonic = time.monotonic()
     if _CACHE and now_monotonic - _CACHE[0] < CACHE_TTL_SECONDS:
+        _CALENDAR_STATUS = CalendarFetchStatus("cache_aktif", _utc_now(), "Kalender memakai cache sesi yang masih berada dalam batas 15 menit.")
         return _CACHE[1]
+    failures: list[str] = []
     for loader in (_fetch_weekly_json, _fetch_public_html_fallback):
         try:
             events = loader()
             if events:
                 _CACHE = (now_monotonic, events)
+                _CALENDAR_STATUS = CalendarFetchStatus("live", _utc_now(), f"Kalender diperbarui melalui {events[0].source_name}.")
                 return events
-        except (requests.RequestException, ValueError, TypeError, KeyError, AttributeError):
+        except (requests.RequestException, ValueError, TypeError, KeyError, AttributeError) as exc:
+            failures.append(type(exc).__name__)
             continue
-    return _CACHE[1] if _CACHE else []
+    if _CACHE:
+        _CALENDAR_STATUS = CalendarFetchStatus("cache_kedaluwarsa", _utc_now(), "Sumber kalender tidak merespons; sistem hanya mempertahankan cache sesi yang terakhir tersedia.")
+        return _CACHE[1]
+    _CALENDAR_STATUS = CalendarFetchStatus("tidak_tersedia", _utc_now(), "Sumber kalender publik dan fallback tidak mengembalikan data pada pemindaian ini.")
+    return []
 
 
-def find_calendar_events(keywords: Iterable[str], limit: int = 3) -> list[EconomicCalendarEvent]:
-    """Pilih event kalender dengan kecocokan judul yang eksplisit terhadap alias agenda."""
+def calendar_fetch_status() -> CalendarFetchStatus:
+    """Status transparan sumber kalender terakhir tanpa membuat data pengganti."""
+    return _CALENDAR_STATUS
+
+
+def find_calendar_events(
+    keywords: Iterable[str],
+    limit: int = 3,
+    currency_filter: Iterable[str] | None = None,
+) -> list[EconomicCalendarEvent]:
+    """Pilih event berdasarkan judul dan, bila diberikan, mata uang fokus yang eksplisit."""
     normalized_keywords = [_normalized(keyword) for keyword in keywords if len(_normalized(keyword)) >= 3]
+    allowed_currencies = {str(currency).strip().upper() for currency in currency_filter or () if str(currency).strip()}
     matches: list[tuple[int, EconomicCalendarEvent]] = []
     for event in fetch_public_calendar():
+        if allowed_currencies and event.currency.strip().upper() not in allowed_currencies:
+            continue
         title = _normalized(event.title)
         score = max((len(keyword) for keyword in normalized_keywords if keyword in title), default=0)
         if score:

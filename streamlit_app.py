@@ -13,7 +13,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from fundamental_data import FundamentalSnapshot, fetch_fundamental_context
-from market_chat import build_agenda_reply, build_instrument_confirmation, build_reply, build_unknown_input_reply, detect_economic_agenda, follow_up_prompts
+from market_chat import agenda_clarification_prompts, build_agenda_reply, build_instrument_confirmation, build_multi_instrument_clarification, build_reply, build_source_unavailable_reply, build_unknown_input_reply, detect_economic_agenda, follow_up_prompts, multi_instrument_clarification_prompts
 from market_data import MarketSnapshot, detect_instruments, detect_timeframe, detect_unknown_instrument_candidates, fetch_market_snapshot, normalized_comparison
 
 
@@ -101,7 +101,7 @@ def render_line_chart(snapshot: MarketSnapshot) -> None:
     figure.update_layout(template="plotly_dark", paper_bgcolor="#0a0d12", plot_bgcolor="#0a0d12", height=365, margin={"l":8,"r":10,"t":10,"b":8}, hovermode=False, xaxis={"rangeslider":{"visible":False},"gridcolor":"#202734","fixedrange":True}, yaxis={"side":"right","gridcolor":"#202734","fixedrange":True}, legend={"orientation":"h","x":0,"y":1.02,"xanchor":"left","yanchor":"bottom"}, font={"family":"Manrope","color":"#eaf0f7"})
     st.markdown(f'<div class="brand-kicker">{snapshot.instrument.code} · STATIC LINE MARKET CHART · {snapshot.interval.upper()}</div><div class="chart-guide"><span>Line chart statis · interaksi dinonaktifkan</span><span>Harga penutupan, MA 50, MA 200</span></div>', unsafe_allow_html=True)
     chart_key = f"market-chart-{snapshot.instrument.code}-{snapshot.interval}-{int(snapshot.fetched_at.timestamp() * 1_000_000)}"
-    st.plotly_chart(figure, use_container_width=True, config=STATIC_CHART_CONFIG, key=chart_key)
+    st.plotly_chart(figure, width="stretch", config=STATIC_CHART_CONFIG, key=chart_key)
 
 
 def _format_number(value) -> str:
@@ -158,7 +158,7 @@ def render_comparison(snapshots: list[MarketSnapshot]) -> None:
     figure.update_layout(template="plotly_dark", paper_bgcolor="#0a0d12", plot_bgcolor="#0a0d12", height=310, margin={"l":8,"r":8,"t":15,"b":8}, hovermode=False, xaxis={"rangeslider":{"visible":False},"gridcolor":"#202734","fixedrange":True}, yaxis={"gridcolor":"#202734","fixedrange":True}, legend={"orientation":"h","y":1.02,"yanchor":"bottom"})
     st.markdown('<div class="brand-kicker">PERBANDINGAN RELATIF · BASIS 100 · LINE CHART STATIS</div>', unsafe_allow_html=True)
     comparison_key = "comparison-chart-" + "-".join(f"{snapshot.instrument.code}-{int(snapshot.fetched_at.timestamp() * 1_000_000)}" for snapshot in snapshots)
-    st.plotly_chart(figure, use_container_width=True, config=STATIC_CHART_CONFIG, key=comparison_key)
+    st.plotly_chart(figure, width="stretch", config=STATIC_CHART_CONFIG, key=comparison_key)
 
 
 def _loader_markup(stage: str, estimate: int, progress: int) -> str:
@@ -256,14 +256,23 @@ def process_question(question: str, loader_slot) -> None:
     if not instruments:
         agenda_reply = build_agenda_reply(question)
         unknown_candidates = detect_unknown_instrument_candidates(question)
-        st.session_state.messages.append(_message("assistant", agenda_reply or build_unknown_input_reply(question, unknown_candidates)))
+        prompt_chips = agenda_clarification_prompts(question) if agenda_reply else []
+        st.session_state.messages.append(_message("assistant", agenda_reply or build_unknown_input_reply(question, unknown_candidates), prompt_chips=prompt_chips))
+        return
+    if len(instruments) > 2:
+        codes = [instrument.code for instrument in instruments]
+        st.session_state.messages.append(_message(
+            "assistant",
+            build_multi_instrument_clarification(codes),
+            prompt_chips=multi_instrument_clarification_prompts(codes),
+        ))
         return
     action_words = ("analisa", "analyze", "scan", "bandingkan", "compare", "tren", "trend", "risiko", "risk", "indikator", "sinyal", "signal", "entry", "level", "fundamental", "forecast", "prediksi")
     if len(instruments) == 1 and not detect_economic_agenda(question) and not any(word in question.casefold() for word in action_words) and not re.search(r"\b(?:m15|m30|h\d{1,2}|d1|w1|mn)\b", question.casefold()):
         st.session_state.pending_instrument_confirmation = {"instrument": instruments[0].code, "interval": interval}
         st.session_state.messages.append(_message("assistant", build_instrument_confirmation(instruments[0].code)))
         return
-    started_at, snapshots, fundamentals = time.monotonic(), [], {}
+    started_at, snapshots, fundamentals, unavailable_codes = time.monotonic(), [], {}, []
     stages = [("01 / 05 · MENDETEKSI INSTRUMEN, TIMEFRAME, DAN KONTEKS", 50, 9, 1.2), ("02 / 05 · MENARIK OHLCV PUBLIK DAN MEMVALIDASI CANDLE", 46, 27, 5.0), ("03 / 05 · MEMINDAI FUNDAMENTAL DAN KALENDER EKONOMI PUBLIK", 42, 49, 8.0), ("04 / 05 · MENGHITUNG 10 INDIKATOR PYTHON DAN REGIME PASAR", 38, 72, 10.5), ("05 / 05 · MENYUSUN NARASI DAN MEMBANGUN LINE CHART", 34, 92, MIN_ANALYSIS_SECONDS)]
     for index, (stage, estimate, progress, target_seconds) in enumerate(stages):
         loader_slot.markdown(_loader_markup(stage, estimate, progress), unsafe_allow_html=True)
@@ -271,8 +280,8 @@ def process_question(question: str, loader_slot) -> None:
             for instrument in instruments[:2]:
                 try:
                     snapshots.append(fetch_market_snapshot(instrument, interval=interval))
-                except RuntimeError as exc:
-                    st.warning(f"{instrument.code}: {exc}")
+                except RuntimeError:
+                    unavailable_codes.append(instrument.code)
         elif index == 2:
             for snapshot in snapshots:
                 fundamentals[snapshot.instrument.code] = fetch_fundamental_context(snapshot.instrument)
@@ -281,9 +290,16 @@ def process_question(question: str, loader_slot) -> None:
     time.sleep(.35)
     loader_slot.empty()
     if not snapshots:
-        st.session_state.messages.append(_message("assistant", "Sumber publik belum mengembalikan data memadai. Aero AI tidak akan membuat angka pengganti. Silakan ulangi beberapa saat lagi atau coba instrumen lain."))
+        st.session_state.messages.append(_message("assistant", build_source_unavailable_reply(unavailable_codes or [instrument.code for instrument in instruments])))
         return
-    response = _message("assistant", build_reply(question, snapshots[0], fundamentals.get(snapshots[0].instrument.code, [])), snapshots=snapshots, fundamentals=fundamentals, animate=True)
+    response = _message(
+        "assistant",
+        build_reply(question, snapshots[0], fundamentals.get(snapshots[0].instrument.code, [])),
+        snapshots=snapshots,
+        fundamentals=fundamentals,
+        prompt_chips=agenda_clarification_prompts(question, snapshots[0].instrument.code),
+        animate=True,
+    )
     st.session_state.messages.append(response)
     st.session_state.latest_response_id = response["id"]
     update_context_thread(snapshots[0].instrument.code, snapshots[0].interval, question)
@@ -294,14 +310,20 @@ def render_analysis_message(message: dict) -> None:
     snapshots: list[MarketSnapshot] = message.get("snapshots", [])
     fundamentals: dict[str, list[FundamentalSnapshot]] = message.get("fundamentals", {})
     if not snapshots:
+        prompts = message.get("prompt_chips") or []
+        if prompts:
+            st.markdown('<div class="brand-kicker" style="margin-top:18px">KLARIFIKASI FOKUS · GESER DAN PILIH</div>', unsafe_allow_html=True)
+            render_prompt_carousel(prompts, scope=f"followup_{message['id']}")
         return
     if len(snapshots) > 1:
         render_comparison(snapshots)
     for snapshot in snapshots:
         render_snapshot(snapshot, fundamentals.get(snapshot.instrument.code, []))
-    st.markdown('<div class="brand-kicker" style="margin-top:18px">PERTANYAAN LANJUTAN · GESER DAN PILIH FOKUS</div>', unsafe_allow_html=True)
+    prompts = message.get("prompt_chips") or follow_up_prompts(snapshots[0].instrument.code, snapshots[0].interval)
+    label = "KLARIFIKASI FOKUS · GESER DAN PILIH" if message.get("prompt_chips") else "PERTANYAAN LANJUTAN · GESER DAN PILIH FOKUS"
+    st.markdown(f'<div class="brand-kicker" style="margin-top:18px">{label}</div>', unsafe_allow_html=True)
     render_prompt_carousel(
-        follow_up_prompts(snapshots[0].instrument.code, snapshots[0].interval),
+        prompts,
         scope=f"followup_{message['id']}",
     )
     if message["id"] == st.session_state.get("latest_response_id"):
@@ -377,7 +399,7 @@ def render_prompt_carousel(prompts: list[str], scope: str) -> None:
         carousel.button(
             prompt,
             key=f"{scope}_{index}_{prompt}",
-            use_container_width=False,
+            width="content",
             on_click=queue_chip_question,
             args=(prompt, scope),
         )
@@ -392,7 +414,7 @@ def render_input_panel() -> None:
         render_prompt_carousel(st.session_state.opening_suggestions, scope="opening")
     with st.form("aero_question_form", clear_on_submit=True):
         question = st.text_area("Tanyakan analisis market", placeholder="Contoh: Analisa XAGUSD di M15, jelaskan NFP, atau cek Retail Sales untuk DXY", height=68, label_visibility="collapsed")
-        submitted = st.form_submit_button("Mulai pemindaian Aero AI", use_container_width=True)
+        submitted = st.form_submit_button("Mulai pemindaian Aero AI", width="stretch")
     st.markdown('</div>', unsafe_allow_html=True)
     if submitted and question.strip():
         queue_question(question.strip())
