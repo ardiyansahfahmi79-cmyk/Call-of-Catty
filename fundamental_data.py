@@ -11,6 +11,7 @@ import csv
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from io import StringIO
+import re
 import time
 from typing import Any
 
@@ -21,6 +22,16 @@ from market_data import Instrument
 
 REQUEST_TIMEOUT = 8
 _CACHE: dict[str, tuple[float, list["FundamentalSnapshot"]]] = {}
+NY_FED_SOFR_URL = "https://markets.newyorkfed.org/api/rates/secured/sofr/last/1.json"
+NY_FED_EFFR_URL = "https://markets.newyorkfed.org/api/rates/unsecured/effr/last/1.json"
+EIA_PETROLEUM_TABLE_URL = "https://ir.eia.gov/wpsr/table1.csv"
+EIA_NATURAL_GAS_URL = "https://ir.eia.gov/ngs/wngsr.txt"
+CFTC_DISAGGREGATED_URL = "https://www.cftc.gov/dea/newcot/f_disagg.txt"
+CFTC_CONTRACTS = {
+    "XAUUSD": "GOLD - COMMODITY EXCHANGE INC.",
+    "XAGUSD": "SILVER - COMMODITY EXCHANGE INC.",
+    "WTI": "WTI FINANCIAL CRUDE OIL - NEW YORK MERCANTILE EXCHANGE",
+}
 
 
 @dataclass(frozen=True)
@@ -172,6 +183,150 @@ def _latest_fred_macro(instrument_code: str) -> list[FundamentalSnapshot]:
     return _cached("fred_market_context", 15 * 60, load)
 
 
+def _latest_new_york_fed_rates(instrument_code: str) -> list[FundamentalSnapshot]:
+    """Ambil reference rates resmi AS untuk Macro Pulse tanpa membuat proyeksi kebijakan."""
+    definitions = (
+        ("SOFR", "SOFR / Secured Overnight Financing Rate", NY_FED_SOFR_URL, "Kondisi pendanaan beragunan AS"),
+        ("EFFR", "EFFR / Effective Federal Funds Rate", NY_FED_EFFR_URL, "Suku bunga efektif overnight AS"),
+    )
+
+    def load() -> list[FundamentalSnapshot]:
+        snapshots: list[FundamentalSnapshot] = []
+        fetched_at = _utc_now()
+        for expected_type, title, source_url, category in definitions:
+            payload = _get_json(source_url)
+            point = next((row for row in payload.get("refRates", []) if str(row.get("type", "")).upper() == expected_type), None)
+            if not point or point.get("percentRate") is None or not point.get("effectiveDate"):
+                continue
+            snapshots.append(FundamentalSnapshot(
+                category="Macro Pulse AS",
+                instrument_code=instrument_code,
+                title=title,
+                value=str(point["percentRate"]),
+                unit="%",
+                observed_at=_to_datetime(str(point["effectiveDate"])),
+                released_at=None,
+                fetched_at=fetched_at,
+                source_name="Federal Reserve Bank of New York Markets API",
+                source_url=source_url,
+                freshness="Reference rate harian resmi; bukan proyeksi kebijakan berikutnya.",
+                warning=category + ". Gunakan sebagai konteks, bukan sinyal arah harga tunggal.",
+            ))
+        return snapshots
+
+    return _cached("new_york_fed_reference_rates", 15 * 60, load)
+
+
+def _parse_us_short_date(value: str) -> datetime:
+    return datetime.strptime(value.strip(), "%m/%d/%y").replace(tzinfo=timezone.utc)
+
+
+def _eia_petroleum_inventory(instrument_code: str) -> list[FundamentalSnapshot]:
+    if instrument_code not in {"WTI", "BRENT", "XBRUSD"}:
+        return []
+
+    def load() -> list[FundamentalSnapshot]:
+        rows = list(csv.DictReader(StringIO(_get_text(EIA_PETROLEUM_TABLE_URL))))
+        if not rows or not rows[0]:
+            return []
+        fields = list(rows[0].keys())
+        if len(fields) < 4:
+            return []
+        current_date = fields[1]
+        commercial = next((row for row in rows if str(row.get(fields[0], "")).strip() == "Commercial (Excluding SPR)"), None)
+        if not commercial or not commercial.get(current_date):
+            return []
+        weekly_change = str(commercial.get("Difference", "")).strip()
+        warning = "Perubahan mingguan tidak tersedia dari tabel sumber." if not weekly_change else f"Perubahan mingguan sumber: {weekly_change} juta barel. Inventori mingguan bukan proyeksi harga minyak."
+        return [FundamentalSnapshot(
+            category="Inventori energi AS",
+            instrument_code=instrument_code,
+            title="Inventori minyak mentah komersial AS (ex-SPR)",
+            value=str(commercial[current_date]).strip(),
+            unit="juta barel",
+            observed_at=_parse_us_short_date(current_date),
+            released_at=None,
+            fetched_at=_utc_now(),
+            source_name="U.S. Energy Information Administration · WPSR Table 1",
+            source_url=EIA_PETROLEUM_TABLE_URL,
+            freshness="Laporan mingguan EIA; bukan data intraday.",
+            warning=warning,
+        )]
+
+    return _cached("eia_petroleum_inventory", 60 * 60, load)
+
+
+def _eia_natural_gas_storage(instrument_code: str) -> list[FundamentalSnapshot]:
+    if instrument_code != "XNGUSD":
+        return []
+
+    def load() -> list[FundamentalSnapshot]:
+        text = _get_text(EIA_NATURAL_GAS_URL)
+        total_match = re.search(r"Total \((\d{2}/\d{2}/\d{2})\):\s*([\d,]+)\s*Bcf", text)
+        change_match = re.search(r"Net change:\s*([+-]?[\d,]+)\s*Bcf", text)
+        if not total_match:
+            return []
+        storage_date, total = total_match.groups()
+        change = change_match.group(1) if change_match else "tidak tersedia"
+        return [FundamentalSnapshot(
+            category="Inventori energi AS",
+            instrument_code=instrument_code,
+            title="Gas kerja dalam penyimpanan Lower 48",
+            value=total,
+            unit="Bcf",
+            observed_at=_parse_us_short_date(storage_date),
+            released_at=None,
+            fetched_at=_utc_now(),
+            source_name="U.S. Energy Information Administration · WNGSR",
+            source_url=EIA_NATURAL_GAS_URL,
+            freshness="Laporan mingguan EIA; bukan data intraday.",
+            warning=f"Perubahan mingguan sumber: {change} Bcf. Data storage bukan proyeksi harga gas.",
+        )]
+
+    return _cached("eia_natural_gas_storage", 60 * 60, load)
+
+
+def _cftc_managed_money_positioning(instrument_code: str) -> list[FundamentalSnapshot]:
+    """Ambil positioning mingguan CFTC untuk kontrak yang punya pemetaan eksplisit.
+
+    Kolom 13 dan 14 file Disaggregated Futures-only adalah posisi long dan short
+    Managed Money menurut susunan laporan CFTC. Nilai net dihitung dari dua angka
+    sumber ini, lalu selalu diberi tanggal as-of agar tidak disalahartikan real-time.
+    """
+    contract_name = CFTC_CONTRACTS.get(instrument_code)
+    if not contract_name:
+        return []
+
+    def load() -> list[FundamentalSnapshot]:
+        rows = csv.reader(StringIO(_get_text(CFTC_DISAGGREGATED_URL)))
+        row = next((item for item in rows if item and item[0].strip() == contract_name), None)
+        if not row or len(row) <= 14:
+            return []
+        managed_money_long = int(row[13].strip())
+        managed_money_short = int(row[14].strip())
+        net_position = managed_money_long - managed_money_short
+        observed_at = _to_datetime(row[2].strip())
+        return [FundamentalSnapshot(
+            category="Positioning futures mingguan",
+            instrument_code=instrument_code,
+            title="CFTC Managed Money net positioning",
+            value=f"{net_position:+,}",
+            unit="kontrak",
+            observed_at=observed_at,
+            released_at=None,
+            fetched_at=_utc_now(),
+            source_name="U.S. Commodity Futures Trading Commission · Disaggregated COT",
+            source_url=CFTC_DISAGGREGATED_URL,
+            freshness="Laporan mingguan CFTC; bukan positioning real-time dan dapat memiliki jeda publikasi.",
+            warning=(
+                f"Managed Money long: {managed_money_long:,}; short: {managed_money_short:,}. "
+                "Net positioning bukan rekomendasi transaksi dan tidak menjelaskan semua pelaku pasar."
+            ),
+        )]
+
+    return _cached(f"cftc_disaggregated_{instrument_code}", 6 * 60 * 60, load)
+
+
 def _crypto_structure(instrument_code: str) -> list[FundamentalSnapshot]:
     coin_ids = {"BTCUSD": "bitcoin", "ETHUSD": "ethereum", "SOLUSD": "solana"}
     coin_id = coin_ids.get(instrument_code)
@@ -224,7 +379,11 @@ def _crypto_structure(instrument_code: str) -> list[FundamentalSnapshot]:
 def fetch_fundamental_context(instrument: Instrument) -> list[FundamentalSnapshot]:
     """Ambil konteks fundamental yang relevan tanpa membuat angka pengganti."""
     snapshots: list[FundamentalSnapshot] = []
+    snapshots.extend(_eia_petroleum_inventory(instrument.code))
+    snapshots.extend(_eia_natural_gas_storage(instrument.code))
+    snapshots.extend(_cftc_managed_money_positioning(instrument.code))
     snapshots.extend(_latest_fred_macro(instrument.code))
+    snapshots.extend(_latest_new_york_fed_rates(instrument.code))
     snapshots.extend(_crypto_structure(instrument.code))
     # Makro USD relevan untuk FX, logam, energi, indeks, dan saham; kripto sudah memakai konteks pasar serta struktur asetnya.
     if instrument.code not in {"BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "XRPUSD", "ADAUSD", "DOTUSD", "MATICUSD", "LINKUSD", "AVAXUSD"}:

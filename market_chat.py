@@ -77,6 +77,25 @@ def detect_economic_agenda(question: str) -> AgendaDefinition | None:
     return max(matches, key=lambda agenda: max(len(alias) for alias in agenda[0]), default=None)
 
 
+def _retail_sales_period(question: str) -> str | None:
+    """Klasifikasikan basis Retail Sales yang ditulis pengguna tanpa mengubah nilai kalender."""
+    text = question.casefold()
+    if re.search(r"\b(?:yoy|y\s*[/.-]\s*y|year\s+over\s+year|tahunan)\b", text):
+        return "YoY"
+    if re.search(r"\b(?:mom|m\s*[/.-]\s*m|month\s+over\s+month|monthly|bulanan)\b", text):
+        return "MoM"
+    return None
+
+
+def agenda_display_name(agenda: AgendaDefinition, question: str) -> str:
+    """Tampilkan variasi periode yang benar-benar disebut, terutama Retail Sales."""
+    name = agenda[1]
+    period = _retail_sales_period(question)
+    if period and name in {"Retail Sales", "Core Retail Sales"}:
+        return f"{name} ({period})"
+    return name
+
+
 def infer_intent(question: str) -> str:
     text = question.casefold()
     if detect_economic_agenda(question):
@@ -114,13 +133,19 @@ def _agenda_market_channel(instrument: str | None = None) -> str:
     return "Dampak potensial perlu dibaca bersama instrumen, nilai aktual rilis, revisi data, dan ekspektasi pasar sebelum rilis."
 
 
-def _calendar_section(agenda: AgendaDefinition) -> str:
+def _calendar_section(agenda: AgendaDefinition, question: str = "") -> str:
     events = find_calendar_events(agenda[3])
     if not events:
         return (
             "Kalender publik mingguan belum memuat event yang cocok atau tidak menyediakan konsensus pada saat pemindaian. "
             "Aero AI tidak akan membuat nilai forecast, previous, atau actual pengganti."
         )
+    requested_period = _retail_sales_period(question)
+    if requested_period and agenda[1] in {"Retail Sales", "Core Retail Sales"}:
+        marker = "m/m" if requested_period == "MoM" else "y/y"
+        matching_period = [event for event in events if marker in event.title.casefold()]
+        if matching_period:
+            events = matching_period
     rows: list[str] = []
     for event in events:
         released = event.release_at.strftime("%d %b %Y %H:%M UTC") if event.release_at else "waktu rilis tidak tersedia dari fallback"
@@ -132,6 +157,14 @@ def _calendar_section(agenda: AgendaDefinition) -> str:
             f"Actual: **{actual}**; forecast/konsensus sumber kalender: **{forecast}**; previous: **{previous}**. "
             f"Sumber: [{event.source_name}]({event.source_url})."
         )
+    if requested_period and agenda[1] in {"Retail Sales", "Core Retail Sales"} and not any(
+        ("m/m" if requested_period == "MoM" else "y/y") in event.title.casefold() for event in events
+    ):
+        rows.insert(
+            0,
+            f"Anda meminta **Retail Sales {requested_period}**. Feed kalender tidak menuliskan basis periode secara eksplisit pada judul event yang ditemukan; "
+            "Aero AI menampilkan data sumber apa adanya dan tidak mengasumsikan MoM atau YoY dari nilai tersebut.",
+        )
     return "\n\n".join(rows)
 
 
@@ -140,11 +173,12 @@ def build_agenda_reply(question: str) -> str | None:
     agenda = detect_economic_agenda(question)
     if not agenda:
         return None
-    _, name, context, _ = agenda
+    _, _, context, _ = agenda
+    name = agenda_display_name(agenda, question)
     return (
         f"**KONTEKS AGENDA EKONOMI · {name}**\n\n"
         f"{context} {_agenda_market_channel()}\n\n"
-        f"**DATA KALENDER PUBLIK**\n\n{_calendar_section(agenda)}\n\n"
+        f"**DATA KALENDER PUBLIK**\n\n{_calendar_section(agenda, question)}\n\n"
         "Forecast atau consensus di atas adalah nilai yang tersedia dari sumber kalender, bukan prediksi yang dibuat Aero AI. Untuk memindai respons harga, sebutkan instrumen dan timeframe, misalnya **Analisa XAUUSD pada H1 setelah NFP**.\n\n"
         "**BATAS ANALISIS**\n\nIni adalah konteks riset dan edukasi, bukan nasihat finansial personal atau instruksi transaksi."
     )
@@ -254,8 +288,9 @@ def build_reply(question: str, snapshot: MarketSnapshot, fundamentals: list[Fund
     agenda = detect_economic_agenda(question)
     agenda_section = ""
     if agenda:
-        _, name, context, _ = agenda
-        agenda_section = f"\n\n**KONTEKS AGENDA EKONOMI · {name}**\n\n{context} {_agenda_market_channel(snapshot.instrument.code)}\n\n**DATA KALENDER PUBLIK**\n\n{_calendar_section(agenda)}"
+        _, _, context, _ = agenda
+        name = agenda_display_name(agenda, question)
+        agenda_section = f"\n\n**KONTEKS AGENDA EKONOMI · {name}**\n\n{context} {_agenda_market_channel(snapshot.instrument.code)}\n\n**DATA KALENDER PUBLIK**\n\n{_calendar_section(agenda, question)}"
     scenario_section = f"\n\n**SKENARIO LEVEL TEKNIKAL**\n\n{_entry_scenario(data)}" if intent == "levels_entry" else ""
     return (
         f"**STATUS PASAR · {snapshot.instrument.code}**\n\n"
@@ -281,6 +316,8 @@ def follow_up_prompts(instrument: str, interval: str | None = None) -> list[str]
         f"Jelaskan dampak NFP untuk {instrument}{suffix}",
         f"Jelaskan dampak CPI untuk {instrument}{suffix}",
         f"Jelaskan dampak Retail Sales untuk {instrument}{suffix}",
+        f"Jelaskan Retail Sales MoM untuk {instrument}{suffix}",
+        f"Jelaskan Retail Sales YoY untuk {instrument}{suffix}",
         f"Jelaskan konteks FOMC untuk {instrument}{suffix}",
         f"Nilai momentum dan konfluensi indikator {instrument}{suffix}",
         f"Rangkum konteks fundamental publik untuk {instrument}{suffix}",
