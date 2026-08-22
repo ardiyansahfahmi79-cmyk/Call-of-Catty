@@ -67,15 +67,15 @@ ECONOMIC_AGENDAS: tuple[AgendaDefinition, ...] = (
 )
 
 _CURRENCY_COUNTRY_ALIASES: dict[str, tuple[str, ...]] = {
-    "USD": ("as", "us", "usa", "u s", "u s a", "amerika", "amerika serikat", "american", "united states", "united states of america"),
-    "EUR": ("euro area", "eurozone", "zona euro", "eropa", "europe"),
-    "CAD": ("kanada", "canada"),
-    "GBP": ("inggris", "britania", "united kingdom", "uk"),
-    "JPY": ("jepang", "japan"),
-    "AUD": ("australia",),
-    "CHF": ("swiss", "switzerland", "swis"),
-    "NZD": ("selandia baru", "new zealand"),
-    "IDR": ("indonesia", "indonesian"),
+    "USD": ("usd", "as", "us", "usa", "u s", "u s a", "amerika", "amerika serikat", "america", "american", "united states", "united states of america"),
+    "EUR": ("eur", "eu", "e u", "euro", "euro area", "eurozone", "zona euro", "uni eropa", "european union", "eropa", "europe"),
+    "CAD": ("cad", "kanada", "canada", "canadian"),
+    "GBP": ("gbp", "uk", "u k", "inggris", "england", "britania", "british", "united kingdom"),
+    "JPY": ("jpy", "jepang", "japan", "japanese", "yen"),
+    "AUD": ("aud", "australia", "australian", "aussie"),
+    "CHF": ("chf", "swiss", "switzerland", "swis", "franc"),
+    "NZD": ("nzd", "nz", "n z", "selandia baru", "new zealand", "kiwi"),
+    "IDR": ("idr", "rupiah", "indonesia", "indonesian"),
 }
 _CURRENCY_DISPLAY_NAMES = {
     "USD": "AS", "EUR": "Euro Area", "CAD": "Kanada", "GBP": "Inggris", "JPY": "Jepang",
