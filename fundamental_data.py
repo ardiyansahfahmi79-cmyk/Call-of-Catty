@@ -40,6 +40,10 @@ WORLD_BANK_COUNTRY_BY_CURRENCY = {
 ECB_EURUSD_URL = "https://data-api.ecb.europa.eu/service/data/EXR/D.USD.EUR.SP00.A?format=csvdata&lastNObservations=1"
 BOC_USDCAD_URL = "https://www.bankofcanada.ca/valet/observations/FXUSDCAD/json?recent=1"
 RBA_AUDUSD_URL = "https://www.rba.gov.au/statistics/tables/csv/f11.1-data.csv"
+BOJ_TANKAN_ENDPOINT = "https://www.stat-search.boj.or.jp/api/v1/getDataCode"
+BOJ_TANKAN_SERIES_CODE = "TK99F1000601GCQ01000"
+BI_HOME_URL = "https://www.bi.go.id/en/default.aspx"
+BOE_BANK_RATE_ENDPOINT = "https://www.bankofengland.co.uk/boeapps/database/_iadb-fromshowcolumns.asp"
 
 
 @dataclass(frozen=True)
@@ -90,6 +94,16 @@ def _get_text(url: str) -> str:
         url,
         timeout=REQUEST_TIMEOUT,
         headers={"Accept": "text/csv", "Accept-Encoding": "identity", "User-Agent": "AeroAI-Research/1.0"},
+    )
+    response.raise_for_status()
+    return response.text
+
+
+def _get_html(url: str) -> str:
+    response = requests.get(
+        url,
+        timeout=REQUEST_TIMEOUT,
+        headers={"Accept": "text/html", "User-Agent": "AeroAI-Research/1.0"},
     )
     response.raise_for_status()
     return response.text
@@ -242,6 +256,122 @@ def _latest_rba_audusd_reference(instrument_code: str) -> list[FundamentalSnapsh
             warning="Nilai indikatif RBA dapat berbeda dari harga Yahoo Finance pada saat pemindaian.",
         )]
     return _cached("rba_audusd_reference", 6 * 60 * 60, load)
+
+
+def _latest_boj_tankan(instrument: Instrument) -> list[FundamentalSnapshot]:
+    """Ambil satu seri Tankan resmi yang eksplisit sebagai konteks kuartalan JPY."""
+    if "JPY" not in instrument_economic_currencies(instrument.code):
+        return []
+
+    def load() -> list[FundamentalSnapshot]:
+        now = _utc_now()
+        current_quarter = max(1, min(4, (now.month - 1) // 3 + 1))
+        end_period = f"{now.year}{current_quarter:02d}"
+        params = {
+            "format": "json", "lang": "en", "db": "CO", "startDate": "202401",
+            "endDate": end_period, "code": BOJ_TANKAN_SERIES_CODE,
+        }
+        payload = _get_json(BOJ_TANKAN_ENDPOINT, params)
+        if int(payload.get("STATUS", 0)) != 200 or not payload.get("RESULTSET"):
+            return []
+        series = payload["RESULTSET"][0]
+        dates = series.get("VALUES", {}).get("SURVEY_DATES", [])
+        values = series.get("VALUES", {}).get("VALUES", [])
+        point = next(((period, value) for period, value in zip(reversed(dates), reversed(values)) if value is not None), None)
+        if not point:
+            return []
+        period, value = point
+        year, quarter = int(str(period)[:4]), int(str(period)[4:])
+        if quarter not in {1, 2, 3, 4}:
+            return []
+        observed_at = datetime(year, quarter * 3, 1, tzinfo=timezone.utc)
+        source_url = (
+            f"{BOJ_TANKAN_ENDPOINT}?format=json&lang=en&db=CO&startDate=202401&"
+            f"endDate={end_period}&code={BOJ_TANKAN_SERIES_CODE}"
+        )
+        return [FundamentalSnapshot(
+            category="Makro Jepang",
+            instrument_code=instrument.code,
+            title="BOJ Tankan · kondisi bisnis manufaktur perusahaan besar",
+            value=str(value),
+            unit=str(series.get("UNIT", "% points")),
+            observed_at=observed_at,
+            released_at=None,
+            fetched_at=now,
+            source_name="Bank of Japan Time-Series Data Search API",
+            source_url=source_url,
+            freshness="Seri kuartalan resmi Bank of Japan; bukan indikator harga intraday.",
+            warning="Tankan menggambarkan survei kondisi bisnis. Nilainya tidak menyimpulkan arah JPY atau harga instrumen secara pasti.",
+        )]
+    return _cached("boj_tankan_manufacturing", 12 * 60 * 60, load)
+
+
+def _latest_bi_policy_rate(instrument: Instrument) -> list[FundamentalSnapshot]:
+    """Baca BI-Rate dari kartu indikator resmi, dengan parser defensif atas halaman publik."""
+    if "IDR" not in instrument_economic_currencies(instrument.code):
+        return []
+
+    def load() -> list[FundamentalSnapshot]:
+        page = _get_html(BI_HOME_URL)
+        pattern = (
+            r"BI-Rate\s*</p>\s*<h2>\s*([0-9]+(?:[.,][0-9]+)?)%\s*</h2>\s*"
+            r"<p>\s*([0-9]{2}-[A-Za-z]{3}-[0-9]{4})\s*</p>"
+        )
+        match = re.search(pattern, page, flags=re.IGNORECASE)
+        if not match:
+            return []
+        raw_value, raw_date = match.groups()
+        observed_at = datetime.strptime(raw_date, "%d-%b-%Y").replace(tzinfo=timezone.utc)
+        return [FundamentalSnapshot(
+            category="Makro Indonesia",
+            instrument_code=instrument.code,
+            title="BI-Rate",
+            value=raw_value.replace(",", "."),
+            unit="%",
+            observed_at=observed_at,
+            released_at=None,
+            fetched_at=_utc_now(),
+            source_name="Bank Indonesia",
+            source_url=BI_HOME_URL,
+            freshness="Kartu indikator publik Bank Indonesia; kebijakan dapat berubah pada rapat berikutnya.",
+            warning="BI-Rate adalah konteks kebijakan moneter IDR, bukan sinyal arah tunggal IHSG atau saham IDX.",
+        )]
+    return _cached("bank_indonesia_policy_rate", 6 * 60 * 60, load)
+
+
+def _latest_boe_policy_rate(instrument: Instrument) -> list[FundamentalSnapshot]:
+    """Ambil Bank Rate resmi Inggris dari ekspor CSV database Bank of England."""
+    if "GBP" not in instrument_economic_currencies(instrument.code):
+        return []
+
+    def load() -> list[FundamentalSnapshot]:
+        now = _utc_now()
+        date_from = f"01/Jan/{now.year - 2}"
+        date_to = now.strftime("%d/%b/%Y")
+        source_url = (
+            f"{BOE_BANK_RATE_ENDPOINT}?csv.x=yes&Datefrom={date_from}&Dateto={date_to}&"
+            "SeriesCodes=IUDBEDR&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N"
+        )
+        rows = list(csv.DictReader(StringIO(_get_text(source_url))))
+        point = next((row for row in reversed(rows) if row.get("DATE") and row.get("IUDBEDR")), None)
+        if not point:
+            return []
+        observed_at = datetime.strptime(point["DATE"], "%d %b %Y").replace(tzinfo=timezone.utc)
+        return [FundamentalSnapshot(
+            category="Makro Inggris",
+            instrument_code=instrument.code,
+            title="Bank Rate",
+            value=point["IUDBEDR"],
+            unit="%",
+            observed_at=observed_at,
+            released_at=None,
+            fetched_at=now,
+            source_name="Bank of England Database",
+            source_url=source_url,
+            freshness="Seri kebijakan resmi Inggris; bukan proyeksi keputusan Bank of England berikutnya.",
+            warning="Bank Rate adalah konteks GBP, bukan instruksi transaksi atau prediksi arah harga.",
+        )]
+    return _cached("bank_of_england_bank_rate", 6 * 60 * 60, load)
 
 
 def _latest_fred_macro(instrument_code: str) -> list[FundamentalSnapshot]:
@@ -487,6 +617,9 @@ def fetch_fundamental_context(instrument: Instrument) -> list[FundamentalSnapsho
     snapshots.extend(_latest_ecb_eurusd_reference(instrument.code))
     snapshots.extend(_latest_boc_usdcad_reference(instrument.code))
     snapshots.extend(_latest_rba_audusd_reference(instrument.code))
+    snapshots.extend(_latest_boj_tankan(instrument))
+    snapshots.extend(_latest_bi_policy_rate(instrument))
+    snapshots.extend(_latest_boe_policy_rate(instrument))
     # Pengangguran BLS tetap dibatasi pada aset yang berdenominasi/berkaitan USD.
     if instrument.code not in {"BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "XRPUSD", "ADAUSD", "DOTUSD", "MATICUSD", "LINKUSD", "AVAXUSD"}:
         snapshots.extend(_latest_us_unemployment(instrument.code))
