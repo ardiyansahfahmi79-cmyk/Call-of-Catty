@@ -56,6 +56,7 @@ def init_state() -> None:
         "typed_message_ids": set(),
         "pending_question": None,
         "opening_suggestions": None,
+        "stable_prompt_chips": {},
         "pending_instrument_confirmation": None,
     }
     for key, value in defaults.items():
@@ -293,13 +294,24 @@ def select_prompt_chips(prompts: list[str]) -> list[str]:
     return random.sample(prompts, k=min(3, len(prompts)))
 
 
+def select_stable_prompt_chips(cache: dict, scope: str, prompts: list[str]) -> list[str]:
+    """Pertahankan urutan tiga chip sampai pool prompt untuk scope tersebut berubah."""
+    prompt_pool = tuple(prompts)
+    cached = cache.get(scope)
+    if cached and cached.get("pool") == prompt_pool:
+        return list(cached["selected"])
+    selected = select_prompt_chips(prompts)
+    cache[scope] = {"pool": prompt_pool, "selected": tuple(selected)}
+    return selected
+
+
 def should_show_opening_suggestions(messages: list[dict]) -> bool:
     return not any(message["role"] == "user" for message in messages)
 
 
 def render_prompt_carousel(prompts: list[str], scope: str) -> None:
     """Render maksimal tiga prompt sebagai chip horizontal yang dapat digeser dan diklik."""
-    selected = select_prompt_chips(prompts)
+    selected = select_stable_prompt_chips(st.session_state.stable_prompt_chips, scope, prompts)
     carousel = st.container(horizontal=True, wrap=False, horizontal_alignment="left", gap="small", key=f"chip-carousel-{scope}")
     for index, prompt in enumerate(selected):
         if carousel.button(prompt, key=f"{scope}_{index}_{prompt}", use_container_width=False):
