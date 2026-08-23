@@ -148,16 +148,22 @@ def detect_instruments(question: str) -> list[Instrument]:
         left, right = instrument.code[:3].casefold(), instrument.code[3:].casefold()
         pattern = rf"(?<![a-z0-9]){left}\s*[/_\- ]?\s*{right}(?![a-z0-9])"
         normalized = re.sub(pattern, instrument.code.casefold(), normalized)
-    matches: list[tuple[int, Instrument]] = []
+    matches: list[tuple[int, int, Instrument]] = []
     for instrument in INSTRUMENTS:
-        for alias in instrument.aliases:
-            matched = re.search(rf"(?<![a-z0-9]){re.escape(alias.casefold())}(?![a-z0-9])", normalized)
-            if matched:
-                matches.append((matched.start(), instrument))
-                break
-    matches.sort(key=lambda item: item[0])
+        alias_matches = [
+            (matched.start(), -len(alias))
+            for alias in instrument.aliases
+            if (matched := re.search(rf"(?<![a-z0-9]){re.escape(alias.casefold())}(?![a-z0-9])", normalized))
+        ]
+        if alias_matches:
+            # Pilih alias terawal; bila posisi sama, ambil frase terpanjang.
+            # Ini menjaga `gold eur` dan `minyak brent` lebih spesifik daripada
+            # alias umum `gold` atau `minyak`.
+            start, specificity = min(alias_matches)
+            matches.append((start, specificity, instrument))
+    matches.sort(key=lambda item: (item[0], item[1]))
     unique: list[Instrument] = []
-    for _, instrument in matches:
+    for _, _, instrument in matches:
         if instrument not in unique:
             unique.append(instrument)
     return unique

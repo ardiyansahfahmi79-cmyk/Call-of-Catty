@@ -11,6 +11,7 @@ from market_intelligence import (
     evidence_section,
     historical_section,
     local_evaluation_section,
+    ml_regime_section,
     macro_router_section,
     market_structure_quality_section,
     comparative_regime_replay_section,
@@ -561,6 +562,7 @@ def build_reply(question: str, snapshot: MarketSnapshot, fundamentals: list[Fund
     macro_section = macro_router_section(snapshot.instrument.code)
     trust_section = evidence_section(snapshot, fundamentals, calendar_fetch_status().state)
     regime_summary = regime_section(snapshot)
+    ml_regime_summary = ml_regime_section(snapshot)
     history_summary = historical_section(snapshot)
     source_health_summary = source_health_section(snapshot, fundamentals, calendar_fetch_status().state)
     provenance_summary = provenance_section(snapshot, fundamentals, calendar_fetch_status().state)
@@ -577,6 +579,7 @@ def build_reply(question: str, snapshot: MarketSnapshot, fundamentals: list[Fund
         f"**STRUKTUR DAN MOMENTUM**\n\n{_trend_description(data)} RSI(14) berada pada **{rsi:.1f}**, ADX(14) pada **{adx:.1f}**, dan relative volume pada **{volume:.2f}x**. ADX mengukur kekuatan tren, bukan arahnya; volume relatif bernilai netral bila penyedia tidak menyediakan volume yang bermakna.\n\n"
         f"{quality_summary}\n\n"
         f"{regime_summary}\n\n"
+        f"{ml_regime_summary}\n\n"
         f"{macro_section}\n\n"
         f"{cross_asset_summary}\n\n"
         f"{trust_section}\n\n"

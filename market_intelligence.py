@@ -17,6 +17,7 @@ import pandas as pd
 
 from fundamental_data import FundamentalSnapshot
 from market_data import MarketSnapshot, instrument_economic_currencies
+from market_regime_ml import MLRegimeAssessment, classify_ml_regime
 
 
 CURRENCY_DISPLAY_NAMES = {
@@ -584,6 +585,36 @@ def regime_section(snapshot: MarketSnapshot) -> str:
         "**MARKET REGIME ENGINE**\n\n"
         f"Regime saat ini: **{regime.label}** dengan volatilitas **{regime.volatility_label}**. "
         f"Dasar pembacaan: {regime.rationale}. Label ini menggambarkan kondisi snapshot dan harus dievaluasi ulang ketika candle baru masuk."
+    )
+
+
+def ml_regime_assessment(snapshot: MarketSnapshot) -> MLRegimeAssessment:
+    """Jalankan classifier hanya bila quality gate snapshot telah memenuhi ambang."""
+    baseline = classify_market_regime(snapshot)
+    quality = market_structure_quality(snapshot)
+    return classify_ml_regime(snapshot, baseline.label, quality.score)
+
+
+def ml_regime_section(snapshot: MarketSnapshot) -> str:
+    """Sajikan provenance model dan disagreement tanpa mengubahnya menjadi sinyal transaksi."""
+    assessment = ml_regime_assessment(snapshot)
+    if assessment.state != "TERSEDIA":
+        return (
+            "**ML REGIME CONTEXT · SHADOW MODE**\n\n"
+            f"Klasifikasi ML tidak diterapkan: **{assessment.state}**. {' '.join(assessment.notes)} "
+            "Market Regime Engine berbasis aturan tetap menjadi pembacaan utama; Aero AI tidak mengganti kekosongan data dengan label model."
+        )
+    confidence = assessment.confidence or 0.0
+    accuracy = assessment.balanced_accuracy or 0.0
+    cutoff = assessment.training_end_at.strftime("%d %b %Y %H:%M UTC") if assessment.training_end_at else "tidak tersedia"
+    return (
+        "**ML REGIME CONTEXT · SHADOW MODE**\n\n"
+        f"Classifier lokal **{assessment.model_version}** membaca kondisi candle terakhir sebagai **{assessment.regime_label}** dengan confidence kelas **{confidence:.0%}**. "
+        f"Dibanding Market Regime Engine, hasilnya **{assessment.agreement}**. Validasi temporal memakai **{assessment.test_rows}** observasi uji "
+        f"dengan balanced accuracy rata-rata **{accuracy:.0%}** terhadap label regime kausal. Dataset: **{assessment.dataset_id}**; "
+        f"candle pembelajaran berhenti pada **{cutoff}** dan menyisakan censor gap **{assessment.censor_gap_candles} candle**. "
+        "Confidence ini adalah keyakinan klasifikasi keadaan, bukan probabilitas harga naik/turun atau peluang profit. "
+        "Jika hasil model berbeda dari baseline aturan, Aero AI mempertahankan konflik tersebut sebagai alasan kehati-hatian, bukan memilih sinyal yang paling tegas."
     )
 
 
