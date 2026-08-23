@@ -464,7 +464,7 @@ def build_unknown_input_reply(question: str, unknown_candidates: list[str] | Non
             "Jika yang Anda maksud emas, tulis **emas**, **gold**, atau **XAUUSD**; jika yang dimaksud instrumen lain, tulis kode lengkapnya. "
             "Aero AI tidak akan menebak pair dari singkatan ambigu agar tidak mengambil data market yang salah."
         )
-    if re.search(r"\b(?:entry|stop\s*loss|take\s*profit|tp\s*[123]|sl)\b", question.casefold()):
+    if re.search(r"\b(?:entry|stop\s*loss|take\s*profit|tp\s*[123]|sl|risk\s*(?:reward|to\s*reward))\b", question.casefold()):
         return (
             "Untuk menyusun area Entry, SL, TP1, TP2, dan TP3 secara bersyarat, sebutkan instrumen dan bila perlu timeframe. "
             "Contoh: **Tentukan Entry, SL, TP1 TP2 TP3 untuk XAUUSD pada H1**. "
