@@ -26,7 +26,7 @@ class Instrument:
 
 
 INSTRUMENTS: tuple[Instrument, ...] = (
-    Instrument("XAUUSD", "Gold / US Dollar", "GC=F", "Komoditas", ("xauusd", "xau/usd", "gold", "emas", "xau"), "Proxy COMEX Gold Futures (GC=F), bukan spot broker."),
+    Instrument("XAUUSD", "Gold / US Dollar", "GC=F", "Komoditas", ("xauusd", "xau/usd", "gold", "emas", "emas dunia", "harga emas", "gold price", "xau"), "Proxy COMEX Gold Futures (GC=F), bukan spot broker."),
     Instrument("XAGUSD", "Silver / US Dollar", "SI=F", "Komoditas", ("xagusd", "xag/usd", "silver", "perak", "xag"), "Proxy COMEX Silver Futures (SI=F)."),
     Instrument("XAUEUR", "Gold / Euro", "XAUEUR=X", "Komoditas", ("xaueur", "xau/eur", "gold eur", "emas euro"), "Quote publik XAUEUR; ketersediaan bergantung pada Yahoo Finance."),
     Instrument("XAGEUR", "Silver / Euro", "XAGEUR=X", "Komoditas", ("xageur", "xag/eur", "silver eur", "perak euro"), "Quote publik XAGEUR; ketersediaan bergantung pada Yahoo Finance."),
@@ -140,6 +140,14 @@ class MarketSnapshot:
 def detect_instruments(question: str) -> list[Instrument]:
     """Temukan instrumen dari bahasa alami tanpa bergantung pada terminal lain."""
     normalized = re.sub(r"[^a-z0-9/=^&$\- ]", " ", question.casefold())
+    # Menyatukan hanya pasangan kode yang memang terdaftar, sehingga `xau usd`,
+    # `EUR / USD`, dan kapitalisasi apa pun terbaca tanpa menggabungkan kata umum.
+    for instrument in INSTRUMENTS:
+        if len(instrument.code) != 6 or not instrument.code.isalnum():
+            continue
+        left, right = instrument.code[:3].casefold(), instrument.code[3:].casefold()
+        pattern = rf"(?<![a-z0-9]){left}\s*[/_\- ]?\s*{right}(?![a-z0-9])"
+        normalized = re.sub(pattern, instrument.code.casefold(), normalized)
     matches: list[tuple[int, Instrument]] = []
     for instrument in INSTRUMENTS:
         for alias in instrument.aliases:

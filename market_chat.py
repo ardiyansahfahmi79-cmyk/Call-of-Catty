@@ -400,9 +400,20 @@ def build_unknown_input_reply(question: str, unknown_candidates: list[str] | Non
         )
     if re.fullmatch(r"\s*(?:halo|hai|hello|hi|selamat\s+(?:pagi|siang|sore|malam))(?:\s+(?:aero|aero\s+ai))?\s*[!.,]?\s*", question.casefold()):
         return (
-            "Halo, saya **Aero AI**. Saya adalah sistem pemindaian market berbasis data yang masih dalam tahap pengembangan, "
+            "Halo, saya **Aero AI**. Ada instrumen atau agenda market yang ingin Anda analisa? Saya adalah sistem pemindaian market berbasis data yang masih dalam tahap pengembangan, "
             "dengan fokus pada instrumen, timeframe, indikator, risiko, dan agenda ekonomi—bukan percakapan umum. "
             "Untuk memulai, coba tulis **Analisa EURUSD sekarang**, **Analisa XAUUSD pada H1**, **Jelaskan CPI AS**, atau **Retail Sales untuk DXY**."
+        )
+    if re.search(r"\b(?:siapa|siapakah|who)\b.*\b(?:menciptakan(?:mu)?|membuat(?:mu)?|mengembangkan(?:mu)?|pembuat(?:mu)?|creator|created|developer)\b", question.casefold()):
+        return (
+            "Aero AI dikembangkan oleh **DynamiHatch** sebagai sistem market-intelligence berbasis data. "
+            "Fokus saya adalah membantu pemindaian instrumen, struktur harga, indikator, risiko, dan konteks fundamental publik untuk riset serta edukasi."
+        )
+    if re.search(r"\bgu\b", question.casefold()) and re.search(r"\b(?:analisa|analisis|scan|market|harga|pair|instrumen)\b", question.casefold()):
+        return (
+            "Saya menemukan singkatan **gu**, tetapi singkatan tersebut belum cukup spesifik untuk memilih instrumen secara aman. "
+            "Jika yang Anda maksud emas, tulis **emas**, **gold**, atau **XAUUSD**; jika yang dimaksud instrumen lain, tulis kode lengkapnya. "
+            "Aero AI tidak akan menebak pair dari singkatan ambigu agar tidak mengambil data market yang salah."
         )
     compact = re.sub(r"\s+", "", question)
     if len(compact) >= 6 and not re.search(r"(?:analisa|market|agenda|indikator|risiko|trend|fundamental)", question.casefold()):
