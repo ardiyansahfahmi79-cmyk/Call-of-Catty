@@ -59,7 +59,9 @@ def main() -> None:
     flash_reply = build_reply("Analisa SPX saat volatilitas ekstrem pada D1", flash_crash_snapshot, [])
     _assert_user_facing(flash_reply)
     assert flash_reply.startswith("**RINGKASAN SPX · D1**")
-    assert "Riwayat harga publik untuk uji respons" in flash_reply
+    assert "Candle terakhir" in flash_reply
+    assert "tidak cukup segar" in flash_reply
+    assert "Yahoo Finance" not in flash_reply
 
     # Agenda CPI diproses hanya dari kalender publik yang tersedia; tidak ada nilai rilis yang dibuat-buat.
     dxy_snapshot = _historical_daily_snapshot("DXY", "2025-01-01", "2026-08-22")

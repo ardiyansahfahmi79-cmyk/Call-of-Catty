@@ -140,7 +140,9 @@ def normalize_market_language(question: str) -> NormalizationResult:
     for code in (
         "XAUUSD", "XAGUSD", "XAUEUR", "XAGEUR", "XBRUSD", "XNGUSD", "XPDUSD",
         "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD",
-        "EURGBP", "EURJPY", "GBPJPY", "BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD",
+        "EURGBP", "EURJPY", "GBPJPY", "EURCHF", "EURAUD", "EURNZD", "AUDJPY",
+        "CADJPY", "CHFJPY", "GBPAUD", "GBPCAD", "GBPCHF", "AUDCAD", "AUDCHF",
+        "NZDJPY", "NZDCAD", "NZDCHF", "CADCHF", "BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD",
         "XRPUSD", "ADAUSD", "DOTUSD", "MATICUSD", "LINKUSD", "AVAXUSD",
     ):
         left, right = code[:3].casefold(), code[3:].casefold()

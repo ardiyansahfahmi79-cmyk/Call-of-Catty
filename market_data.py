@@ -26,7 +26,7 @@ class Instrument:
 
 
 INSTRUMENTS: tuple[Instrument, ...] = (
-    Instrument("XAUUSD", "Gold / US Dollar", "GC=F", "Komoditas", ("xauusd", "xau/usd", "gold", "emas", "emas dunia", "harga emas", "gold price", "xau"), "Proxy COMEX Gold Futures (GC=F), bukan spot broker."),
+    Instrument("XAUUSD", "Gold / US Dollar", "GC=F", "Komoditas", ("xauusd", "xau/usd", "gold", "emas", "emas dunia", "harga emas", "gold price", "xau"), "Candle teknikal memakai kontrak emas publik; referensi spot publik ditampilkan terpisah bila tersedia dan dapat berbeda dari harga broker."),
     Instrument("XAGUSD", "Silver / US Dollar", "SI=F", "Komoditas", ("xagusd", "xag/usd", "silver", "perak", "xag"), "Proxy COMEX Silver Futures (SI=F)."),
     Instrument("XAUEUR", "Gold / Euro", "XAUEUR=X", "Komoditas", ("xaueur", "xau/eur", "gold eur", "emas euro"), "Quote publik XAUEUR; ketersediaan bergantung pada Yahoo Finance."),
     Instrument("XAGEUR", "Silver / Euro", "XAGEUR=X", "Komoditas", ("xageur", "xag/eur", "silver eur", "perak euro"), "Quote publik XAGEUR; ketersediaan bergantung pada Yahoo Finance."),
@@ -43,6 +43,21 @@ INSTRUMENTS: tuple[Instrument, ...] = (
     Instrument("EURGBP", "Euro / Pound", "EURGBP=X", "Forex", ("eurgbp", "eur/gbp", "euro pound")),
     Instrument("EURJPY", "Euro / Yen", "EURJPY=X", "Forex", ("eurjpy", "eur/jpy", "euro yen")),
     Instrument("GBPJPY", "Pound / Yen", "GBPJPY=X", "Forex", ("gbpjpy", "gbp/jpy", "pound yen")),
+    Instrument("EURCHF", "Euro / Swiss Franc", "EURCHF=X", "Forex", ("eurchf", "eur/chf", "euro franc")),
+    Instrument("EURAUD", "Euro / Australian Dollar", "EURAUD=X", "Forex", ("euraud", "eur/aud", "euro aussie")),
+    Instrument("EURNZD", "Euro / New Zealand Dollar", "EURNZD=X", "Forex", ("eurnzd", "eur/nzd", "euro kiwi")),
+    Instrument("AUDJPY", "Australian Dollar / Yen", "AUDJPY=X", "Forex", ("audjpy", "aud/jpy", "aussie yen")),
+    Instrument("CADJPY", "Canadian Dollar / Yen", "CADJPY=X", "Forex", ("cadjpy", "cad/jpy", "canadian yen")),
+    Instrument("CHFJPY", "Swiss Franc / Yen", "CHFJPY=X", "Forex", ("chfjpy", "chf/jpy", "franc yen")),
+    Instrument("GBPAUD", "Pound / Australian Dollar", "GBPAUD=X", "Forex", ("gbpaud", "gbp/aud", "pound aussie")),
+    Instrument("GBPCAD", "Pound / Canadian Dollar", "GBPCAD=X", "Forex", ("gbpcad", "gbp/cad", "pound cad")),
+    Instrument("GBPCHF", "Pound / Swiss Franc", "GBPCHF=X", "Forex", ("gbpchf", "gbp/chf", "pound franc")),
+    Instrument("AUDCAD", "Australian Dollar / Canadian Dollar", "AUDCAD=X", "Forex", ("audcad", "aud/cad", "aussie cad")),
+    Instrument("AUDCHF", "Australian Dollar / Swiss Franc", "AUDCHF=X", "Forex", ("audchf", "aud/chf", "aussie franc")),
+    Instrument("NZDJPY", "New Zealand Dollar / Yen", "NZDJPY=X", "Forex", ("nzdjpy", "nzd/jpy", "kiwi yen")),
+    Instrument("NZDCAD", "New Zealand Dollar / Canadian Dollar", "NZDCAD=X", "Forex", ("nzdcad", "nzd/cad", "kiwi cad")),
+    Instrument("NZDCHF", "New Zealand Dollar / Swiss Franc", "NZDCHF=X", "Forex", ("nzdchf", "nzd/chf", "kiwi franc")),
+    Instrument("CADCHF", "Canadian Dollar / Swiss Franc", "CADCHF=X", "Forex", ("cadchf", "cad/chf", "cad franc")),
     Instrument("BTCUSD", "Bitcoin / US Dollar", "BTC-USD", "Kripto", ("btcusd", "btc/usd", "bitcoin", "btc")),
     Instrument("ETHUSD", "Ethereum / US Dollar", "ETH-USD", "Kripto", ("ethusd", "eth/usd", "ethereum", "eth")),
     Instrument("BNBUSD", "BNB / US Dollar", "BNB-USD", "Kripto", ("bnbusd", "bnb/usd", "bnb")),
@@ -78,7 +93,12 @@ _INSTRUMENT_ECONOMIC_CURRENCIES: dict[str, tuple[str, ...]] = {
     "EURUSD": ("EUR", "USD"), "GBPUSD": ("GBP", "USD"), "USDJPY": ("USD", "JPY"),
     "AUDUSD": ("AUD", "USD"), "USDCAD": ("USD", "CAD"), "USDCHF": ("USD", "CHF"),
     "NZDUSD": ("NZD", "USD"), "EURGBP": ("EUR", "GBP"), "EURJPY": ("EUR", "JPY"),
-    "GBPJPY": ("GBP", "JPY"),
+    "GBPJPY": ("GBP", "JPY"), "EURCHF": ("EUR", "CHF"), "EURAUD": ("EUR", "AUD"),
+    "EURNZD": ("EUR", "NZD"), "AUDJPY": ("AUD", "JPY"), "CADJPY": ("CAD", "JPY"),
+    "CHFJPY": ("CHF", "JPY"), "GBPAUD": ("GBP", "AUD"), "GBPCAD": ("GBP", "CAD"),
+    "GBPCHF": ("GBP", "CHF"), "AUDCAD": ("AUD", "CAD"), "AUDCHF": ("AUD", "CHF"),
+    "NZDJPY": ("NZD", "JPY"), "NZDCAD": ("NZD", "CAD"), "NZDCHF": ("NZD", "CHF"),
+    "CADCHF": ("CAD", "CHF"),
     "BTCUSD": ("USD",), "ETHUSD": ("USD",), "BNBUSD": ("USD",), "SOLUSD": ("USD",),
     "XRPUSD": ("USD",), "ADAUSD": ("USD",), "DOTUSD": ("USD",), "MATICUSD": ("USD",),
     "LINKUSD": ("USD",), "AVAXUSD": ("USD",),
@@ -135,6 +155,8 @@ class MarketSnapshot:
     source: str
     warning: str
     interval: str = "1h"
+    reference_spot_price: float | None = None
+    reference_spot_at: datetime | None = None
 
 
 def detect_instruments(question: str) -> list[Instrument]:
@@ -148,10 +170,10 @@ def detect_instruments(question: str) -> list[Instrument]:
         left, right = instrument.code[:3].casefold(), instrument.code[3:].casefold()
         pattern = rf"(?<![a-z0-9]){left}\s*[/_\- ]?\s*{right}(?![a-z0-9])"
         normalized = re.sub(pattern, instrument.code.casefold(), normalized)
-    matches: list[tuple[int, int, Instrument]] = []
+    matches: list[tuple[int, int, int, Instrument]] = []
     for instrument in INSTRUMENTS:
         alias_matches = [
-            (matched.start(), -len(alias))
+            (matched.start(), matched.end(), -len(alias))
             for alias in instrument.aliases
             if (matched := re.search(rf"(?<![a-z0-9]){re.escape(alias.casefold())}(?![a-z0-9])", normalized))
         ]
@@ -159,13 +181,20 @@ def detect_instruments(question: str) -> list[Instrument]:
             # Pilih alias terawal; bila posisi sama, ambil frase terpanjang.
             # Ini menjaga `gold eur` dan `minyak brent` lebih spesifik daripada
             # alias umum `gold` atau `minyak`.
-            start, specificity = min(alias_matches)
-            matches.append((start, specificity, instrument))
-    matches.sort(key=lambda item: (item[0], item[1]))
+            start, end, specificity = min(alias_matches)
+            matches.append((start, end, specificity, instrument))
+    matches.sort(key=lambda item: (item[0], item[2]))
     unique: list[Instrument] = []
-    for _, _, instrument in matches:
+    selected_spans: list[tuple[int, int]] = []
+    for start, end, _, instrument in matches:
+        # Bila alias umum dan alias spesifik memakai karakter yang sama, gunakan
+        # hanya frasa paling spesifik. Alias terpisah dalam satu pertanyaan tetap
+        # dipertahankan sebagai permintaan multi-instrumen.
+        if any(start < selected_end and end > selected_start for selected_start, selected_end in selected_spans):
+            continue
         if instrument not in unique:
             unique.append(instrument)
+            selected_spans.append((start, end))
     return unique
 
 
@@ -362,6 +391,29 @@ def _fetch_coingecko_ohlc(instrument: Instrument, interval: str) -> pd.DataFrame
         return pd.DataFrame()
 
 
+def _fetch_xauusd_spot_reference() -> tuple[float | None, datetime | None]:
+    """Ambil satu quote XAU/USD publik sebagai referensi spot terpisah dari candle futures."""
+    try:
+        response = requests.get(
+            "https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAU/USD",
+            timeout=8,
+            headers={"Accept": "application/json", "User-Agent": "AeroAI-Research/1.0"},
+        )
+        response.raise_for_status()
+        venues = response.json()
+        for venue in venues:
+            timestamp = venue.get("ts")
+            prices = venue.get("spreadProfilePrices", [])
+            point = next((item for item in prices if item.get("bid") is not None and item.get("ask") is not None), None)
+            if point and timestamp:
+                midpoint = (float(point["bid"]) + float(point["ask"])) / 2
+                observed_at = datetime.fromtimestamp(float(timestamp) / 1000, tz=timezone.utc)
+                return midpoint, observed_at
+    except (TypeError, ValueError, KeyError, requests.RequestException):
+        pass
+    return None, None
+
+
 def fetch_market_snapshot(instrument: Instrument, interval: str = "1h") -> MarketSnapshot:
     try:
         import yfinance as yf
@@ -395,7 +447,8 @@ def fetch_market_snapshot(instrument: Instrument, interval: str = "1h") -> Marke
         warning = "CoinGecko keyless memiliki batas rate bersama dan candle historis; bukan feed eksekusi broker."
     if instrument.note:
         warning = f"{instrument.note} {warning}"
-    return MarketSnapshot(instrument, candles, calculate_indicators(candles), datetime.now(timezone.utc), candles.index[-1].to_pydatetime(), source, warning, requested_interval)
+    reference_spot_price, reference_spot_at = _fetch_xauusd_spot_reference() if instrument.code == "XAUUSD" else (None, None)
+    return MarketSnapshot(instrument, candles, calculate_indicators(candles), datetime.now(timezone.utc), candles.index[-1].to_pydatetime(), source, warning, requested_interval, reference_spot_price, reference_spot_at)
 
 
 def normalized_comparison(snapshots: Iterable[MarketSnapshot]) -> pd.DataFrame:

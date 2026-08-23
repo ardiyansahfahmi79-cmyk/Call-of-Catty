@@ -101,7 +101,7 @@ def render_line_chart(snapshot: MarketSnapshot) -> None:
     figure.add_trace(go.Scatter(x=candles.index, y=candles["ma50"], name="MA 50", mode="lines", line={"color":"#18d9f5", "width":1.55}))
     figure.add_trace(go.Scatter(x=candles.index, y=candles["ma200"], name="MA 200", mode="lines", line={"color":"#e7bd52", "width":1.35, "dash":"dot"}))
     figure.update_layout(template="plotly_dark", paper_bgcolor="#0a0d12", plot_bgcolor="#0a0d12", height=365, margin={"l":8,"r":10,"t":10,"b":8}, hovermode=False, xaxis={"rangeslider":{"visible":False},"gridcolor":"#202734","fixedrange":True}, yaxis={"side":"right","gridcolor":"#202734","fixedrange":True}, legend={"orientation":"h","x":0,"y":1.02,"xanchor":"left","yanchor":"bottom"}, font={"family":"Manrope","color":"#eaf0f7"})
-    st.markdown(f'<div class="brand-kicker">{snapshot.instrument.code} · STATIC LINE MARKET CHART · {snapshot.interval.upper()}</div><div class="chart-guide"><span>Line chart statis · interaksi dinonaktifkan</span><span>Harga penutupan, MA 50, MA 200</span></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="brand-kicker">{snapshot.instrument.code} · GRAFIK HARGA · {snapshot.interval.upper()}</div><div class="chart-guide"><span>Line chart statis · interaksi dinonaktifkan</span><span>Harga penutupan, MA 50, MA 200</span></div>', unsafe_allow_html=True)
     chart_key = f"market-chart-{snapshot.instrument.code}-{snapshot.interval}-{int(snapshot.fetched_at.timestamp() * 1_000_000)}"
     st.plotly_chart(figure, width="stretch", config=STATIC_CHART_CONFIG, key=chart_key)
 
@@ -129,8 +129,12 @@ def render_snapshot(snapshot: MarketSnapshot, fundamentals: list[FundamentalSnap
     last_candle = snapshot.last_candle_at.astimezone(timezone.utc).strftime("%d %b %H:%M UTC")
     basis = snapshot.instrument.note or f"{snapshot.instrument.asset_class} · quote publik referensi"
     st.markdown('<div class="analysis-shell">', unsafe_allow_html=True)
-    st.markdown(f'<div class="data-proof"><span>SUMBER: {html.escape(snapshot.source)}</span><span>CANDLE TERAKHIR: {last_candle}</span><span>BASIS: {html.escape(basis)}</span><span>DIAMBIL: {snapshot.fetched_at.astimezone(timezone.utc).strftime("%H:%M:%S UTC")}</span></div>', unsafe_allow_html=True)
-    metrics = [("HARGA", _format_number(data["price"])), ("20 CANDLE", f"{float(data['change_20']):+.2f}%"), ("RSI 14", f"{float(data['rsi14']):.1f}"), ("ADX 14", f"{float(data['adx14']):.1f}"), ("KONDISI", str(data["market_state"])), ("BIAS", bias)]
+    spot_label = ""
+    if snapshot.reference_spot_price is not None and snapshot.reference_spot_at is not None:
+        observed_at = snapshot.reference_spot_at.astimezone(timezone.utc).strftime("%d %b %H:%M UTC")
+        spot_label = f'<span>REFERENSI SPOT: {_format_number(snapshot.reference_spot_price)} · {observed_at}</span>'
+    st.markdown(f'<div class="data-proof"><span>CANDLE TERAKHIR: {last_candle}</span><span>BASIS HARGA: {html.escape(basis)}</span><span>DIAMBIL: {snapshot.fetched_at.astimezone(timezone.utc).strftime("%H:%M:%S UTC")}</span>{spot_label}</div>', unsafe_allow_html=True)
+    metrics = [("HARGA CHART", _format_number(data["price"])), ("20 CANDLE", f"{float(data['change_20']):+.2f}%"), ("RSI 14", f"{float(data['rsi14']):.1f}"), ("ADX 14", f"{float(data['adx14']):.1f}"), ("KONDISI", str(data["market_state"])), ("BIAS", bias)]
     markup = ''.join(f'<div class="metric-box"><div class="name">{name}</div><div class="val {signal_class if name in {"KONDISI", "BIAS"} else ""}">{html.escape(value)}</div></div>' for name, value in metrics)
     st.markdown(f'<div class="metric-grid">{markup}</div>', unsafe_allow_html=True)
     render_line_chart(snapshot)
@@ -163,8 +167,8 @@ def render_comparison(snapshots: list[MarketSnapshot]) -> None:
     st.plotly_chart(figure, width="stretch", config=STATIC_CHART_CONFIG, key=comparison_key)
 
 
-def _loader_markup(stage: str, estimate: int, progress: int) -> str:
-    return f'<div class="loader-hud"><div class="loader-orbit"></div><div class="loader-top"><span>◈ AERO AI / DIGITAL MARKET PIPELINE</span><span>EST. {estimate:02d}S</span></div><div class="loader-stage">{html.escape(stage)}<span class="loader-dots"><span>.</span><span>.</span><span>.</span></span></div><div class="loader-track"><div class="loader-fill" style="--progress:{progress}%"></div></div></div>'
+def _loader_markup(stage: str, progress: int) -> str:
+    return f'<div class="loader-hud"><div class="loader-orbit"></div><div class="loader-top"><span>◈ AERO AI</span><span>PEMINDAIAN MARKET</span></div><div class="loader-stage">{html.escape(stage)}<span class="loader-dots"><span>.</span><span>.</span><span>.</span></span></div><div class="loader-track"><div class="loader-fill" style="--progress:{progress}%"></div></div></div>'
 
 
 def _wait_until(started_at: float, seconds: float) -> None:
@@ -174,20 +178,20 @@ def _wait_until(started_at: float, seconds: float) -> None:
 
 
 def _run_context_loader(loader_slot, started_at: float, response_builder):
-    """Tampilkan pipeline untuk agenda, klarifikasi, dan input yang tidak memerlukan snapshot harga."""
+    """Tampilkan status pemindaian untuk agenda, klarifikasi, dan input tanpa snapshot harga."""
     stages = [
-        ("01 / 04 · MEMVALIDASI INTENT, AGENDA, DAN KONTEKS PESAN", 28, 12, 1.1),
-        ("02 / 04 · MEMETAKAN NEGARA, MATA UANG, DAN RELEVANSI", 22, 38, 4.0),
-        ("03 / 04 · MEMERIKSA SUMBER KALENDER PUBLIK DAN BATAS DATA", 17, 69, 8.0),
-        ("04 / 04 · MENYUSUN RESPONS MARKET YANG DAPAT DITELUSURI", 9, 92, MIN_ANALYSIS_SECONDS),
+        ("Memahami fokus pertanyaan Anda", 12, 1.1),
+        ("Menyiapkan konteks market yang relevan", 38, 4.0),
+        ("Memeriksa ketersediaan informasi", 69, 8.0),
+        ("Merangkum informasi yang tersedia", 92, MIN_ANALYSIS_SECONDS),
     ]
     response = None
-    for index, (stage, estimate, progress, target_seconds) in enumerate(stages):
-        loader_slot.markdown(_loader_markup(stage, estimate, progress), unsafe_allow_html=True)
+    for index, (stage, progress, target_seconds) in enumerate(stages):
+        loader_slot.markdown(_loader_markup(stage, progress), unsafe_allow_html=True)
         if index == 2:
             response = response_builder()
         _wait_until(started_at, target_seconds)
-    loader_slot.markdown(_loader_markup("PIPELINE SELESAI · MENYIAPKAN RESPONS TERBARU", 0, 100), unsafe_allow_html=True)
+    loader_slot.markdown(_loader_markup("Informasi berhasil diperiksa · menyiapkan respons", 100), unsafe_allow_html=True)
     time.sleep(.35)
     loader_slot.empty()
     return response if response is not None else response_builder()
@@ -251,6 +255,8 @@ def resolve_thread_context(question: str, thread: dict | None) -> str | None:
         return f"Jelaskan {question.strip()} {suffix}"
     if any(token in text for token in ("risiko", "risk", "atr", "volatil")):
         return f"Tinjau risiko {suffix}"
+    if any(token in text for token in ("entry", "stop loss", "take profit", "tp1", "tp2", "tp3")) or " sl " in f" {text} ":
+        return f"Tentukan Entry, SL, TP1 TP2 TP3 dan Risk {suffix}"
     if any(token in text for token in ("tren", "trend", "momentum", "indikator", "sinyal")):
         return f"Jelaskan {question.strip()} {suffix}"
     return None
@@ -316,9 +322,9 @@ def process_question(question: str, loader_slot) -> None:
         st.session_state.messages.append(_message("assistant", _with_normalization(build_instrument_confirmation(instruments[0].code), normalized_note)))
         return
     snapshots, fundamentals, unavailable_codes = [], {}, []
-    stages = [("01 / 05 · MENDETEKSI INSTRUMEN, TIMEFRAME, DAN KONTEKS", 50, 9, 1.2), ("02 / 05 · MENARIK OHLCV PUBLIK DAN MEMVALIDASI CANDLE", 46, 27, 5.0), ("03 / 05 · MEMINDAI FUNDAMENTAL DAN KALENDER EKONOMI PUBLIK", 42, 49, 8.0), ("04 / 05 · MENGHITUNG 10 INDIKATOR PYTHON DAN REGIME PASAR", 38, 72, 10.5), ("05 / 05 · MENYUSUN NARASI DAN MEMBANGUN LINE CHART", 34, 92, MIN_ANALYSIS_SECONDS)]
-    for index, (stage, estimate, progress, target_seconds) in enumerate(stages):
-        loader_slot.markdown(_loader_markup(stage, estimate, progress), unsafe_allow_html=True)
+    stages = [("Membaca instrumen dan timeframe", 9, 1.2), ("Mengambil data harga yang tersedia", 27, 5.0), ("Meninjau konteks market yang relevan", 49, 8.0), ("Membaca kondisi harga dan risiko", 72, 10.5), ("Merangkum informasi dan menyiapkan grafik", 92, MIN_ANALYSIS_SECONDS)]
+    for index, (stage, progress, target_seconds) in enumerate(stages):
+        loader_slot.markdown(_loader_markup(stage, progress), unsafe_allow_html=True)
         if index == 1:
             for instrument in instruments[:2]:
                 try:
@@ -329,7 +335,7 @@ def process_question(question: str, loader_slot) -> None:
             for snapshot in snapshots:
                 fundamentals[snapshot.instrument.code] = fetch_fundamental_context(snapshot.instrument)
         _wait_until(started_at, target_seconds)
-    loader_slot.markdown(_loader_markup("PIPELINE SELESAI · MENYIAPKAN RESPONS TERBARU", 0, 100), unsafe_allow_html=True)
+    loader_slot.markdown(_loader_markup("Informasi berhasil disiapkan", 100), unsafe_allow_html=True)
     time.sleep(.35)
     loader_slot.empty()
     if not snapshots:
@@ -469,9 +475,8 @@ def main() -> None:
     st.markdown(APP_CSS, unsafe_allow_html=True)
     init_state()
     st.markdown('<div class="app-shell">', unsafe_allow_html=True)
-    st.markdown('<div class="title-row"><div><div class="brand-kicker">AEROVULPIS / MARKET SCANNING SYSTEM</div><h1 class="aero-title"><span class="aero-white">Aero</span> <span class="ai-neon">AI</span></h1></div><div class="engine"><b>●</b> PYTHON DATA ENGINE<br>MARKET SIGNALS · TRACEABLE CONTEXT</div></div>', unsafe_allow_html=True)
+    st.markdown('<div class="title-row"><div><div class="brand-kicker">AEROVULPIS / MARKET SCANNING SYSTEM</div><h1 class="aero-title"><span class="aero-white">Aero</span> <span class="ai-neon">AI</span></h1></div></div>', unsafe_allow_html=True)
     st.markdown('<div class="market-only"><b>Aero AI adalah sistem pemindaian market berbasis data.</b> Sistem ini dikhususkan untuk instrumen, struktur harga, indikator, risiko, dan konteks fundamental market; bukan chatbot umum untuk topik di luar market.</div>', unsafe_allow_html=True)
-    st.markdown('<div class="context-band"><p>Aero AI mendeteksi instrumen langsung dari pertanyaan dan menampilkan sumber, basis harga, waktu candle, indikator Python, serta konteks fundamental yang tersedia.</p><div><span class="market-chip"><span class="dot"></span>XAUUSD</span><span class="market-chip"><span class="dot"></span>EURUSD</span><span class="market-chip"><span class="dot"></span>BTCUSD</span><span class="market-chip"><span class="dot"></span>WTI</span></div></div>', unsafe_allow_html=True)
     for message in st.session_state.messages:
         if message["role"] == "assistant":
             render_analysis_message(message)

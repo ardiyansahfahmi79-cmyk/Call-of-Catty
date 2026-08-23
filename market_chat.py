@@ -224,7 +224,7 @@ def infer_intent(question: str) -> str:
 def _agenda_market_channel(instrument: str | None = None) -> str:
     if instrument in {"XAUUSD", "XAGUSD", "XAUEUR", "XAGEUR", "XPDUSD"}:
         return "Untuk logam, saluran yang lazim dipantau adalah USD, imbal hasil, dan ekspektasi kebijakan moneter; reaksi aktual dapat berbeda dari ekspektasi."
-    if instrument in {"EURUSD", "GBPUSD", "AUDUSD", "USDJPY", "USDCAD", "USDCHF", "NZDUSD", "EURGBP", "EURJPY", "GBPJPY"}:
+    if instrument in {"EURUSD", "GBPUSD", "AUDUSD", "USDJPY", "USDCAD", "USDCHF", "NZDUSD", "EURGBP", "EURJPY", "GBPJPY", "EURCHF", "EURAUD", "EURNZD", "AUDJPY", "CADJPY", "CHFJPY", "GBPAUD", "GBPCAD", "GBPCHF", "AUDCAD", "AUDCHF", "NZDJPY", "NZDCAD", "NZDCHF", "CADCHF"}:
         return "Untuk FX, pasar biasanya menilai perubahan relatif ekspektasi kebijakan mata uang yang bersangkutan, bukan hanya angka tajuk rilis."
     if instrument in {"SPX", "NAS100", "IHSG", "BBCA", "BBRI", "TLKM", "ASII", "BMRI", "UNVR", "GGRM", "HMSP", "ANTM"}:
         return "Untuk indeks dan saham, perhatian umumnya berada pada ekspektasi imbal hasil, pertumbuhan, serta dampak lintas sektor; respons tiap aset dapat berbeda."
@@ -270,8 +270,7 @@ def _calendar_section(agenda: AgendaDefinition, question: str = "", currency_fil
         previous = event.previous or "tidak tersedia"
         rows.append(
             f"**{event.title} · {event.currency}** — jadwal **{released}**; dampak **{event.impact}**. "
-            f"Actual: **{actual}**; forecast/konsensus sumber kalender: **{forecast}**; previous: **{previous}**. "
-            f"Sumber: [{event.source_name}]({event.source_url})."
+            f"Actual: **{actual}**; forecast/konsensus: **{forecast}**; previous: **{previous}**."
         )
     if requested_period and agenda[1] in {"Retail Sales", "Core Retail Sales"} and not any(
         ("m/m" if requested_period == "MoM" else "y/y") in event.title.casefold() for event in events
@@ -319,7 +318,7 @@ def _agenda_release_summary(
     event = events[0]
     actual, forecast, previous = event.actual.strip(), event.forecast.strip(), event.previous.strip()
     scheduled = event.release_at.strftime("%d %b %Y %H:%M UTC") if event.release_at else "waktu rilis tidak tersedia"
-    source = f"Sumber: [{event.source_name}]({event.source_url})."
+    source = "Data mengikuti pembaruan kalender publik yang tersedia pada pemindaian ini."
     interpretation = (
         "Untuk DXY, pembacaan awal perlu mempertimbangkan revisi data dan komponen tenaga kerja lain bila tersedia; satu angka tidak menjamin arah harga."
         if instrument_code == "DXY"
@@ -461,6 +460,12 @@ def build_unknown_input_reply(question: str, unknown_candidates: list[str] | Non
             "Jika yang Anda maksud emas, tulis **emas**, **gold**, atau **XAUUSD**; jika yang dimaksud instrumen lain, tulis kode lengkapnya. "
             "Aero AI tidak akan menebak pair dari singkatan ambigu agar tidak mengambil data market yang salah."
         )
+    if re.search(r"\b(?:entry|stop\s*loss|take\s*profit|tp\s*[123]|sl)\b", question.casefold()):
+        return (
+            "Untuk menyusun area Entry, SL, TP1, TP2, dan TP3 secara bersyarat, sebutkan instrumen dan bila perlu timeframe. "
+            "Contoh: **Tentukan Entry, SL, TP1 TP2 TP3 untuk XAUUSD pada H1**. "
+            "Aero AI akan menggunakan data yang tersedia dan menandai batas risikonya, bukan memberi instruksi transaksi personal."
+        )
     compact = re.sub(r"\s+", "", question)
     if len(compact) >= 6 and not re.search(r"(?:analisa|market|agenda|indikator|risiko|trend|fundamental)", question.casefold()):
         return (
@@ -572,7 +577,7 @@ def _entry_scenario(data: dict) -> str:
 def _fundamental_section(items: list[FundamentalSnapshot]) -> str:
     if not items:
         return "Konteks fundamental belum tersedia dari sumber publik yang dikonfigurasi. Analisis teknikal tetap memakai data harga yang ditampilkan beserta waktunya."
-    return " ".join(f"{item.title}: **{item.value} {item.unit}** (observasi {item.observed_at.strftime('%d %b %Y')}; {item.source_name})." for item in items[:4])
+    return " ".join(f"{item.title}: **{item.value} {item.unit}** (observasi {item.observed_at.strftime('%d %b %Y')})." for item in items[:4])
 
 
 def _data_status_summary(snapshot: MarketSnapshot) -> str:
@@ -586,7 +591,7 @@ def _data_status_summary(snapshot: MarketSnapshot) -> str:
         freshness = "Data harga masih berada dalam jendela pembacaan yang lebih relevan untuk timeframe ini."
     return (
         f"Candle terakhir **{candle_at.strftime('%d %b %Y %H:%M UTC')}** ({age} lalu). "
-        f"{freshness} Sumber harga: **{snapshot.source}**."
+        f"{freshness}"
     )
 
 
@@ -617,7 +622,7 @@ def _agenda_summary(agenda: AgendaDefinition, question: str, instrument_code: st
 def build_reply(question: str, snapshot: MarketSnapshot, fundamentals: list[FundamentalSnapshot] | None = None) -> str:
     data = snapshot.indicators
     intent = infer_intent(question)
-    price, change_20 = _fmt(float(data["price"])), float(data["change_20"])
+    candle_price, change_20 = _fmt(float(data["price"])), float(data["change_20"])
     rsi, adx, volume = float(data["rsi14"]), float(data["adx14"]), float(data["relative_volume"])
     timeframe_note = (
         f"Timeframe **{timeframe_label(snapshot.interval)}** terdeteksi langsung dari pertanyaan Anda."
@@ -626,6 +631,12 @@ def build_reply(question: str, snapshot: MarketSnapshot, fundamentals: list[Fund
     )
     agenda = detect_economic_agenda(question)
     fundamentals = fundamentals or []
+    spot_note = ""
+    price = candle_price
+    if snapshot.reference_spot_price is not None and snapshot.reference_spot_at is not None:
+        spot_value = _fmt(float(snapshot.reference_spot_price))
+        spot_time = snapshot.reference_spot_at.astimezone(timezone.utc).strftime('%d %b %Y %H:%M UTC')
+        spot_note = f" Referensi spot terakhir **{spot_value}** tersedia pada **{spot_time}**; nilainya dapat berbeda dari harga chart karena basis harga berbeda."
     scenario_section = f"\n\n**SKENARIO LEVEL TEKNIKAL**\n\n{_entry_scenario(data)}" if intent == "levels_entry" else ""
     reaction_section = _release_reaction_section(question, agenda, snapshot)
     agenda_summary = _agenda_summary(agenda, question, snapshot.instrument.code) if agenda else ""
@@ -636,13 +647,13 @@ def build_reply(question: str, snapshot: MarketSnapshot, fundamentals: list[Fund
     return (
         f"**RINGKASAN {snapshot.instrument.code} · {timeframe_label(snapshot.interval)}**\n\n"
         f"{agenda_summary + '\n\n' if agenda_summary else ''}"
-        f"{timeframe_note} Harga referensi **{price}** dengan perubahan **{change_20:+.2f}%** dalam 20 candle. "
+        f"{timeframe_note} Harga chart **{price}**.{spot_note} Perubahan candle teknikal adalah **{change_20:+.2f}%** dalam 20 candle. "
         f"Kondisi saat ini **{data['market_state']}**. {_trend_description(data)}\n\n"
         f"**Hal yang paling relevan**\n\n"
         f"RSI(14) **{rsi:.1f}**, ADX(14) **{adx:.1f}**, dan volatilitas 20 candle **{float(data['volatility20']):.2f}%**. "
         f"Rentang 20 candle berada pada **{range_low}–{range_high}**. {consensus_note}\n\n"
         f"**Risiko dan batas data**\n\n"
-        f"{data_status} {snapshot.warning}\n\n"
+        f"{data_status}\n\n"
         f"**Konteks pendukung**\n\n{fundamentals_summary}"
         f"{scenario_section}"
         f"{f'\n\n{reaction_section}' if reaction_section else ''}\n\n"
