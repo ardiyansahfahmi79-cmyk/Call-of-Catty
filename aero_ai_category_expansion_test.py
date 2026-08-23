@@ -14,10 +14,20 @@ def _codes(question: str) -> list[str]:
 def main() -> None:
     categories: dict[str, int] = {}
 
-    # 1. Resolusi instrumen + intent level/risk: 50 variasi casing dan frasa.
+    # 1. Resolusi instrumen + intent analisis/level/risiko: 50 variasi casing dan frasa.
     for index in range(50):
         instrument = INSTRUMENTS[index % len(INSTRUMENTS)]
-        question = f"{('ANALISA' if index % 2 else 'analisa')} {instrument.code.lower() if index % 3 else instrument.code} pada H{(index % 12) + 1}"
+        code = instrument.code.lower() if index % 3 else instrument.code
+        timeframe = f"H{(index % 12) + 1}"
+        mode = index % 3
+        if mode == 0:
+            question = f"{('ANALISA' if index % 2 else 'analisa')} {code} pada {timeframe}"
+        elif mode == 1:
+            question = f"Tentukan Entry, SL, TP1 TP2 TP3 untuk {code} pada {timeframe}"
+            assert infer_intent(question) == "levels_entry", question
+        else:
+            question = f"Tinjau risiko {code} pada {timeframe}"
+            assert infer_intent(question) == "risk", question
         assert _codes(question) == [instrument.code], question
     categories["Instrumen + Entry + Risiko"] = 50
 
