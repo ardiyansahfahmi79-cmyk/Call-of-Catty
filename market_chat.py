@@ -288,6 +288,66 @@ def _calendar_section(agenda: AgendaDefinition, question: str = "", currency_fil
     return "\n\n".join(rows)
 
 
+def _agenda_events_after_release_check(
+    agenda: AgendaDefinition,
+    question: str,
+    instrument_code: str,
+) -> tuple[tuple[str, ...], list]:
+    """Lakukan satu pembaruan kalender setelah jadwal NFP lewat bila actual belum terlihat."""
+    currency_filter = _agenda_calendar_currencies(agenda, question, instrument_code)
+    events = find_calendar_events(agenda[3], currency_filter=currency_filter)
+    if agenda[1] != "NFP / Non-Farm Payrolls" or not events:
+        return currency_filter, events
+    now = datetime.now(timezone.utc)
+    release_has_passed = any(event.release_at and event.release_at <= now for event in events)
+    actual_missing = all(not event.actual.strip() for event in events)
+    if release_has_passed and actual_missing:
+        events = find_calendar_events(agenda[3], currency_filter=currency_filter, force_refresh=True)
+    return currency_filter, events
+
+
+def _agenda_release_summary(
+    agenda: AgendaDefinition,
+    question: str,
+    instrument_code: str,
+) -> str:
+    """Jawab status rilis dengan actual, forecast, dan previous apa adanya dari kalender publik."""
+    currency_filter, events = _agenda_events_after_release_check(agenda, question, instrument_code)
+    name = agenda_display_name(agenda, question)
+    if not events:
+        return _calendar_section(agenda, question, currency_filter)
+    event = events[0]
+    actual, forecast, previous = event.actual.strip(), event.forecast.strip(), event.previous.strip()
+    scheduled = event.release_at.strftime("%d %b %Y %H:%M UTC") if event.release_at else "waktu rilis tidak tersedia"
+    source = f"Sumber: [{event.source_name}]({event.source_url})."
+    interpretation = (
+        "Untuk DXY, pembacaan awal perlu mempertimbangkan revisi data dan komponen tenaga kerja lain bila tersedia; satu angka tidak menjamin arah harga."
+        if instrument_code == "DXY"
+        else "Perbandingan actual, konsensus, revisi, dan kondisi harga perlu dibaca bersama; satu angka tidak menjamin arah harga."
+    )
+    if actual and forecast:
+        previous_note = f" Previous: **{previous}**." if previous else ""
+        return (
+            f"Data **{name}** sudah tersedia: actual **{actual}**, konsensus **{forecast}**.{previous_note} "
+            f"{interpretation} "
+            f"{source}"
+        )
+    if actual:
+        previous_note = f" Previous: **{previous}**." if previous else ""
+        return (
+            f"Data **{name}** sudah tersedia: actual **{actual}**.{previous_note} "
+            "Konsensus belum tersedia dari kalender publik pada pemindaian ini, sehingga Aero AI tidak menyimpulkan kejutan rilis. "
+            f"{source}"
+        )
+    forecast_note = f" Konsensus kalender: **{forecast}**." if forecast else ""
+    previous_note = f" Previous: **{previous}**." if previous else ""
+    return (
+        f"Rilis **{name}** dijadwalkan pada **{scheduled}**. Actual belum tersedia dari kalender publik.{forecast_note}{previous_note} "
+        "Aero AI akan menampilkan actual bila sumber memperbaruinya, tanpa membuat angka pengganti. "
+        f"{source}"
+    )
+
+
 def _age_label(moment: datetime) -> str:
     seconds = max(0, int((datetime.now(timezone.utc) - moment.astimezone(timezone.utc)).total_seconds()))
     if seconds < 60:
@@ -365,11 +425,10 @@ def build_agenda_reply(question: str) -> str | None:
             f"{_agenda_clarification_section(agenda, question)}\n\n"
             "**BATAS ANALISIS**\n\nIni adalah konteks riset dan edukasi, bukan nasihat finansial personal atau instruksi transaksi."
         )
-    currency_filter = _agenda_calendar_currencies(agenda, question)
     return (
         f"**{name}**\n\n"
         f"{context} {_agenda_market_channel()}\n\n"
-        f"**Data yang tersedia**\n\n{_calendar_section(agenda, question, currency_filter)}\n\n"
+        f"**Status rilis**\n\n{_agenda_release_summary(agenda, question, '')}\n\n"
         f"Forecast atau konsensus di atas berasal dari kalender publik, bukan prediksi Aero AI. Untuk melihat kondisi harga yang terkait, tulis misalnya **Analisa XAUUSD pada H1 setelah {name}**.\n\n"
         "Untuk riset dan edukasi, bukan nasihat finansial personal."
     )
@@ -551,7 +610,7 @@ def _agenda_summary(agenda: AgendaDefinition, question: str, instrument_code: st
     return (
         f"**{name} untuk {instrument_code}**\n\n"
         f"{context} {_agenda_market_channel(instrument_code)}\n\n"
-        f"**Data agenda**\n\n{_calendar_section(agenda, question, currency_filter)}"
+        f"**Status rilis**\n\n{_agenda_release_summary(agenda, question, instrument_code)}"
     )
 
 

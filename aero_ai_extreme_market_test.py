@@ -66,7 +66,7 @@ def main() -> None:
     cpi_reply = build_reply("Jelaskan dampak lonjakan CPI AS untuk DXY pada D1", dxy_snapshot, fetch_fundamental_context(dxy_snapshot.instrument))
     _assert_user_facing(cpi_reply)
     assert "CPI / Consumer Price Index untuk DXY" in cpi_reply
-    assert "Data agenda" in cpi_reply
+    assert "Status rilis" in cpi_reply
     assert any(
         marker in cpi_reply
         for marker in (
