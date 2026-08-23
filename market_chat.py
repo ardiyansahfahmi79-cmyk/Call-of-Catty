@@ -8,20 +8,7 @@ import re
 from economic_calendar import calendar_fetch_status, find_calendar_events
 from fundamental_data import FundamentalSnapshot
 from market_intelligence import (
-    evidence_section,
-    historical_section,
-    local_evaluation_section,
-    ml_regime_section,
-    macro_router_section,
-    market_structure_quality_section,
-    comparative_regime_replay_section,
-    policy_divergence_section,
-    provenance_section,
-    release_surprise_section,
-    regime_section,
-    scenario_invalidation_section,
-    source_health_section,
-    cross_asset_context_section,
+    ml_regime_assessment,
 )
 from market_data import MarketSnapshot, instrument_economic_currencies, timeframe_label, timeframe_was_explicit
 
@@ -380,12 +367,11 @@ def build_agenda_reply(question: str) -> str | None:
         )
     currency_filter = _agenda_calendar_currencies(agenda, question)
     return (
-        f"**KONTEKS AGENDA EKONOMI · {name}**\n\n"
+        f"**{name}**\n\n"
         f"{context} {_agenda_market_channel()}\n\n"
-        f"**DATA KALENDER PUBLIK**\n\n{_calendar_section(agenda, question, currency_filter)}\n\n"
-        "Forecast atau consensus di atas adalah nilai yang tersedia dari sumber kalender, bukan prediksi yang dibuat Aero AI. "
-        f"Apakah Anda ingin Aero AI menganalisa respons harga terhadap **{name}**? Sebutkan instrumen dan timeframe, misalnya **Analisa XAUUSD pada H1 setelah {name}**.\n\n"
-        "**BATAS ANALISIS**\n\nIni adalah konteks riset dan edukasi, bukan nasihat finansial personal atau instruksi transaksi."
+        f"**Data yang tersedia**\n\n{_calendar_section(agenda, question, currency_filter)}\n\n"
+        f"Forecast atau konsensus di atas berasal dari kalender publik, bukan prediksi Aero AI. Untuk melihat kondisi harga yang terkait, tulis misalnya **Analisa XAUUSD pada H1 setelah {name}**.\n\n"
+        "Untuk riset dan edukasi, bukan nasihat finansial personal."
     )
 
 
@@ -530,6 +516,45 @@ def _fundamental_section(items: list[FundamentalSnapshot]) -> str:
     return " ".join(f"{item.title}: **{item.value} {item.unit}** (observasi {item.observed_at.strftime('%d %b %Y')}; {item.source_name})." for item in items[:4])
 
 
+def _data_status_summary(snapshot: MarketSnapshot) -> str:
+    candle_at = snapshot.last_candle_at.astimezone(timezone.utc)
+    age = _age_label(candle_at)
+    if age.endswith("hari") or "hari" in age:
+        freshness = "Data harga tidak cukup segar untuk membaca reaksi intraday terhadap agenda saat ini."
+    elif "jam" in age and int(age.split()[0]) >= 6:
+        freshness = "Data harga tersedia, tetapi keterlambatannya perlu diperhatikan untuk pembacaan intraday."
+    else:
+        freshness = "Data harga masih berada dalam jendela pembacaan yang lebih relevan untuk timeframe ini."
+    return (
+        f"Candle terakhir **{candle_at.strftime('%d %b %Y %H:%M UTC')}** ({age} lalu). "
+        f"{freshness} Sumber harga: **{snapshot.source}**."
+    )
+
+
+def _market_consensus_note(snapshot: MarketSnapshot) -> str:
+    """Tambahkan kehati-hatian hanya ketika pembacaan tambahan berbeda dengan struktur utama."""
+    assessment = ml_regime_assessment(snapshot)
+    if assessment.state == "TERSEDIA" and assessment.agreement == "BERBEDA":
+        return "Pembacaan kondisi belum sepenuhnya sejalan; lebih aman menunggu konfirmasi candle berikutnya sebelum mengambil kesimpulan arah."
+    if assessment.state in {"ABSTAIN", "DATA BELUM CUKUP"}:
+        return "Kualitas atau kedalaman data belum cukup untuk memperkuat pembacaan kondisi saat ini."
+    return ""
+
+
+def _agenda_summary(agenda: AgendaDefinition, question: str, instrument_code: str) -> str:
+    """Mulai jawaban agenda dari informasi yang diminta pengguna, bukan dari audit internal."""
+    _, _, context, _ = agenda
+    name = agenda_display_name(agenda, question)
+    if _needs_currency_clarification(agenda, question, instrument_code):
+        return _agenda_clarification_section(agenda, question, instrument_code)
+    currency_filter = _agenda_calendar_currencies(agenda, question, instrument_code)
+    return (
+        f"**{name} untuk {instrument_code}**\n\n"
+        f"{context} {_agenda_market_channel(instrument_code)}\n\n"
+        f"**Data agenda**\n\n{_calendar_section(agenda, question, currency_filter)}"
+    )
+
+
 def build_reply(question: str, snapshot: MarketSnapshot, fundamentals: list[FundamentalSnapshot] | None = None) -> str:
     data = snapshot.indicators
     intent = infer_intent(question)
@@ -542,60 +567,27 @@ def build_reply(question: str, snapshot: MarketSnapshot, fundamentals: list[Fund
     )
     agenda = detect_economic_agenda(question)
     fundamentals = fundamentals or []
-    agenda_section = ""
-    surprise_summary = ""
-    if agenda:
-        _, _, context, _ = agenda
-        name = agenda_display_name(agenda, question)
-        if _needs_currency_clarification(agenda, question, snapshot.instrument.code):
-            agenda_section = f"\n\n{_agenda_clarification_section(agenda, question, snapshot.instrument.code)}"
-        else:
-            currency_filter = _agenda_calendar_currencies(agenda, question, snapshot.instrument.code)
-            agenda_section = (
-                f"\n\n**KONTEKS AGENDA EKONOMI · {name}**\n\n{context} {_agenda_market_channel(snapshot.instrument.code)}\n\n"
-                f"**DATA KALENDER PUBLIK**\n\n{_calendar_section(agenda, question, currency_filter)}"
-            )
-            surprise_summary = release_surprise_section(find_calendar_events(agenda[3], currency_filter=currency_filter))
     scenario_section = f"\n\n**SKENARIO LEVEL TEKNIKAL**\n\n{_entry_scenario(data)}" if intent == "levels_entry" else ""
-    freshness_section = _freshness_section(snapshot, fundamentals)
     reaction_section = _release_reaction_section(question, agenda, snapshot)
-    macro_section = macro_router_section(snapshot.instrument.code)
-    trust_section = evidence_section(snapshot, fundamentals, calendar_fetch_status().state)
-    regime_summary = regime_section(snapshot)
-    ml_regime_summary = ml_regime_section(snapshot)
-    history_summary = historical_section(snapshot)
-    source_health_summary = source_health_section(snapshot, fundamentals, calendar_fetch_status().state)
-    provenance_summary = provenance_section(snapshot, fundamentals, calendar_fetch_status().state)
-    quality_summary = market_structure_quality_section(snapshot)
-    cross_asset_summary = cross_asset_context_section(snapshot, fundamentals)
-    invalidation_summary = scenario_invalidation_section(snapshot)
-    replay_summary = comparative_regime_replay_section(snapshot)
-    divergence_summary = policy_divergence_section(snapshot, fundamentals)
-    evaluation_studio_summary = local_evaluation_section(snapshot)
+    agenda_summary = _agenda_summary(agenda, question, snapshot.instrument.code) if agenda else ""
+    consensus_note = _market_consensus_note(snapshot)
+    data_status = _data_status_summary(snapshot)
+    fundamentals_summary = _fundamental_section(fundamentals)
+    range_low, range_high = _fmt(float(data["low20"])), _fmt(float(data["high20"]))
     return (
-        f"**STATUS PASAR · {snapshot.instrument.code}**\n\n"
-        f"{timeframe_note} Harga referensi terakhir adalah **{price}** dengan perubahan **{change_20:+.2f}%** dalam 20 candle. Kondisi pada timeframe data saat ini adalah **{data['market_state']}** dengan keselarasan teknikal **{int(data['confluence'])}/100**. Nilai tersebut menunjukkan jumlah indikator yang searah, bukan probabilitas keberhasilan transaksi.\n\n"
-        f"**FOKUS PEMINDAIAN**\n\n{_focus_line(intent, data)}\n\n"
-        f"**STRUKTUR DAN MOMENTUM**\n\n{_trend_description(data)} RSI(14) berada pada **{rsi:.1f}**, ADX(14) pada **{adx:.1f}**, dan relative volume pada **{volume:.2f}x**. ADX mengukur kekuatan tren, bukan arahnya; volume relatif bernilai netral bila penyedia tidak menyediakan volume yang bermakna.\n\n"
-        f"{quality_summary}\n\n"
-        f"{regime_summary}\n\n"
-        f"{ml_regime_summary}\n\n"
-        f"{macro_section}\n\n"
-        f"{cross_asset_summary}\n\n"
-        f"{trust_section}\n\n"
-        f"{history_summary}\n\n"
-        f"{replay_summary}\n\n"
-        f"{evaluation_studio_summary}\n\n"
-        f"{divergence_summary + '\n\n' if divergence_summary else ''}"
-        f"**AREA OBSERVASI DAN RISIKO**\n\nRange 20 candle berada pada **{_fmt(float(data['low20']))}** sampai **{_fmt(float(data['high20']))}**. ATR(14) adalah **{_fmt(float(data['atr14']))}** dan volatilitas 20 candle **{float(data['volatility20']):.2f}%**. Bias harus dievaluasi ulang bila struktur harga bergerak melawan MA 50/MA 200 atau keluar dari range observasi.{agenda_section}{scenario_section}\n\n"
-        f"{invalidation_summary}\n\n"
-        f"**STATUS KETERBARUAN DATA**\n\n{freshness_section}\n\n"
-        f"{source_health_summary}\n\n"
-        f"{provenance_summary}\n\n"
-        f"**KONTEKS FUNDAMENTAL PUBLIK**\n\n{_fundamental_section(fundamentals)}"
-        f"{f'\n\n{surprise_summary}' if surprise_summary else ''}"
+        f"**RINGKASAN {snapshot.instrument.code} · {timeframe_label(snapshot.interval)}**\n\n"
+        f"{agenda_summary + '\n\n' if agenda_summary else ''}"
+        f"{timeframe_note} Harga referensi **{price}** dengan perubahan **{change_20:+.2f}%** dalam 20 candle. "
+        f"Kondisi saat ini **{data['market_state']}**. {_trend_description(data)}\n\n"
+        f"**Hal yang paling relevan**\n\n"
+        f"RSI(14) **{rsi:.1f}**, ADX(14) **{adx:.1f}**, dan volatilitas 20 candle **{float(data['volatility20']):.2f}%**. "
+        f"Rentang 20 candle berada pada **{range_low}–{range_high}**. {consensus_note}\n\n"
+        f"**Risiko dan batas data**\n\n"
+        f"{data_status} {snapshot.warning}\n\n"
+        f"**Konteks pendukung**\n\n{fundamentals_summary}"
+        f"{scenario_section}"
         f"{f'\n\n{reaction_section}' if reaction_section else ''}\n\n"
-        f"**BATAS DATA**\n\n{snapshot.warning} Analisis ini dibuat untuk riset dan edukasi, bukan nasihat finansial personal."
+        "Pembacaan ini untuk riset dan edukasi, bukan nasihat finansial personal."
     )
 
 
