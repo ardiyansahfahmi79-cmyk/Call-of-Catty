@@ -44,6 +44,7 @@ BOJ_TANKAN_ENDPOINT = "https://www.stat-search.boj.or.jp/api/v1/getDataCode"
 BOJ_TANKAN_SERIES_CODE = "TK99F1000601GCQ01000"
 BI_HOME_URL = "https://www.bi.go.id/en/default.aspx"
 BOE_BANK_RATE_ENDPOINT = "https://www.bankofengland.co.uk/boeapps/database/_iadb-fromshowcolumns.asp"
+SNB_POLICY_RATE_ENDPOINT = "https://data.snb.ch/api/cube/snbgwdzid/data/json/en"
 
 
 @dataclass(frozen=True)
@@ -374,6 +375,43 @@ def _latest_boe_policy_rate(instrument: Instrument) -> list[FundamentalSnapshot]
     return _cached("bank_of_england_bank_rate", 6 * 60 * 60, load)
 
 
+def _latest_snb_policy_rate(instrument: Instrument) -> list[FundamentalSnapshot]:
+    """Ambil SNB policy rate dari seri JSON eksplisit untuk konteks CHF."""
+    if "CHF" not in instrument_economic_currencies(instrument.code):
+        return []
+
+    def load() -> list[FundamentalSnapshot]:
+        now = _utc_now()
+        start_date = (now.replace(day=1)).strftime("%Y-%m-%d")
+        end_date = now.strftime("%Y-%m-%d")
+        params = {"dimSel": "D0(LZ)", "fromDate": start_date, "toDate": end_date}
+        payload = _get_json(SNB_POLICY_RATE_ENDPOINT, params)
+        series_list = payload.get("timeseries", [])
+        if not series_list:
+            return []
+        series = series_list[0]
+        point = next((value for value in reversed(series.get("values", [])) if value.get("value") is not None and value.get("date")), None)
+        if not point:
+            return []
+        metadata = series.get("metadata", {})
+        source_url = f"{SNB_POLICY_RATE_ENDPOINT}?dimSel=D0(LZ)&fromDate={start_date}&toDate={end_date}"
+        return [FundamentalSnapshot(
+            category="Makro Swiss",
+            instrument_code=instrument.code,
+            title="SNB policy rate",
+            value=str(point["value"]),
+            unit=str(metadata.get("unit", "%")),
+            observed_at=_to_datetime(str(point["date"])),
+            released_at=None,
+            fetched_at=now,
+            source_name="Swiss National Bank Data Portal",
+            source_url=source_url,
+            freshness="Seri kebijakan resmi Swiss; dipanggil dengan jendela tanggal terbatas dan cache, bukan polling berlebih.",
+            warning="SNB policy rate adalah konteks CHF dan tidak menyimpulkan arah harga USDCHF secara pasti.",
+        )]
+    return _cached("swiss_national_bank_policy_rate", 6 * 60 * 60, load)
+
+
 def _latest_fred_macro(instrument_code: str) -> list[FundamentalSnapshot]:
     """Ambil seri harian publik FRED untuk konteks lintas aset, bukan prediksi market."""
     definitions = (
@@ -620,6 +658,7 @@ def fetch_fundamental_context(instrument: Instrument) -> list[FundamentalSnapsho
     snapshots.extend(_latest_boj_tankan(instrument))
     snapshots.extend(_latest_bi_policy_rate(instrument))
     snapshots.extend(_latest_boe_policy_rate(instrument))
+    snapshots.extend(_latest_snb_policy_rate(instrument))
     # Pengangguran BLS tetap dibatasi pada aset yang berdenominasi/berkaitan USD.
     if instrument.code not in {"BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "XRPUSD", "ADAUSD", "DOTUSD", "MATICUSD", "LINKUSD", "AVAXUSD"}:
         snapshots.extend(_latest_us_unemployment(instrument.code))
