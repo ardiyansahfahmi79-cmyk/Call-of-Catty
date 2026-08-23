@@ -25,6 +25,10 @@ def main() -> None:
         assert infer_intent(f"Tinjau risiko {code} pada D1") == "risk"
         scenario_count += 1
 
+    for question in ("Analisa US100 H1", "Analisa us100 H1", "Analisa NASDAQ INDEX H1", "Analisa Nasdaq Index H1"):
+        assert _codes(question) == ["US100"], question
+        scenario_count += 1
+
     additional_pairs = (
         "EURCHF", "EURAUD", "EURNZD", "AUDJPY", "CADJPY", "CHFJPY", "GBPAUD", "GBPCAD",
         "GBPCHF", "AUDCAD", "AUDCHF", "NZDJPY", "NZDCAD", "NZDCHF", "CADCHF",

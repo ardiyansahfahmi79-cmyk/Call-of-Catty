@@ -73,6 +73,7 @@ INSTRUMENTS: tuple[Instrument, ...] = (
     Instrument("DXY", "US Dollar Index", "DX-Y.NYB", "Indeks", ("dxy", "dollar index", "indeks dolar")),
     Instrument("SPX", "S&P 500", "^GSPC", "Indeks", ("spx", "sp500", "s&p 500", "s&p500", "snp500")),
     Instrument("NAS100", "Nasdaq Composite", "^IXIC", "Indeks", ("nas100", "nasdaq", "nasdaq 100")),
+    Instrument("US100", "Nasdaq-100 Index", "^NDX", "Indeks", ("us100", "nasdaq index", "nasdaq-index", "nasdaq 100 index")),
     Instrument("IHSG", "Indeks Harga Saham Gabungan", "^JKSE", "Indeks", ("ihsg", "jakarta composite", "idx composite")),
     Instrument("BBCA", "Bank Central Asia", "BBCA.JK", "Saham IDX", ("bbca", "bank bca")),
     Instrument("BBRI", "Bank Rakyat Indonesia", "BBRI.JK", "Saham IDX", ("bbri", "bank bri")),
@@ -102,7 +103,7 @@ _INSTRUMENT_ECONOMIC_CURRENCIES: dict[str, tuple[str, ...]] = {
     "BTCUSD": ("USD",), "ETHUSD": ("USD",), "BNBUSD": ("USD",), "SOLUSD": ("USD",),
     "XRPUSD": ("USD",), "ADAUSD": ("USD",), "DOTUSD": ("USD",), "MATICUSD": ("USD",),
     "LINKUSD": ("USD",), "AVAXUSD": ("USD",),
-    "WTI": ("USD",), "BRENT": ("USD",), "DXY": ("USD",), "SPX": ("USD",), "NAS100": ("USD",),
+    "WTI": ("USD",), "BRENT": ("USD",), "DXY": ("USD",), "SPX": ("USD",), "NAS100": ("USD",), "US100": ("USD",),
     "IHSG": ("IDR",), "BBCA": ("IDR",), "BBRI": ("IDR",), "TLKM": ("IDR",), "ASII": ("IDR",),
     "BMRI": ("IDR",), "UNVR": ("IDR",), "GGRM": ("IDR",), "HMSP": ("IDR",), "ANTM": ("IDR",),
 }
