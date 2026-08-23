@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "intents": [
+    {
+      "name": "levels_entry",
+      "priority": 90,
+      "patterns": ["tentukan entry", "area entry", "stop loss", "take profit", "tp1", "tp2", "tp3", "risk reward", "risk to reward", "tentukan level"]
+    },
+    {
+      "name": "risk",
+      "priority": 80,
+      "patterns": ["manajemen risiko", "atur risiko", "tinjau risiko", "berapa risiko", "volatilitas", "risk management"]
+    },
+    {
+      "name": "comparison",
+      "priority": 70,
+      "patterns": ["bandingkan", "compare", "versus", "vs"]
+    },
+    {
+      "name": "trend",
+      "priority": 60,
+      "patterns": ["arah tren", "arah trend", "lihat tren", "lihat trend", "ma 50", "ma50", "ma 200", "ma200"]
+    },
+    {
+      "name": "signals",
+      "priority": 50,
+      "patterns": ["kondisi indikator", "sinyal market", "sinyal pasar", "buy sell", "indikator"]
+    },
+    {
+      "name": "fundamental",
+      "priority": 40,
+      "patterns": ["konteks fundamental", "kondisi makro", "data fundamental", "fundamental", "makro"]
+    }
+  ]
+}

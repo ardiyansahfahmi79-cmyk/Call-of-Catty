@@ -113,6 +113,21 @@ def instrument_economic_currencies(instrument_code: str) -> tuple[str, ...]:
     return _INSTRUMENT_ECONOMIC_CURRENCIES.get(instrument_code.upper(), ())
 
 
+def reference_quote_freshness(observed_at: datetime | None, now: datetime | None = None) -> tuple[str, int | None]:
+    """Labelkan umur quote agar referensi lama tidak disalahartikan sebagai harga saat ini."""
+    if observed_at is None:
+        return "TIDAK TERSEDIA", None
+    current = now or datetime.now(timezone.utc)
+    age_seconds = max(0, int((current - observed_at).total_seconds()))
+    if age_seconds <= 5 * 60:
+        return "TERKINI", age_seconds
+    if age_seconds <= 60 * 60:
+        return "TERTUNDA <1 JAM", age_seconds
+    if age_seconds <= 24 * 60 * 60:
+        return "TERTUNDA <1 HARI", age_seconds
+    return "TERTUNDA >1 HARI", age_seconds
+
+
 _BY_CODE = {instrument.code: instrument for instrument in INSTRUMENTS}
 _CRYPTO_COIN_IDS = {
     "BTCUSD": "bitcoin", "ETHUSD": "ethereum", "BNBUSD": "binancecoin", "SOLUSD": "solana",
@@ -157,6 +172,9 @@ class MarketSnapshot:
     interval: str = "1h"
     reference_spot_price: float | None = None
     reference_spot_at: datetime | None = None
+    reference_quote_bid: float | None = None
+    reference_quote_ask: float | None = None
+    reference_quote_at: datetime | None = None
 
 
 def detect_instruments(question: str) -> list[Instrument]:
@@ -391,11 +409,14 @@ def _fetch_coingecko_ohlc(instrument: Instrument, interval: str) -> pd.DataFrame
         return pd.DataFrame()
 
 
-def _fetch_xauusd_spot_reference() -> tuple[float | None, datetime | None]:
-    """Ambil satu quote XAU/USD publik sebagai referensi spot terpisah dari candle futures."""
+def _fetch_public_pair_quote(instrument_code: str) -> tuple[float | None, float | None, datetime | None]:
+    """Ambil bid/ask publik untuk pair enam karakter tanpa mencampurkannya dengan candle chart."""
+    if len(instrument_code) != 6 or not instrument_code.isalpha():
+        return None, None, None
     try:
+        pair_path = f"{instrument_code[:3]}/{instrument_code[3:]}"
         response = requests.get(
-            "https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAU/USD",
+            f"https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/{pair_path}",
             timeout=8,
             headers={"Accept": "application/json", "User-Agent": "AeroAI-Research/1.0"},
         )
@@ -406,12 +427,11 @@ def _fetch_xauusd_spot_reference() -> tuple[float | None, datetime | None]:
             prices = venue.get("spreadProfilePrices", [])
             point = next((item for item in prices if item.get("bid") is not None and item.get("ask") is not None), None)
             if point and timestamp:
-                midpoint = (float(point["bid"]) + float(point["ask"])) / 2
                 observed_at = datetime.fromtimestamp(float(timestamp) / 1000, tz=timezone.utc)
-                return midpoint, observed_at
+                return float(point["bid"]), float(point["ask"]), observed_at
     except (TypeError, ValueError, KeyError, requests.RequestException):
         pass
-    return None, None
+    return None, None, None
 
 
 def fetch_market_snapshot(instrument: Instrument, interval: str = "1h") -> MarketSnapshot:
@@ -447,8 +467,25 @@ def fetch_market_snapshot(instrument: Instrument, interval: str = "1h") -> Marke
         warning = "CoinGecko keyless memiliki batas rate bersama dan candle historis; bukan feed eksekusi broker."
     if instrument.note:
         warning = f"{instrument.note} {warning}"
-    reference_spot_price, reference_spot_at = _fetch_xauusd_spot_reference() if instrument.code == "XAUUSD" else (None, None)
-    return MarketSnapshot(instrument, candles, calculate_indicators(candles), datetime.now(timezone.utc), candles.index[-1].to_pydatetime(), source, warning, requested_interval, reference_spot_price, reference_spot_at)
+    quote_allowed = instrument.asset_class == "Forex" or instrument.code == "XAUUSD"
+    reference_bid, reference_ask, reference_at = _fetch_public_pair_quote(instrument.code) if quote_allowed else (None, None, None)
+    reference_spot_price = (reference_bid + reference_ask) / 2 if instrument.code == "XAUUSD" and reference_bid is not None and reference_ask is not None else None
+    reference_spot_at = reference_at if instrument.code == "XAUUSD" else None
+    return MarketSnapshot(
+        instrument,
+        candles,
+        calculate_indicators(candles),
+        datetime.now(timezone.utc),
+        candles.index[-1].to_pydatetime(),
+        source,
+        warning,
+        requested_interval,
+        reference_spot_price,
+        reference_spot_at,
+        reference_bid,
+        reference_ask,
+        reference_at,
+    )
 
 
 def normalized_comparison(snapshots: Iterable[MarketSnapshot]) -> pd.DataFrame:

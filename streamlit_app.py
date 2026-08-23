@@ -15,7 +15,7 @@ import streamlit as st
 from fundamental_data import FundamentalSnapshot, fetch_fundamental_context
 from market_chat import agenda_clarification_prompts, build_agenda_reply, build_instrument_confirmation, build_multi_instrument_clarification, build_reply, build_source_unavailable_reply, build_unknown_input_reply, detect_economic_agenda, follow_up_prompts, multi_instrument_clarification_prompts
 from market_intelligence import normalization_section, normalize_market_language
-from market_data import MarketSnapshot, detect_instruments, detect_timeframe, detect_unknown_instrument_candidates, fetch_market_snapshot, normalized_comparison
+from market_data import MarketSnapshot, detect_instruments, detect_timeframe, detect_unknown_instrument_candidates, fetch_market_snapshot, normalized_comparison, reference_quote_freshness
 
 
 MIN_ANALYSIS_SECONDS = 13
@@ -133,6 +133,11 @@ def render_snapshot(snapshot: MarketSnapshot, fundamentals: list[FundamentalSnap
     if snapshot.reference_spot_price is not None and snapshot.reference_spot_at is not None:
         observed_at = snapshot.reference_spot_at.astimezone(timezone.utc).strftime("%d %b %H:%M UTC")
         spot_label = f'<span>REFERENSI SPOT: {_format_number(snapshot.reference_spot_price)} · {observed_at}</span>'
+    elif snapshot.reference_quote_bid is not None and snapshot.reference_quote_ask is not None and snapshot.reference_quote_at is not None:
+        observed_at = snapshot.reference_quote_at.astimezone(timezone.utc).strftime("%d %b %H:%M UTC")
+        midpoint = (snapshot.reference_quote_bid + snapshot.reference_quote_ask) / 2
+        freshness, _ = reference_quote_freshness(snapshot.reference_quote_at)
+        spot_label = f'<span>REFERENSI QUOTE {freshness}: {_format_number(midpoint)} · {observed_at}</span>'
     st.markdown(f'<div class="data-proof"><span>CANDLE TERAKHIR: {last_candle}</span><span>BASIS HARGA: {html.escape(basis)}</span><span>DIAMBIL: {snapshot.fetched_at.astimezone(timezone.utc).strftime("%H:%M:%S UTC")}</span>{spot_label}</div>', unsafe_allow_html=True)
     metrics = [("HARGA CHART", _format_number(data["price"])), ("20 CANDLE", f"{float(data['change_20']):+.2f}%"), ("RSI 14", f"{float(data['rsi14']):.1f}"), ("ADX 14", f"{float(data['adx14']):.1f}"), ("KONDISI", str(data["market_state"])), ("BIAS", bias)]
     markup = ''.join(f'<div class="metric-box"><div class="name">{name}</div><div class="val {signal_class if name in {"KONDISI", "BIAS"} else ""}">{html.escape(value)}</div></div>' for name, value in metrics)

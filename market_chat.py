@@ -10,6 +10,7 @@ from fundamental_data import FundamentalSnapshot
 from market_intelligence import (
     ml_regime_assessment,
 )
+from market_intent_router import resolve_local_intent
 from market_data import MarketSnapshot, instrument_economic_currencies, timeframe_label, timeframe_was_explicit
 
 
@@ -204,6 +205,9 @@ def infer_intent(question: str) -> str:
     text = question.casefold()
     if detect_economic_agenda(question):
         return "economic_agenda"
+    local_intent = resolve_local_intent(question)
+    if local_intent:
+        return local_intent.name
     if any(word in text for word in ("bandingkan", "compare", "versus", " vs ")):
         return "comparison"
     if any(word in text for word in ("entry", "stop loss", "take profit", "tentukan level", "tp1", "tp2", "tp3")) or " sl " in f" {text} ":
@@ -637,6 +641,10 @@ def build_reply(question: str, snapshot: MarketSnapshot, fundamentals: list[Fund
         spot_value = _fmt(float(snapshot.reference_spot_price))
         spot_time = snapshot.reference_spot_at.astimezone(timezone.utc).strftime('%d %b %Y %H:%M UTC')
         spot_note = f" Referensi spot terakhir **{spot_value}** tersedia pada **{spot_time}**; nilainya dapat berbeda dari harga chart karena basis harga berbeda."
+    elif snapshot.reference_quote_bid is not None and snapshot.reference_quote_ask is not None and snapshot.reference_quote_at is not None:
+        midpoint = (float(snapshot.reference_quote_bid) + float(snapshot.reference_quote_ask)) / 2
+        quote_time = snapshot.reference_quote_at.astimezone(timezone.utc).strftime('%d %b %Y %H:%M UTC')
+        spot_note = f" Referensi quote terakhir **{_fmt(midpoint)}** tersedia pada **{quote_time}**; nilainya dapat berbeda dari harga chart karena basis harga berbeda."
     scenario_section = f"\n\n**SKENARIO LEVEL TEKNIKAL**\n\n{_entry_scenario(data)}" if intent == "levels_entry" else ""
     reaction_section = _release_reaction_section(question, agenda, snapshot)
     agenda_summary = _agenda_summary(agenda, question, snapshot.instrument.code) if agenda else ""
