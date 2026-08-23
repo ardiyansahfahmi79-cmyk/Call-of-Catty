@@ -398,6 +398,12 @@ def build_unknown_input_reply(question: str, unknown_candidates: list[str] | Non
             "Silakan periksa ejaan atau gunakan kode yang tersedia, misalnya **XAUUSD**, EURUSD, BTCUSD, WTI, IHSG, atau BBCA. "
             "Jika Anda bermaksud menulis instrumen lain, sebutkan kode yang benar agar sistem tidak mengambil data yang salah."
         )
+    if re.fullmatch(r"\s*(?:halo|hai|hello|hi|selamat\s+(?:pagi|siang|sore|malam))(?:\s+(?:aero|aero\s+ai))?\s*[!.,]?\s*", question.casefold()):
+        return (
+            "Halo, saya **Aero AI**. Saya adalah sistem pemindaian market berbasis data yang masih dalam tahap pengembangan, "
+            "dengan fokus pada instrumen, timeframe, indikator, risiko, dan agenda ekonomi—bukan percakapan umum. "
+            "Untuk memulai, coba tulis **Analisa EURUSD sekarang**, **Analisa XAUUSD pada H1**, **Jelaskan CPI AS**, atau **Retail Sales untuk DXY**."
+        )
     compact = re.sub(r"\s+", "", question)
     if len(compact) >= 6 and not re.search(r"(?:analisa|market|agenda|indikator|risiko|trend|fundamental)", question.casefold()):
         return (
