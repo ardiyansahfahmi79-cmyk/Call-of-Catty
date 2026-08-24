@@ -15,6 +15,7 @@ from market_intent_router import resolve_local_intent
 from market_data import Instrument, MarketSnapshot, instrument_economic_currencies, timeframe_label, timeframe_was_explicit
 from market_context import market_context_section
 from market_structure import price_structure_section
+from response_variations import analysis_response_family, select_response_variant
 
 
 AgendaDefinition = tuple[tuple[str, ...], str, str, tuple[str, ...]]
@@ -435,11 +436,13 @@ def build_agenda_reply(question: str) -> str | None:
     name = agenda_display_name(agenda, question)
     if _needs_currency_clarification(agenda, question):
         return (
+            f"{select_response_variant('agenda_clarification', question)}\n\n"
             f"{_agenda_clarification_section(agenda, question)}\n\n"
             "**BATAS ANALISIS**\n\nIni adalah konteks riset dan edukasi, bukan nasihat finansial personal atau instruksi transaksi."
         )
     return (
         f"**{name}**\n\n"
+        f"{select_response_variant('agenda_direct', question)}\n\n"
         f"{context} {_agenda_market_channel()}\n\n"
         f"**Status rilis**\n\n{_agenda_release_summary(agenda, question, '')}\n\n"
         f"Forecast atau konsensus di atas berasal dari kalender publik, bukan prediksi Aero AI. Untuk melihat kondisi harga yang terkait, tulis misalnya **Analisa XAUUSD pada H1 setelah {name}**.\n\n"
@@ -453,29 +456,34 @@ def build_unknown_input_reply(question: str, unknown_candidates: list[str] | Non
     if candidates:
         shown = ", ".join(f"**{candidate}**" for candidate in candidates[:3])
         return (
+            f"{select_response_variant('unknown_unsupported', question)}\n\n"
             f"Aero AI mendeteksi kode {shown}, tetapi instrumen atau pair tersebut **belum tersedia** pada daftar data publik yang dikonfigurasi. "
             "Silakan periksa ejaan atau gunakan kode yang tersedia, misalnya **XAUUSD**, EURUSD, BTCUSD, WTI, IHSG, atau BBCA. "
             "Jika Anda bermaksud menulis instrumen lain, sebutkan kode yang benar agar sistem tidak mengambil data yang salah."
         )
     if re.fullmatch(r"\s*(?:halo|hai|hello|hi|selamat\s+(?:pagi|siang|sore|malam))(?:\s+(?:aero|aero\s+ai))?\s*[!.,]?\s*", question.casefold()):
         return (
+            f"{select_response_variant('unknown_greeting', question)}\n\n"
             "Halo, saya **Aero AI**. Ada instrumen atau agenda market yang ingin Anda analisa? Saya adalah sistem pemindaian market berbasis data yang masih dalam tahap pengembangan, "
             "dengan fokus pada instrumen, timeframe, indikator, risiko, dan agenda ekonomi—bukan percakapan umum. "
             "Untuk memulai, coba tulis **Analisa EURUSD sekarang**, **Analisa XAUUSD pada H1**, **Jelaskan CPI AS**, atau **Retail Sales untuk DXY**."
         )
     if re.search(r"\b(?:siapa|siapakah|who)\b.*\b(?:mencipta(?:kan)?(?:\s*mu)?|pencipta(?:\s*mu)?|membuat(?:\s*mu)?|pembuat(?:\s*mu)?|mengembangkan(?:\s*mu)?|dikembangkan|pengembang(?:\s*mu)?|creator|created|developer)\b", question.casefold()):
         return (
+            f"{select_response_variant('unknown_identity', question)}\n\n"
             "Aero AI dikembangkan dan dipelihara oleh **DynamiHatch** sebagai sistem market-intelligence berbasis data. "
             "Fokus saya adalah membantu pemindaian instrumen, struktur harga, indikator, risiko, dan konteks fundamental publik untuk riset serta edukasi."
         )
     if re.search(r"\bgu\b", question.casefold()) and re.search(r"\b(?:analisa|analisis|scan|market|harga|pair|instrumen)\b", question.casefold()):
         return (
+            f"{select_response_variant('unknown_ambiguous', question)}\n\n"
             "Saya menemukan singkatan **gu**, tetapi singkatan tersebut belum cukup spesifik untuk memilih instrumen secara aman. "
             "Jika yang Anda maksud emas, tulis **emas**, **gold**, atau **XAUUSD**; jika yang dimaksud instrumen lain, tulis kode lengkapnya. "
             "Aero AI tidak akan menebak pair dari singkatan ambigu agar tidak mengambil data market yang salah."
         )
     if re.search(r"\b(?:entry|stop\s*loss|take\s*profit|tp\s*[123]|sl|risk\s*(?:reward|to\s*reward))\b", question.casefold()):
         return (
+            f"{select_response_variant('unknown_levels_missing', question)}\n\n"
             "Untuk menyusun area Entry, SL, TP1, TP2, dan TP3 secara bersyarat, sebutkan instrumen dan bila perlu timeframe. "
             "Contoh: **Tentukan Entry, SL, TP1 TP2 TP3 untuk XAUUSD pada H1**. "
             "Aero AI akan menggunakan data yang tersedia dan menandai batas risikonya, bukan memberi instruksi transaksi personal."
@@ -483,10 +491,12 @@ def build_unknown_input_reply(question: str, unknown_candidates: list[str] | Non
     compact = re.sub(r"\s+", "", question)
     if len(compact) >= 6 and not re.search(r"(?:analisa|market|agenda|indikator|risiko|trend|fundamental)", question.casefold()):
         return (
+            f"{select_response_variant('unknown_off_topic', question)}\n\n"
             "Pesan ini belum dapat dipahami sebagai pertanyaan market yang didukung. Aero AI masih berada dalam tahap pengembangan sebagai sistem pemindaian market berbasis data dan tidak dirancang untuk percakapan umum di luar konteks market. "
             "Mohon tulis instrumen atau agenda secara jelas, misalnya **Analisa XAUUSD pada H1**, **Jelaskan Retail Sales**, atau **NFP untuk DXY**."
         )
     return (
+        f"{select_response_variant('unknown_off_topic', question)}\n\n"
         "Pesan ini belum dapat dipetakan ke instrumen, timeframe, atau agenda ekonomi yang didukung. Aero AI masih berada dalam tahap pengembangan sebagai sistem pemindaian market berbasis data dan tidak dirancang untuk percakapan umum di luar konteks market. "
         "Silakan sebutkan instrumen, timeframe, atau agenda yang jelas. Contoh: **Analisa XAGUSD di M15**, **Bandingkan EURUSD dengan DXY pada H4**, **Jelaskan FOMC**, atau **Jelaskan Retail Sales MoM**."
     )
@@ -496,6 +506,7 @@ def build_source_unavailable_reply(instruments: list[str]) -> str:
     """Tampilkan kegagalan sumber publik tanpa mengungkap detail teknis atau membuat angka."""
     shown = ", ".join(f"**{instrument}**" for instrument in instruments[:2]) or "instrumen yang diminta"
     return (
+        f"{select_response_variant('source_unavailable', shown)}\n\n"
         f"Sumber harga publik belum mengembalikan candle yang memadai untuk {shown} pada pemindaian ini. "
         "Aero AI tidak akan membuat harga, indikator, forecast, atau level pengganti ketika sumber eksternal terlambat atau tidak tersedia. "
         "Silakan coba kembali beberapa saat lagi, gunakan timeframe lain, atau pilih instrumen lain. Analisis Aero AI tetap ditujukan untuk riset dan edukasi, bukan nasihat finansial personal."
@@ -504,6 +515,7 @@ def build_source_unavailable_reply(instruments: list[str]) -> str:
 
 def build_instrument_confirmation(instrument: str) -> str:
     return (
+        f"{select_response_variant('instrument_confirmation', instrument)}\n\n"
         f"Anda menyebut **{instrument}**. Apakah Anda ingin saya menganalisa instrumen tersebut? "
         f"Tambahkan timeframe agar pemindaian lebih spesifik, misalnya **Analisa {instrument} di M15**, **H4**, **D1**, **W1**, atau **MN**."
     )
@@ -526,6 +538,7 @@ def build_multi_instrument_clarification(instruments: list[str]) -> str:
     shown = ", ".join(f"**{code}**" for code in instruments[:5])
     extra = "" if len(instruments) <= 5 else f" serta {len(instruments) - 5} instrumen lainnya"
     return (
+        f"{select_response_variant('multi_instrument_clarification', '|'.join(instruments))}\n\n"
         f"Aero AI mendeteksi lebih dari dua instrumen: {shown}{extra}. "
         "Agar perbandingan tetap terbaca dan tidak ada instrumen yang diabaikan, pilih maksimal dua instrumen utama atau minta analisis satu per satu. "
         "Sistem belum akan menarik data sampai fokus tersebut jelas."
@@ -654,6 +667,7 @@ def build_spot_fallback_reply(question: str, instrument: Instrument, interval: s
     midpoint = (bid + ask) / 2
     return (
         f"**RINGKASAN {instrument.code} · {timeframe_label(interval)}**\n\n"
+        f"{select_response_variant('spot_fallback', question)}\n\n"
         f"Permintaan terbaca: **analisa {instrument.code}** pada **{timeframe_label(interval)}**. "
         f"Harga spot referensi saat ini **{_fmt(midpoint)}** pada **{_wib_time(observed_at)}**.\n\n"
         "Candle teknikal belum tersedia cukup pada pemindaian ini, sehingga Aero AI tidak membentuk indikator, Entry, SL, atau TP pengganti. "
@@ -748,9 +762,15 @@ def build_reply(question: str, snapshot: MarketSnapshot, fundamentals: list[Fund
     caution = data_status
     if consensus_note:
         caution = f"{caution} {consensus_note}"
+    variation_family = analysis_response_family(
+        intent,
+        has_xau_spot=snapshot.instrument.code == "XAUUSD" and snapshot.reference_spot_price is not None,
+    )
+    variation = select_response_variant(variation_family, f"{question}|{snapshot.instrument.code}|{snapshot.interval}")
     return (
         f"**{snapshot.instrument.code} · {timeframe_label(snapshot.interval)} · {str(data['market_state']).title()}**\n\n"
         f"{price_sentence}{spot_note}\n\n"
+        f"{variation}\n\n"
         f"**Inti pembacaan**\n\n"
         f"{posture}\n\n"
         f"• RSI(14) **{rsi:.1f}** · ADX(14) **{adx:.1f}** · volatilitas 20 candle **{float(data['volatility20']):.2f}%**.\n"

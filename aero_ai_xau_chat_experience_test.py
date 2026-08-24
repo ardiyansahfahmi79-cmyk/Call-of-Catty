@@ -63,7 +63,7 @@ def run() -> None:
     for position in range(50):
         question = f"{parsing_forms[position % len(parsing_forms)]} {position}"
         reply = build_reply(question, snapshot, [])
-        assert "Permintaan terbaca" in reply and "XAUUSD" in reply and "H1" in reply, reply
+        assert "**XAUUSD · H1 ·" in reply, reply
         assert "Harga spot referensi **4,641.81**" in reply, reply
         assert "24 Aug 2026 16:14 WIB" in reply, reply
         assert "Harga chart" not in reply and "UTC" not in reply and "4,697.80" not in reply, reply
