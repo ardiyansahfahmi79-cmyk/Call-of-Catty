@@ -8,7 +8,7 @@ satu sumber tidak boleh menghentikan analisis teknikal utama.
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from io import StringIO
 import re
@@ -123,6 +123,11 @@ def _cached(key: str, ttl_seconds: int, loader) -> list[FundamentalSnapshot]:
     return result
 
 
+def _for_instrument(items: list[FundamentalSnapshot], instrument_code: str) -> list[FundamentalSnapshot]:
+    """Salin observasi sumber bersama dengan metadata instrumen pemanggil yang benar."""
+    return [replace(item, instrument_code=instrument_code) for item in items]
+
+
 def _latest_us_unemployment(instrument_code: str) -> list[FundamentalSnapshot]:
     def load() -> list[FundamentalSnapshot]:
         source_url = "https://api.bls.gov/publicAPI/v2/timeseries/data/LNS14000000?latest=true"
@@ -131,7 +136,7 @@ def _latest_us_unemployment(instrument_code: str) -> list[FundamentalSnapshot]:
         observed = _to_datetime(f"{point['year']}-{point['period'][1:]}-01")
         return [FundamentalSnapshot(
             category="Makro AS",
-            instrument_code=instrument_code,
+            instrument_code="_SOURCE_",
             title="Tingkat pengangguran AS",
             value=str(point["value"]),
             unit="%",
@@ -143,7 +148,7 @@ def _latest_us_unemployment(instrument_code: str) -> list[FundamentalSnapshot]:
             freshness="Seri bulanan; bukan data intraday.",
             warning="Gunakan sebagai konteks makro USD, bukan penyebab tunggal pergerakan harga.",
         )]
-    return _cached("bls_unemployment", 6 * 60 * 60, load)
+    return _for_instrument(_cached("bls_unemployment", 6 * 60 * 60, load), instrument_code)
 
 
 def _latest_worldbank_inflation(instrument: Instrument) -> list[FundamentalSnapshot]:
@@ -162,7 +167,7 @@ def _latest_worldbank_inflation(instrument: Instrument) -> list[FundamentalSnaps
             point = next(row for row in rows if row.get("value") is not None)
             return [FundamentalSnapshot(
                 category=f"Makro {country_name}",
-                instrument_code=instrument.code,
+                instrument_code="_SOURCE_",
                 title=f"Inflasi konsumen {country_name}",
                 value=f"{float(point['value']):.1f}",
                 unit="% tahunan",
@@ -175,7 +180,7 @@ def _latest_worldbank_inflation(instrument: Instrument) -> list[FundamentalSnaps
                 warning="Gunakan bersama kalender rilis yang lebih baru. Nilai ini tidak menggantikan actual, forecast, atau previous dari event berjalan.",
             )]
 
-        snapshots.extend(_cached(f"worldbank_cpi_{country_code}", 24 * 60 * 60, load))
+        snapshots.extend(_for_instrument(_cached(f"worldbank_cpi_{country_code}", 24 * 60 * 60, load), instrument.code))
     return snapshots
 
 
@@ -304,7 +309,7 @@ def _latest_boj_tankan(instrument: Instrument) -> list[FundamentalSnapshot]:
             freshness="Seri kuartalan resmi Bank of Japan; bukan indikator harga intraday.",
             warning="Tankan menggambarkan survei kondisi bisnis. Nilainya tidak menyimpulkan arah JPY atau harga instrumen secara pasti.",
         )]
-    return _cached("boj_tankan_manufacturing", 12 * 60 * 60, load)
+    return _cached(f"boj_tankan_manufacturing_{instrument.code}", 12 * 60 * 60, load)
 
 
 def _latest_bi_policy_rate(instrument: Instrument) -> list[FundamentalSnapshot]:
@@ -337,7 +342,7 @@ def _latest_bi_policy_rate(instrument: Instrument) -> list[FundamentalSnapshot]:
             freshness="Kartu indikator publik Bank Indonesia; kebijakan dapat berubah pada rapat berikutnya.",
             warning="BI-Rate adalah konteks kebijakan moneter IDR, bukan sinyal arah tunggal IHSG atau saham IDX.",
         )]
-    return _cached("bank_indonesia_policy_rate", 6 * 60 * 60, load)
+    return _cached(f"bank_indonesia_policy_rate_{instrument.code}", 6 * 60 * 60, load)
 
 
 def _latest_boe_policy_rate(instrument: Instrument) -> list[FundamentalSnapshot]:
@@ -372,7 +377,7 @@ def _latest_boe_policy_rate(instrument: Instrument) -> list[FundamentalSnapshot]
             freshness="Seri kebijakan resmi Inggris; bukan proyeksi keputusan Bank of England berikutnya.",
             warning="Bank Rate adalah konteks GBP, bukan instruksi transaksi atau prediksi arah harga.",
         )]
-    return _cached("bank_of_england_bank_rate", 6 * 60 * 60, load)
+    return _cached(f"bank_of_england_bank_rate_{instrument.code}", 6 * 60 * 60, load)
 
 
 def _latest_snb_policy_rate(instrument: Instrument) -> list[FundamentalSnapshot]:
@@ -409,7 +414,7 @@ def _latest_snb_policy_rate(instrument: Instrument) -> list[FundamentalSnapshot]
             freshness="Seri kebijakan resmi Swiss; dipanggil dengan jendela tanggal terbatas dan cache, bukan polling berlebih.",
             warning="SNB policy rate adalah konteks CHF dan tidak menyimpulkan arah harga USDCHF secara pasti.",
         )]
-    return _cached("swiss_national_bank_policy_rate", 6 * 60 * 60, load)
+    return _cached(f"swiss_national_bank_policy_rate_{instrument.code}", 6 * 60 * 60, load)
 
 
 def _latest_fred_macro(instrument_code: str) -> list[FundamentalSnapshot]:
@@ -432,7 +437,7 @@ def _latest_fred_macro(instrument_code: str) -> list[FundamentalSnapshot]:
             observed_at = datetime.strptime(point["observation_date"], "%Y-%m-%d").replace(tzinfo=timezone.utc)
             snapshots.append(FundamentalSnapshot(
                 category="Kondisi pasar AS",
-                instrument_code=instrument_code,
+                instrument_code="_SOURCE_",
                 title=title,
                 value=point[series_id],
                 unit=unit,
@@ -446,7 +451,7 @@ def _latest_fred_macro(instrument_code: str) -> list[FundamentalSnapshot]:
             ))
         return snapshots
 
-    return _cached("fred_market_context", 15 * 60, load)
+    return _for_instrument(_cached("fred_market_context", 15 * 60, load), instrument_code)
 
 
 def _latest_new_york_fed_rates(instrument_code: str) -> list[FundamentalSnapshot]:
@@ -466,7 +471,7 @@ def _latest_new_york_fed_rates(instrument_code: str) -> list[FundamentalSnapshot
                 continue
             snapshots.append(FundamentalSnapshot(
                 category="Macro Pulse AS",
-                instrument_code=instrument_code,
+                instrument_code="_SOURCE_",
                 title=title,
                 value=str(point["percentRate"]),
                 unit="%",
@@ -480,7 +485,7 @@ def _latest_new_york_fed_rates(instrument_code: str) -> list[FundamentalSnapshot
             ))
         return snapshots
 
-    return _cached("new_york_fed_reference_rates", 15 * 60, load)
+    return _for_instrument(_cached("new_york_fed_reference_rates", 15 * 60, load), instrument_code)
 
 
 def _parse_us_short_date(value: str) -> datetime:
@@ -519,7 +524,7 @@ def _eia_petroleum_inventory(instrument_code: str) -> list[FundamentalSnapshot]:
             warning=warning,
         )]
 
-    return _cached("eia_petroleum_inventory", 60 * 60, load)
+    return _cached(f"eia_petroleum_inventory_{instrument_code}", 60 * 60, load)
 
 
 def _eia_natural_gas_storage(instrument_code: str) -> list[FundamentalSnapshot]:
@@ -549,7 +554,7 @@ def _eia_natural_gas_storage(instrument_code: str) -> list[FundamentalSnapshot]:
             warning=f"Perubahan mingguan sumber: {change} Bcf. Data storage bukan proyeksi harga gas.",
         )]
 
-    return _cached("eia_natural_gas_storage", 60 * 60, load)
+    return _cached(f"eia_natural_gas_storage_{instrument_code}", 60 * 60, load)
 
 
 def _cftc_managed_money_positioning(instrument_code: str) -> list[FundamentalSnapshot]:
