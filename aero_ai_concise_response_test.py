@@ -17,11 +17,11 @@ def main() -> None:
         "SOURCE HEALTH CONSOLE", "SCENARIO INVALIDATION MAP", "COMPARATIVE REGIME REPLAY",
         "LOCAL DATASET & EVALUATION STUDIO", "SHADOW MODE",
     )
-    assert reply.startswith("**RINGKASAN DXY · H1**"), reply[:120]
-    assert "NFP / Non-Farm Payrolls untuk DXY" in reply[:700], reply[:700]
-    assert "Hal yang paling relevan" in reply
-    assert "Risiko dan batas data" in reply
-    assert "Konteks pendukung" in reply
+    assert reply.startswith("**DXY · H1 ·"), reply[:120]
+    assert "NFP / Non-Farm Payrolls untuk DXY" in reply, reply
+    assert "Inti pembacaan" in reply
+    assert "KONTEKS AGENDA" in reply
+    assert "Catatan risiko" in reply
     assert len(reply) < 4000, len(reply)
     assert not any(term in reply for term in forbidden), reply
     print(f"concise_dxy_nfp_ok=chars:{len(reply)} candle:{snapshot.last_candle_at.isoformat()}")

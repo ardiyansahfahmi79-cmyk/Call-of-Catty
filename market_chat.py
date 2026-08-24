@@ -463,9 +463,9 @@ def build_unknown_input_reply(question: str, unknown_candidates: list[str] | Non
             "dengan fokus pada instrumen, timeframe, indikator, risiko, dan agenda ekonomi—bukan percakapan umum. "
             "Untuk memulai, coba tulis **Analisa EURUSD sekarang**, **Analisa XAUUSD pada H1**, **Jelaskan CPI AS**, atau **Retail Sales untuk DXY**."
         )
-    if re.search(r"\b(?:siapa|siapakah|who)\b.*\b(?:menciptakan(?:mu)?|membuat(?:mu)?|mengembangkan(?:mu)?|pembuat(?:mu)?|creator|created|developer)\b", question.casefold()):
+    if re.search(r"\b(?:siapa|siapakah|who)\b.*\b(?:mencipta(?:kan)?(?:\s*mu)?|pencipta(?:\s*mu)?|membuat(?:\s*mu)?|pembuat(?:\s*mu)?|mengembangkan(?:\s*mu)?|dikembangkan|pengembang(?:\s*mu)?|creator|created|developer)\b", question.casefold()):
         return (
-            "Aero AI dikembangkan oleh **DynamiHatch** sebagai sistem market-intelligence berbasis data. "
+            "Aero AI dikembangkan dan dipelihara oleh **DynamiHatch** sebagai sistem market-intelligence berbasis data. "
             "Fokus saya adalah membantu pemindaian instrumen, struktur harga, indikator, risiko, dan konteks fundamental publik untuk riset serta edukasi."
         )
     if re.search(r"\bgu\b", question.casefold()) and re.search(r"\b(?:analisa|analisis|scan|market|harga|pair|instrumen)\b", question.casefold()):
@@ -584,7 +584,7 @@ def _entry_scenario(data: dict, interval: str) -> str:
         return (
             f"Bias indikator saat ini **BUY**. Area observasi entry teknikal berada pada **{_fmt(entry_low)}–{_fmt(entry_high)}**. "
             f"Batas risiko observasi berada di **{_fmt(invalidation)}**. Target observasi bertahap TP1, TP2, dan TP3 berada di **{_fmt(price + targets[0] * atr)}**, **{_fmt(price + targets[1] * atr)}**, dan **{_fmt(price + targets[2] * atr)}**. "
-            f"Jarak risiko harga menuju invalidasi adalah **{risk_distance:.2f}%** dari harga referensi; angka ini belum memasukkan ukuran posisi, spread, biaya, atau slippage."
+            f"Skenario memakai **ATR(14) {timeframe_label(interval)}** sebesar **{_fmt(atr)}**; jarak risiko menuju invalidasi **{risk_distance:.2f}%** dari harga referensi."
         )
     if bias == "SELL":
         structural_ceiling = max(high20, ma50)
@@ -593,7 +593,7 @@ def _entry_scenario(data: dict, interval: str) -> str:
         return (
             f"Bias indikator saat ini **SELL**. Area observasi entry teknikal berada pada **{_fmt(entry_low)}–{_fmt(entry_high)}**. "
             f"Batas risiko observasi berada di **{_fmt(invalidation)}**. Target observasi bertahap TP1, TP2, dan TP3 berada di **{_fmt(price - targets[0] * atr)}**, **{_fmt(price - targets[1] * atr)}**, dan **{_fmt(price - targets[2] * atr)}**. "
-            f"Jarak risiko harga menuju invalidasi adalah **{risk_distance:.2f}%** dari harga referensi; angka ini belum memasukkan ukuran posisi, spread, biaya, atau slippage."
+            f"Skenario memakai **ATR(14) {timeframe_label(interval)}** sebesar **{_fmt(atr)}**; jarak risiko menuju invalidasi **{risk_distance:.2f}%** dari harga referensi."
         )
     return (
         f"Bias indikator saat ini **NEUTRAL**, sehingga Aero AI tidak membentuk satu instruksi arah. Area observasi awal berada pada **{_fmt(entry_low)}–{_fmt(entry_high)}**. "
@@ -715,7 +715,7 @@ def build_reply(question: str, snapshot: MarketSnapshot, fundamentals: list[Fund
         scenario_section = f"\n\n**SKENARIO LEVEL TEKNIKAL**\n\n{_entry_scenario(data, snapshot.interval)}" if intent == "levels_entry" else ""
     structure_section = (
         f"\n\n{price_structure_section(snapshot)}"
-        if intent in {"overview", "trend", "levels", "levels_entry", "risk", "signals"}
+        if intent in {"trend", "levels", "levels_entry", "risk", "signals"}
         else ""
     )
     volatility_context_section = (
@@ -729,23 +729,39 @@ def build_reply(question: str, snapshot: MarketSnapshot, fundamentals: list[Fund
     data_status = _data_status_summary(snapshot)
     fundamentals_summary = _fundamental_section(fundamentals)
     range_low, range_high = _fmt(float(data["low20"])), _fmt(float(data["high20"]))
+    if adx < 15:
+        posture = "Momentum sedang rendah; harga cenderung berada dalam fase konsolidasi dan konfirmasi penembusan perlu ditunggu."
+    elif data["bias"] == "BUY":
+        posture = "Bias indikator condong naik, tetapi validitasnya tetap bergantung pada candle konfirmasi dan batas risiko."
+    elif data["bias"] == "SELL":
+        posture = "Bias indikator condong turun, tetapi validitasnya tetap bergantung pada candle konfirmasi dan batas risiko."
+    else:
+        posture = "Indikator belum memberi arah yang cukup selaras untuk membuat kesimpulan satu arah."
+    confirmation = (
+        f"Konfirmasi atas dipantau di sekitar **{range_high}**, sedangkan batas bawah yang perlu diperhatikan berada di sekitar **{range_low}**."
+    )
+    context_section = ""
+    if agenda_summary:
+        context_section = f"\n\n**KONTEKS AGENDA**\n\n{agenda_summary}"
+    elif intent == "fundamental":
+        context_section = f"\n\n**KONTEKS FUNDAMENTAL**\n\n{fundamentals_summary}"
+    caution = data_status
+    if consensus_note:
+        caution = f"{caution} {consensus_note}"
     return (
-        f"**RINGKASAN {snapshot.instrument.code} · {timeframe_label(snapshot.interval)}**\n\n"
-        f"{agenda_summary + '\n\n' if agenda_summary else ''}"
-        f"Permintaan terbaca: **{intent.replace('_', ' ')}** · **{snapshot.instrument.code}** · **{timeframe_label(snapshot.interval)}**. "
-        f"{timeframe_note} {price_sentence}{spot_note} "
-        f"{'Perubahan candle teknikal adalah **' + format(change_20, '+.2f') + '%** dalam 20 candle. ' if snapshot.instrument.code != 'XAUUSD' else ''}"
-        f"Kondisi saat ini **{data['market_state']}**. {_trend_description(data)}\n\n"
-        f"**Hal yang paling relevan**\n\n"
-        f"RSI(14) **{rsi:.1f}**, ADX(14) **{adx:.1f}**, dan volatilitas 20 candle **{float(data['volatility20']):.2f}%**. "
-        f"Rentang 20 candle berada pada **{range_low}–{range_high}**. {consensus_note}\n\n"
-        f"**Risiko dan batas data**\n\n"
-        f"{data_status}\n\n"
-        f"**Konteks pendukung**\n\n{fundamentals_summary}"
+        f"**{snapshot.instrument.code} · {timeframe_label(snapshot.interval)} · {str(data['market_state']).title()}**\n\n"
+        f"{price_sentence}{spot_note}\n\n"
+        f"**Inti pembacaan**\n\n"
+        f"{posture}\n\n"
+        f"• RSI(14) **{rsi:.1f}** · ADX(14) **{adx:.1f}** · volatilitas 20 candle **{float(data['volatility20']):.2f}%**.\n"
+        f"• {confirmation}\n"
+        f"• {'Perubahan 20 candle **' + format(change_20, '+.2f') + '%**.' if snapshot.instrument.code != 'XAUUSD' else 'Harga spot dan indikator dibaca sebagai dua basis yang diselaraskan secara bersyarat.'}"
+        f"{context_section}"
         f"{structure_section}"
         f"{volatility_context_section}"
         f"{scenario_section}"
         f"{f'\n\n{reaction_section}' if reaction_section else ''}\n\n"
+        f"**Catatan risiko**\n\n{caution}\n\n"
         "Pembacaan ini untuk riset dan edukasi, bukan nasihat finansial personal."
     )
 

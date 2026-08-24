@@ -45,9 +45,8 @@ def _historical_daily_snapshot(code: str, start: str, end: str) -> MarketSnapsho
 
 
 def _assert_user_facing(reply: str) -> None:
-    assert "Hal yang paling relevan" in reply
-    assert "Risiko dan batas data" in reply
-    assert "Konteks pendukung" in reply
+    assert "Inti pembacaan" in reply
+    assert "Catatan risiko" in reply
     assert "bukan nasihat finansial personal" in reply
     assert not any(term in reply.upper() for term in FORBIDDEN_INTERNAL_TERMS), reply
     assert len(reply) < 4000, len(reply)
@@ -58,7 +57,7 @@ def main() -> None:
     flash_crash_snapshot = _historical_daily_snapshot("SPX", "2019-01-01", "2020-03-18")
     flash_reply = build_reply("Analisa SPX saat volatilitas ekstrem pada D1", flash_crash_snapshot, [])
     _assert_user_facing(flash_reply)
-    assert flash_reply.startswith("**RINGKASAN SPX · D1**")
+    assert flash_reply.startswith("**SPX · D1 ·")
     assert "Pembaruan candle terakhir" in flash_reply
     assert "WIB" in flash_reply
     assert "tidak cukup segar" in flash_reply

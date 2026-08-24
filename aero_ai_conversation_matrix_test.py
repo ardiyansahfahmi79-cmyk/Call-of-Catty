@@ -63,7 +63,11 @@ def test_timeframe_and_conversation_matrix() -> int:
         assert "Aero AI" in reply and "analisa" in reply.casefold(), (greeting, reply)
         tested += 1
 
-    for creator_question in ("siapa yang menciptakanmu", "siapa pembuatmu", "siapa yang membuat Aero AI", "who created you"):
+    for creator_question in (
+        "siapa yang menciptakanmu", "siapa penciptamu", "siapa pencipta mu", "siapa yang menciptakan mu",
+        "siapa yang mengembangkanmu", "siapa yang mengembangkan mu", "siapa pengembang mu", "siapa pembuatmu",
+        "siapa yang membuat Aero AI", "who created you",
+    ):
         assert "DynamiHatch" in build_unknown_input_reply(creator_question)
         tested += 1
 

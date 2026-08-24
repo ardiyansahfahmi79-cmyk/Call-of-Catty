@@ -38,6 +38,8 @@ def run() -> None:
         '"scrollZoom": False',
         "pointer-events:none",
         "queue_question(question)",
+        "dismissed_followup_ids",
+        "message[\"id\"] in st.session_state.dismissed_followup_ids",
         "stable_prompt_chips.pop(scope, None)",
         "for message in st.session_state.messages:",
         "process_question(pending_question, loader_slot)",

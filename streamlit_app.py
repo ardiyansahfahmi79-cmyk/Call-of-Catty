@@ -61,6 +61,7 @@ def init_state() -> None:
         "pending_loader_ready": False,
         "opening_suggestions": None,
         "stable_prompt_chips": {},
+        "dismissed_followup_ids": set(),
         "pending_instrument_confirmation": None,
         "context_thread": {"instrument": None, "interval": None, "agenda": None},
     }
@@ -223,6 +224,10 @@ def queue_question(question: str) -> None:
     st.session_state.pending_question = normalized
     st.session_state.pending_loader_ready = False
     st.session_state.stable_prompt_chips.clear()
+    # Semua chip respons lama ditutup permanen ketika pengguna memulai pesan baru.
+    st.session_state.dismissed_followup_ids.update(
+        message["id"] for message in st.session_state.messages if message["role"] == "assistant"
+    )
 
 
 def queue_chip_question(question: str, scope: str) -> None:
@@ -391,6 +396,8 @@ def render_analysis_message(message: dict) -> None:
     if not snapshots:
         if st.session_state.get("pending_question"):
             return
+        if message["id"] in st.session_state.dismissed_followup_ids:
+            return
         prompts = message.get("prompt_chips") or []
         if prompts:
             st.markdown('<div class="brand-kicker" style="margin-top:18px">KLARIFIKASI FOKUS · GESER DAN PILIH</div>', unsafe_allow_html=True)
@@ -401,6 +408,8 @@ def render_analysis_message(message: dict) -> None:
     for snapshot in snapshots:
         render_snapshot(snapshot, fundamentals.get(snapshot.instrument.code, []))
     if st.session_state.get("pending_question"):
+        return
+    if message["id"] in st.session_state.dismissed_followup_ids:
         return
     prompts = message.get("prompt_chips") or follow_up_prompts(snapshots[0].instrument.code, snapshots[0].interval)
     label = "KLARIFIKASI FOKUS · GESER DAN PILIH" if message.get("prompt_chips") else "PERTANYAAN LANJUTAN · GESER DAN PILIH FOKUS"
