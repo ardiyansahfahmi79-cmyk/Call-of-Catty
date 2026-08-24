@@ -59,7 +59,8 @@ def main() -> None:
     flash_reply = build_reply("Analisa SPX saat volatilitas ekstrem pada D1", flash_crash_snapshot, [])
     _assert_user_facing(flash_reply)
     assert flash_reply.startswith("**RINGKASAN SPX · D1**")
-    assert "Candle terakhir" in flash_reply
+    assert "Pembaruan candle terakhir" in flash_reply
+    assert "WIB" in flash_reply
     assert "tidak cukup segar" in flash_reply
     assert "Yahoo Finance" not in flash_reply
 

@@ -11,9 +11,11 @@ def main() -> None:
     assert snapshot.reference_spot_price is not None
     assert snapshot.reference_spot_at is not None
     reply = build_reply("Tentukan Entry, SL, TP1 TP2 TP3 dan Risk untuk XAUUSD pada H1", snapshot, [])
-    assert "SKENARIO LEVEL TEKNIKAL" in reply
-    assert "TP1, TP2, dan TP3" in reply
-    assert "Referensi spot terakhir" in reply
+    assert "SKENARIO LEVEL" in reply
+    assert "tidak ditampilkan" in reply
+    assert "Harga spot referensi" in reply
+    assert "WIB" in reply
+    assert "Harga chart" not in reply
     assert "Yahoo Finance" not in reply
     assert "yfinance" not in reply.casefold()
     print(

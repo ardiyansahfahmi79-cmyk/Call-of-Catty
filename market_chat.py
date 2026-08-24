@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import re
+from zoneinfo import ZoneInfo
 
 from economic_calendar import calendar_fetch_status, find_calendar_events
 from fundamental_data import FundamentalSnapshot
@@ -11,12 +12,19 @@ from market_intelligence import (
     ml_regime_assessment,
 )
 from market_intent_router import resolve_local_intent
-from market_data import MarketSnapshot, instrument_economic_currencies, timeframe_label, timeframe_was_explicit
+from market_data import Instrument, MarketSnapshot, instrument_economic_currencies, timeframe_label, timeframe_was_explicit
 from market_context import market_context_section
 from market_structure import price_structure_section
 
 
 AgendaDefinition = tuple[tuple[str, ...], str, str, tuple[str, ...]]
+WIB = ZoneInfo("Asia/Jakarta")
+
+
+def _wib_time(value: datetime, include_date: bool = True) -> str:
+    """Format waktu pengguna dalam WIB; penyimpanan internal tetap UTC."""
+    template = "%d %b %Y %H:%M WIB" if include_date else "%H:%M:%S WIB"
+    return value.astimezone(WIB).strftime(template)
 
 # Batas sengaja dipertahankan pada 50 kategori agar intent tetap terukur dan dapat diuji.
 ECONOMIC_AGENDAS: tuple[AgendaDefinition, ...] = (
@@ -548,29 +556,39 @@ def _focus_line(intent: str, data: dict) -> str:
     return mapping[intent]
 
 
-def _entry_scenario(data: dict) -> str:
+def _entry_scenario(data: dict, interval: str) -> str:
     """Menghitung area observasi dari snapshot, tanpa menentukan ukuran posisi atau instruksi eksekusi."""
     price = float(data["price"])
     atr = float(data["atr14"])
     if atr <= 0:
         return "ATR(14) belum memadai untuk membentuk jarak observasi. Aero AI tidak akan membuat level pengganti."
     low20, high20, ma50 = float(data["low20"]), float(data["high20"]), float(data["ma50"])
-    entry_low, entry_high = price - 0.25 * atr, price + 0.25 * atr
+    if interval in {"15m", "30m"}:
+        entry_width, stop_multiple, targets = 0.12, 0.60, (0.40, 0.70, 1.00)
+    elif interval in {"1h", "2h", "3h", "4h"}:
+        entry_width, stop_multiple, targets = 0.15, 0.85, (0.60, 1.00, 1.40)
+    elif interval.endswith("h"):
+        entry_width, stop_multiple, targets = 0.20, 1.05, (0.80, 1.30, 1.90)
+    else:
+        entry_width, stop_multiple, targets = 0.25, 1.25, (1.00, 2.00, 3.00)
+    entry_low, entry_high = price - entry_width * atr, price + entry_width * atr
     bias = str(data["bias"])
     if bias == "BUY":
-        invalidation = min(low20, ma50, entry_low - atr)
+        structural_floor = min(low20, ma50)
+        invalidation = max(structural_floor, entry_low - stop_multiple * atr)
         risk_distance = abs(price - invalidation) / price * 100
         return (
             f"Bias indikator saat ini **BUY**. Area observasi entry teknikal berada pada **{_fmt(entry_low)}–{_fmt(entry_high)}**. "
-            f"Invalidasi teknikal / SL observasi berada di **{_fmt(invalidation)}**. Target observasi bertahap TP1, TP2, dan TP3 berada di **{_fmt(price + atr)}**, **{_fmt(price + 2 * atr)}**, dan **{_fmt(price + 3 * atr)}**. "
+            f"Batas risiko observasi berada di **{_fmt(invalidation)}**. Target observasi bertahap TP1, TP2, dan TP3 berada di **{_fmt(price + targets[0] * atr)}**, **{_fmt(price + targets[1] * atr)}**, dan **{_fmt(price + targets[2] * atr)}**. "
             f"Jarak risiko harga menuju invalidasi adalah **{risk_distance:.2f}%** dari harga referensi; angka ini belum memasukkan ukuran posisi, spread, biaya, atau slippage."
         )
     if bias == "SELL":
-        invalidation = max(high20, ma50, entry_high + atr)
+        structural_ceiling = max(high20, ma50)
+        invalidation = min(structural_ceiling, entry_high + stop_multiple * atr)
         risk_distance = abs(invalidation - price) / price * 100
         return (
             f"Bias indikator saat ini **SELL**. Area observasi entry teknikal berada pada **{_fmt(entry_low)}–{_fmt(entry_high)}**. "
-            f"Invalidasi teknikal / SL observasi berada di **{_fmt(invalidation)}**. Target observasi bertahap TP1, TP2, dan TP3 berada di **{_fmt(price - atr)}**, **{_fmt(price - 2 * atr)}**, dan **{_fmt(price - 3 * atr)}**. "
+            f"Batas risiko observasi berada di **{_fmt(invalidation)}**. Target observasi bertahap TP1, TP2, dan TP3 berada di **{_fmt(price - targets[0] * atr)}**, **{_fmt(price - targets[1] * atr)}**, dan **{_fmt(price - targets[2] * atr)}**. "
             f"Jarak risiko harga menuju invalidasi adalah **{risk_distance:.2f}%** dari harga referensi; angka ini belum memasukkan ukuran posisi, spread, biaya, atau slippage."
         )
     return (
@@ -596,8 +614,21 @@ def _data_status_summary(snapshot: MarketSnapshot) -> str:
     else:
         freshness = "Data harga masih berada dalam jendela pembacaan yang lebih relevan untuk timeframe ini."
     return (
-        f"Candle terakhir **{candle_at.strftime('%d %b %Y %H:%M UTC')}** ({age} lalu). "
+        f"Pembaruan candle terakhir **{_wib_time(candle_at)}** ({age} lalu). "
         f"{freshness}"
+    )
+
+
+def build_spot_fallback_reply(question: str, instrument: Instrument, interval: str, bid: float, ask: float, observed_at: datetime) -> str:
+    """Respons saat quote spot tersedia tetapi candle yfinance belum cukup untuk indikator."""
+    midpoint = (bid + ask) / 2
+    return (
+        f"**RINGKASAN {instrument.code} · {timeframe_label(interval)}**\n\n"
+        f"Permintaan terbaca: **analisa {instrument.code}** pada **{timeframe_label(interval)}**. "
+        f"Harga spot referensi saat ini **{_fmt(midpoint)}** pada **{_wib_time(observed_at)}**.\n\n"
+        "Candle teknikal belum tersedia cukup pada pemindaian ini, sehingga Aero AI tidak membentuk indikator, Entry, SL, atau TP pengganti. "
+        "Coba kembali beberapa saat lagi; harga spot tetap dipisahkan dari candle grafik agar basis analisis tidak tercampur.\n\n"
+        "Pembacaan ini untuk riset dan edukasi, bukan nasihat finansial personal."
     )
 
 
@@ -638,16 +669,24 @@ def build_reply(question: str, snapshot: MarketSnapshot, fundamentals: list[Fund
     agenda = detect_economic_agenda(question)
     fundamentals = fundamentals or []
     spot_note = ""
-    price = candle_price
+    price_sentence = f"Harga terakhir pada snapshot **{candle_price}**."
     if snapshot.reference_spot_price is not None and snapshot.reference_spot_at is not None:
         spot_value = _fmt(float(snapshot.reference_spot_price))
-        spot_time = snapshot.reference_spot_at.astimezone(timezone.utc).strftime('%d %b %Y %H:%M UTC')
-        spot_note = f" Referensi spot terakhir **{spot_value}** tersedia pada **{spot_time}**; nilainya dapat berbeda dari harga chart karena basis harga berbeda."
+        spot_time = _wib_time(snapshot.reference_spot_at)
+        price_sentence = f"Harga spot referensi **{spot_value}** tersedia pada **{spot_time}**."
+        spot_note = " Pembacaan indikator pada grafik tetap dipisahkan dari harga spot."
     elif snapshot.reference_quote_bid is not None and snapshot.reference_quote_ask is not None and snapshot.reference_quote_at is not None:
         midpoint = (float(snapshot.reference_quote_bid) + float(snapshot.reference_quote_ask)) / 2
-        quote_time = snapshot.reference_quote_at.astimezone(timezone.utc).strftime('%d %b %Y %H:%M UTC')
-        spot_note = f" Referensi quote terakhir **{_fmt(midpoint)}** tersedia pada **{quote_time}**; nilainya dapat berbeda dari harga chart karena basis harga berbeda."
-    scenario_section = f"\n\n**SKENARIO LEVEL TEKNIKAL**\n\n{_entry_scenario(data)}" if intent == "levels_entry" else ""
+        quote_time = _wib_time(snapshot.reference_quote_at)
+        price_sentence = f"Harga referensi **{_fmt(midpoint)}** tersedia pada **{quote_time}**."
+    if intent == "levels_entry" and snapshot.instrument.code == "XAUUSD" and snapshot.reference_spot_price is not None:
+        scenario_section = (
+            "\n\n**SKENARIO LEVEL**\n\n"
+            "Harga spot tersedia, tetapi level Entry, SL, dan TP tidak ditampilkan pada pemindaian ini karena candle indikator dan spot belum berada pada basis harga yang sama. "
+            "Aero AI tidak akan memindahkan level dari grafik ke harga spot secara paksa."
+        )
+    else:
+        scenario_section = f"\n\n**SKENARIO LEVEL TEKNIKAL**\n\n{_entry_scenario(data, snapshot.interval)}" if intent == "levels_entry" else ""
     structure_section = (
         f"\n\n{price_structure_section(snapshot)}"
         if intent in {"overview", "trend", "levels", "levels_entry", "risk", "signals"}
@@ -667,7 +706,9 @@ def build_reply(question: str, snapshot: MarketSnapshot, fundamentals: list[Fund
     return (
         f"**RINGKASAN {snapshot.instrument.code} · {timeframe_label(snapshot.interval)}**\n\n"
         f"{agenda_summary + '\n\n' if agenda_summary else ''}"
-        f"{timeframe_note} Harga chart **{price}**.{spot_note} Perubahan candle teknikal adalah **{change_20:+.2f}%** dalam 20 candle. "
+        f"Permintaan terbaca: **{intent.replace('_', ' ')}** · **{snapshot.instrument.code}** · **{timeframe_label(snapshot.interval)}**. "
+        f"{timeframe_note} {price_sentence}{spot_note} "
+        f"{'Perubahan candle teknikal adalah **' + format(change_20, '+.2f') + '%** dalam 20 candle. ' if snapshot.instrument.code != 'XAUUSD' else ''}"
         f"Kondisi saat ini **{data['market_state']}**. {_trend_description(data)}\n\n"
         f"**Hal yang paling relevan**\n\n"
         f"RSI(14) **{rsi:.1f}**, ADX(14) **{adx:.1f}**, dan volatilitas 20 candle **{float(data['volatility20']):.2f}%**. "

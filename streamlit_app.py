@@ -8,6 +8,7 @@ import random
 import re
 import time
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import plotly.graph_objects as go
 import streamlit as st
@@ -44,6 +45,7 @@ div[data-testid="stPlotlyChart"],div[data-testid="stPlotlyChart"] .plot-containe
 """
 
 STATIC_CHART_CONFIG = {"displaylogo": False, "displayModeBar": False, "scrollZoom": False, "responsive": True, "staticPlot": True}
+WIB = ZoneInfo("Asia/Jakarta")
 
 
 def _message(role: str, content: str, **extra) -> dict:
@@ -111,6 +113,11 @@ def _format_number(value) -> str:
     return f"{numeric:,.5f}" if abs(numeric) < 20 else f"{numeric:,.2f}"
 
 
+def _format_wib(value, include_date: bool = True) -> str:
+    template = "%d %b %H:%M WIB" if include_date else "%H:%M:%S WIB"
+    return value.astimezone(WIB).strftime(template)
+
+
 def render_fundamentals(items: list[FundamentalSnapshot]) -> None:
     st.markdown('<div class="fundamental-title">KONTEKS FUNDAMENTAL · SUMBER PUBLIK</div>', unsafe_allow_html=True)
     if not items:
@@ -126,25 +133,30 @@ def render_fundamentals(items: list[FundamentalSnapshot]) -> None:
 def render_snapshot(snapshot: MarketSnapshot, fundamentals: list[FundamentalSnapshot]) -> None:
     data, bias = snapshot.indicators, str(snapshot.indicators["bias"])
     signal_class = {"BUY":"signal-buy", "SELL":"signal-sell"}.get(bias, "signal-neutral")
-    last_candle = snapshot.last_candle_at.astimezone(timezone.utc).strftime("%d %b %H:%M UTC")
-    basis = snapshot.instrument.note or f"{snapshot.instrument.asset_class} · quote publik referensi"
+    last_candle = _format_wib(snapshot.last_candle_at)
     st.markdown('<div class="analysis-shell">', unsafe_allow_html=True)
     spot_label = ""
     if snapshot.reference_spot_price is not None and snapshot.reference_spot_at is not None:
-        observed_at = snapshot.reference_spot_at.astimezone(timezone.utc).strftime("%d %b %H:%M UTC")
+        observed_at = _format_wib(snapshot.reference_spot_at)
         spot_label = f'<span>REFERENSI SPOT: {_format_number(snapshot.reference_spot_price)} · {observed_at}</span>'
     elif snapshot.reference_quote_bid is not None and snapshot.reference_quote_ask is not None and snapshot.reference_quote_at is not None:
-        observed_at = snapshot.reference_quote_at.astimezone(timezone.utc).strftime("%d %b %H:%M UTC")
+        observed_at = _format_wib(snapshot.reference_quote_at)
         midpoint = (snapshot.reference_quote_bid + snapshot.reference_quote_ask) / 2
         freshness, _ = reference_quote_freshness(snapshot.reference_quote_at)
         spot_label = f'<span>REFERENSI QUOTE {freshness}: {_format_number(midpoint)} · {observed_at}</span>'
-    st.markdown(f'<div class="data-proof"><span>CANDLE TERAKHIR: {last_candle}</span><span>BASIS HARGA: {html.escape(basis)}</span><span>DIAMBIL: {snapshot.fetched_at.astimezone(timezone.utc).strftime("%H:%M:%S UTC")}</span>{spot_label}</div>', unsafe_allow_html=True)
-    metrics = [("HARGA CHART", _format_number(data["price"])), ("20 CANDLE", f"{float(data['change_20']):+.2f}%"), ("RSI 14", f"{float(data['rsi14']):.1f}"), ("ADX 14", f"{float(data['adx14']):.1f}"), ("KONDISI", str(data["market_state"])), ("BIAS", bias)]
+    if snapshot.instrument.code == "XAUUSD":
+        st.markdown(f'<div class="data-proof">{spot_label}<span>PEMBARUAN CANDLE: {last_candle}</span><span>PEMINDAIAN: {_format_wib(snapshot.fetched_at, include_date=False)}</span></div>', unsafe_allow_html=True)
+        metrics = [("HARGA SPOT", _format_number(snapshot.reference_spot_price) if snapshot.reference_spot_price is not None else "BELUM TERSEDIA"), ("20 CANDLE", f"{float(data['change_20']):+.2f}%"), ("RSI 14", f"{float(data['rsi14']):.1f}"), ("ADX 14", f"{float(data['adx14']):.1f}"), ("KONDISI", str(data["market_state"])), ("BIAS", bias)]
+    else:
+        st.markdown(f'<div class="data-proof"><span>CANDLE TERAKHIR: {last_candle}</span><span>PEMINDAIAN: {_format_wib(snapshot.fetched_at, include_date=False)}</span>{spot_label}</div>', unsafe_allow_html=True)
+        metrics = [("HARGA TERAKHIR", _format_number(data["price"])), ("20 CANDLE", f"{float(data['change_20']):+.2f}%"), ("RSI 14", f"{float(data['rsi14']):.1f}"), ("ADX 14", f"{float(data['adx14']):.1f}"), ("KONDISI", str(data["market_state"])), ("BIAS", bias)]
     markup = ''.join(f'<div class="metric-box"><div class="name">{name}</div><div class="val {signal_class if name in {"KONDISI", "BIAS"} else ""}">{html.escape(value)}</div></div>' for name, value in metrics)
     st.markdown(f'<div class="metric-grid">{markup}</div>', unsafe_allow_html=True)
     render_line_chart(snapshot)
     states = data["indicator_states"]
     rows = [("Harga vs MA 20", data["ma20"]), ("Harga vs MA 50", data["ma50"]), ("Harga vs MA 200", data["ma200"]), ("RSI 14", data["rsi14"]), ("MACD", data["macd"]), ("ADX 14", data["adx14"]), ("Volume relatif", f"{float(data['relative_volume']):.2f}x"), ("Fibonacci 61.8%", data["fib618"]), ("High 20", data["high20"]), ("Low 20", data["low20"])]
+    if snapshot.instrument.code == "XAUUSD":
+        rows = [("RSI 14", data["rsi14"]), ("MACD", data["macd"]), ("ADX 14", data["adx14"]), ("Volume relatif", f"{float(data['relative_volume']):.2f}x")]
     table = ['<div class="indicator-table"><div class="indicator-row header"><span>INDIKATOR</span><span>NILAI</span><span>KONDISI</span></div>']
     for name, value in rows:
         state = str(states.get(name, "NEUTRAL"))
@@ -153,7 +165,7 @@ def render_snapshot(snapshot: MarketSnapshot, fundamentals: list[FundamentalSnap
         table.append(f'<div class="indicator-row"><span>{name}</span><span>{formatted}</span><span class="{css}">{state}</span></div>')
     st.markdown("".join(table) + '</div>', unsafe_allow_html=True)
     render_fundamentals(fundamentals)
-    st.caption(snapshot.warning)
+    st.caption("Data publik dapat tertunda dan bukan harga eksekusi broker.")
     st.markdown('</div>', unsafe_allow_html=True)
 
 
@@ -210,6 +222,7 @@ def queue_question(question: str) -> None:
     st.session_state.messages.append(_message("user", normalized))
     st.session_state.pending_question = normalized
     st.session_state.pending_loader_ready = False
+    st.session_state.stable_prompt_chips.clear()
 
 
 def queue_chip_question(question: str, scope: str) -> None:
@@ -344,6 +357,18 @@ def process_question(question: str, loader_slot) -> None:
     time.sleep(.35)
     loader_slot.empty()
     if not snapshots:
+        if len(instruments) == 1 and instruments[0].code == "XAUUSD":
+            from market_chat import build_spot_fallback_reply
+            from market_data import fetch_public_reference_quote
+
+            bid, ask, quote_at = fetch_public_reference_quote(instruments[0])
+            if bid is not None and ask is not None and quote_at is not None:
+                st.session_state.messages.append(_message(
+                    "assistant",
+                    _with_normalization(build_spot_fallback_reply(question, instruments[0], interval, bid, ask, quote_at), normalized_note),
+                ))
+                update_context_thread(instruments[0].code, interval, question)
+                return
         st.session_state.messages.append(_message("assistant", _with_normalization(build_source_unavailable_reply(unavailable_codes or [instrument.code for instrument in instruments]), normalized_note)))
         return
     response = _message(
@@ -364,6 +389,8 @@ def render_analysis_message(message: dict) -> None:
     snapshots: list[MarketSnapshot] = message.get("snapshots", [])
     fundamentals: dict[str, list[FundamentalSnapshot]] = message.get("fundamentals", {})
     if not snapshots:
+        if st.session_state.get("pending_question"):
+            return
         prompts = message.get("prompt_chips") or []
         if prompts:
             st.markdown('<div class="brand-kicker" style="margin-top:18px">KLARIFIKASI FOKUS · GESER DAN PILIH</div>', unsafe_allow_html=True)
@@ -373,6 +400,8 @@ def render_analysis_message(message: dict) -> None:
         render_comparison(snapshots)
     for snapshot in snapshots:
         render_snapshot(snapshot, fundamentals.get(snapshot.instrument.code, []))
+    if st.session_state.get("pending_question"):
+        return
     prompts = message.get("prompt_chips") or follow_up_prompts(snapshots[0].instrument.code, snapshots[0].interval)
     label = "KLARIFIKASI FOKUS · GESER DAN PILIH" if message.get("prompt_chips") else "PERTANYAAN LANJUTAN · GESER DAN PILIH FOKUS"
     st.markdown(f'<div class="brand-kicker" style="margin-top:18px">{label}</div>', unsafe_allow_html=True)

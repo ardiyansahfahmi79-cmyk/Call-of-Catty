@@ -435,6 +435,13 @@ def _fetch_public_pair_quote(instrument_code: str) -> tuple[float | None, float 
     return None, None, None
 
 
+def fetch_public_reference_quote(instrument: Instrument) -> tuple[float | None, float | None, datetime | None]:
+    """Ambil quote publik terpisah untuk fallback, tanpa menggantikan candle chart."""
+    if instrument.asset_class != "Forex" and instrument.code != "XAUUSD":
+        return None, None, None
+    return _fetch_public_pair_quote(instrument.code)
+
+
 def fetch_market_snapshot(instrument: Instrument, interval: str = "1h") -> MarketSnapshot:
     try:
         import yfinance as yf
@@ -468,8 +475,7 @@ def fetch_market_snapshot(instrument: Instrument, interval: str = "1h") -> Marke
         warning = "CoinGecko keyless memiliki batas rate bersama dan candle historis; bukan feed eksekusi broker."
     if instrument.note:
         warning = f"{instrument.note} {warning}"
-    quote_allowed = instrument.asset_class == "Forex" or instrument.code == "XAUUSD"
-    reference_bid, reference_ask, reference_at = _fetch_public_pair_quote(instrument.code) if quote_allowed else (None, None, None)
+    reference_bid, reference_ask, reference_at = fetch_public_reference_quote(instrument)
     reference_spot_price = (reference_bid + reference_ask) / 2 if instrument.code == "XAUUSD" and reference_bid is not None and reference_ask is not None else None
     reference_spot_at = reference_at if instrument.code == "XAUUSD" else None
     return MarketSnapshot(
