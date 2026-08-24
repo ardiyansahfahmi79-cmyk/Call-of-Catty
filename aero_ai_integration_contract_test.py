@@ -37,7 +37,7 @@ def _snapshot() -> MarketSnapshot:
 
 def run() -> None:
     reply = build_reply("Tentukan Entry, SL, TP1 TP2 TP3 dan Risk untuk EURUSD pada H1", _snapshot())
-    for expected in ("SKENARIO LEVEL TEKNIKAL", "STRUKTUR HARGA", "KONTEKS VOLATILITAS & WAKTU"):
+    for expected in ("SKENARIO LEVEL · EURUSD · H1", "STRUKTUR HARGA", "KONTEKS VOLATILITAS & WAKTU"):
         assert expected in reply, expected
     for prohibited in ("pipeline", "python data engine", "traceable context", "yfinance", "yahoo finance", "gc=f"):
         assert prohibited not in reply.casefold(), prohibited

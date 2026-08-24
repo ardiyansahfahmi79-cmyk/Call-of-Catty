@@ -221,13 +221,13 @@ def infer_intent(question: str) -> str:
         return local_intent.name
     if any(word in text for word in ("bandingkan", "compare", "versus", " vs ")):
         return "comparison"
-    if any(word in text for word in ("entry", "stop loss", "take profit", "tentukan level", "tp1", "tp2", "tp3")) or " sl " in f" {text} ":
+    if any(word in text for word in ("entry", "stop loss", "take profit", "tentukan level", "tp1", "tp2", "tp3", "area buy", "area sell", "zona buy", "zona sell", "buy area", "sell area")) or " sl " in f" {text} ":
         return "levels_entry"
     if any(word in text for word in ("risiko", "risk", "atr", "volatil")):
         return "risk"
     if any(word in text for word in ("fundamental", "makro")):
         return "fundamental"
-    if any(word in text for word in ("level", "high", "low", "support", "resistance", "fib")):
+    if any(word in text for word in ("level", "high", "low", "support", "resistance", "supply", "demand", "order block", "fib")):
         return "levels"
     if any(word in text for word in ("tren", "trend", "ma 50", "ma50", "ma 200", "ma200")):
         return "trend"
@@ -481,7 +481,14 @@ def build_unknown_input_reply(question: str, unknown_candidates: list[str] | Non
             "Jika yang Anda maksud emas, tulis **emas**, **gold**, atau **XAUUSD**; jika yang dimaksud instrumen lain, tulis kode lengkapnya. "
             "Aero AI tidak akan menebak pair dari singkatan ambigu agar tidak mengambil data market yang salah."
         )
-    if re.search(r"\b(?:entry|stop\s*loss|take\s*profit|tp\s*[123]|sl|risk\s*(?:reward|to\s*reward))\b", question.casefold()):
+    if re.search(r"\b(?:support|resistance|supply|demand|order\s*block|zona\s*(?:supply|demand)|area\s*(?:support|resistance))\b", question.casefold()):
+        return (
+            f"{select_response_variant('unknown_levels_missing', question)}\n\n"
+            "Untuk memetakan **Support, Resistance, Supply, atau Demand** dari candle yang tersedia, sebutkan instrumen dan timeframe. "
+            "Contoh: **Area Resistance XAUUSD pada H1**, **Tentukan Supply EURUSD H4**, atau **Support BBCA D1**. "
+            "Aero AI tidak akan membuat area harga tanpa basis instrumen dan timeframe."
+        )
+    if re.search(r"\b(?:entry|stop\s*loss|take\s*profit|tp\s*[123]|sl|risk\s*(?:reward|to\s*reward)|area\s*(?:buy|sell)|zona\s*(?:buy|sell)|(?:buy|sell)\s*area)\b", question.casefold()):
         return (
             f"{select_response_variant('unknown_levels_missing', question)}\n\n"
             "Untuk menyusun area Entry, SL, TP1, TP2, dan TP3 secara bersyarat, sebutkan instrumen dan bila perlu timeframe. "
@@ -580,12 +587,12 @@ def _level_parameters(interval: str) -> tuple[float, float, tuple[float, float, 
     return 0.25, 1.25, (1.00, 2.00, 3.00)
 
 
-def _entry_scenario(data: dict, interval: str) -> str:
+def _entry_scenario(data: dict, interval: str, instrument_code: str = "INSTRUMEN") -> str:
     """Menghitung area observasi dari snapshot, tanpa menentukan ukuran posisi atau instruksi eksekusi."""
     price = float(data["price"])
     atr = float(data["atr14"])
     if atr <= 0:
-        return "ATR(14) belum memadai untuk membentuk jarak observasi. Aero AI tidak akan membuat level pengganti."
+        return f"**SKENARIO LEVEL · {instrument_code} · {timeframe_label(interval)}**\n\nATR(14) belum memadai untuk membentuk jarak observasi. Aero AI tidak akan membuat level pengganti."
     low20, high20, ma50 = float(data["low20"]), float(data["high20"]), float(data["ma50"])
     entry_width, stop_multiple, targets = _level_parameters(interval)
     entry_low, entry_high = price - entry_width * atr, price + entry_width * atr
@@ -594,32 +601,42 @@ def _entry_scenario(data: dict, interval: str) -> str:
         structural_floor = min(low20, ma50)
         invalidation = max(structural_floor, entry_low - stop_multiple * atr)
         risk_distance = abs(price - invalidation) / price * 100
-        return (
-            f"Bias indikator saat ini **BUY**. Area observasi entry teknikal berada pada **{_fmt(entry_low)}–{_fmt(entry_high)}**. "
-            f"Batas risiko observasi berada di **{_fmt(invalidation)}**. Target observasi bertahap TP1, TP2, dan TP3 berada di **{_fmt(price + targets[0] * atr)}**, **{_fmt(price + targets[1] * atr)}**, dan **{_fmt(price + targets[2] * atr)}**. "
-            f"Skenario memakai **ATR(14) {timeframe_label(interval)}** sebesar **{_fmt(atr)}**; jarak risiko menuju invalidasi **{risk_distance:.2f}%** dari harga referensi."
-        )
-    if bias == "SELL":
+        target_values = (price + targets[0] * atr, price + targets[1] * atr, price + targets[2] * atr)
+        direction = "BUY / long observasi"
+    elif bias == "SELL":
         structural_ceiling = max(high20, ma50)
         invalidation = min(structural_ceiling, entry_high + stop_multiple * atr)
         risk_distance = abs(invalidation - price) / price * 100
+        target_values = (price - targets[0] * atr, price - targets[1] * atr, price - targets[2] * atr)
+        direction = "SELL / short observasi"
+    else:
         return (
-            f"Bias indikator saat ini **SELL**. Area observasi entry teknikal berada pada **{_fmt(entry_low)}–{_fmt(entry_high)}**. "
-            f"Batas risiko observasi berada di **{_fmt(invalidation)}**. Target observasi bertahap TP1, TP2, dan TP3 berada di **{_fmt(price - targets[0] * atr)}**, **{_fmt(price - targets[1] * atr)}**, dan **{_fmt(price - targets[2] * atr)}**. "
-            f"Skenario memakai **ATR(14) {timeframe_label(interval)}** sebesar **{_fmt(atr)}**; jarak risiko menuju invalidasi **{risk_distance:.2f}%** dari harga referensi."
+            f"**SKENARIO LEVEL · {instrument_code} · {timeframe_label(interval)}**\n\n"
+            "**Kondisi:** **NEUTRAL** — Aero AI tidak membentuk arah Buy atau Sell tunggal ketika indikator belum selaras.\n\n"
+            f"**Zona observasi:** **{_fmt(entry_low)}–{_fmt(entry_high)}**\n\n"
+            f"**Trigger bullish:** tunggu close candle terkonfirmasi di atas **{_fmt(high20)}**.\n"
+            f"**Trigger bearish:** tunggu close candle terkonfirmasi di bawah **{_fmt(low20)}**.\n\n"
+            f"**Basis jarak:** ATR(14) {timeframe_label(interval)} **{_fmt(atr)}**. Tidak ada Entry, SL, atau TP satu arah yang dipaksakan sebelum struktur lebih jelas."
         )
     return (
-        f"Bias indikator saat ini **NEUTRAL**, sehingga Aero AI tidak membentuk satu instruksi arah. Area observasi awal berada pada **{_fmt(entry_low)}–{_fmt(entry_high)}**. "
-        f"Konfirmasi bullish perlu dievaluasi terhadap high 20 candle **{_fmt(high20)}**, sedangkan konfirmasi bearish terhadap low 20 candle **{_fmt(low20)}**. "
-        "Tunggu konfirmasi struktur sesuai rencana risiko pribadi; tidak ada Entry, SL, atau TP satu arah yang dipaksakan ketika indikator belum selaras."
+        f"**SKENARIO LEVEL · {instrument_code} · {timeframe_label(interval)}**\n\n"
+        f"**Arah kondisi:** **{direction}**\n\n"
+        f"**Zona Entry:** **{_fmt(entry_low)}–{_fmt(entry_high)}**\n"
+        f"**Invalidasi / SL observasi:** **{_fmt(invalidation)}**\n\n"
+        f"**Target bertahap**\n"
+        f"• **TP1:** **{_fmt(target_values[0])}**\n"
+        f"• **TP2:** **{_fmt(target_values[1])}**\n"
+        f"• **TP3:** **{_fmt(target_values[2])}**\n\n"
+        f"**Basis skenario:** ATR(14) {timeframe_label(interval)} **{_fmt(atr)}** · jarak menuju invalidasi **{risk_distance:.2f}%** dari harga referensi.\n\n"
+        "Konfirmasi tetap memerlukan close candle dan struktur harga yang selaras; zona ini adalah kerangka observasi, bukan instruksi eksekusi personal."
     )
 
 
-def _spot_entry_scenario(data: dict, spot_price: float, interval: str) -> str:
+def _spot_entry_scenario(data: dict, spot_price: float, interval: str, instrument_code: str = "XAUUSD") -> str:
     """Selaraskan ATR relatif candle ke harga spot, bukan level nominal candle futures."""
     candle_price, candle_atr = float(data["price"]), float(data["atr14"])
     if candle_price <= 0 or candle_atr <= 0 or spot_price <= 0:
-        return "ATR belum memadai untuk membentuk skenario level pada harga spot."
+        return f"**SKENARIO LEVEL · {instrument_code} · {timeframe_label(interval)}**\n\nATR belum memadai untuk membentuk skenario level pada harga spot."
     relative_atr = candle_atr / candle_price
     spot_atr = spot_price * relative_atr
     entry_width, stop_multiple, targets = _level_parameters(interval)
@@ -632,12 +649,22 @@ def _spot_entry_scenario(data: dict, spot_price: float, interval: str) -> str:
         invalidation = entry_high + stop_multiple * spot_atr
         direction, values = "SELL", (spot_price - targets[0] * spot_atr, spot_price - targets[1] * spot_atr, spot_price - targets[2] * spot_atr)
     else:
-        return "Bias indikator masih **NEUTRAL**; Aero AI tidak membentuk Entry/SL/TP sampai kondisi teknikal lebih terarah."
+        return (
+            f"**SKENARIO LEVEL · {instrument_code} · {timeframe_label(interval)}**\n\n"
+            "**Kondisi:** **NEUTRAL** — Aero AI tidak membentuk Entry/SL/TP satu arah sampai kondisi teknikal lebih terarah."
+        )
     risk_distance = abs(spot_price - invalidation) / spot_price * 100
     return (
-        f"Bias indikator saat ini **{direction}**. Area observasi entry berada pada **{_fmt(entry_low)}–{_fmt(entry_high)}**. "
-        f"Batas risiko observasi berada di **{_fmt(invalidation)}**. TP1, TP2, dan TP3 berada di **{_fmt(values[0])}**, **{_fmt(values[1])}**, dan **{_fmt(values[2])}**. "
-        f"Jarak level disesuaikan dengan volatilitas **ATR(14) {timeframe_label(interval)}** sebesar **{relative_atr * 100:.2f}%** dari harga spot; risiko menuju batas observasi **{risk_distance:.2f}%**."
+        f"**SKENARIO LEVEL · {instrument_code} · {timeframe_label(interval)}**\n\n"
+        f"**Arah kondisi:** **{direction} / {'long' if direction == 'BUY' else 'short'} observasi**\n\n"
+        f"**Zona Entry:** **{_fmt(entry_low)}–{_fmt(entry_high)}**\n"
+        f"**Invalidasi / SL observasi:** **{_fmt(invalidation)}**\n\n"
+        f"**Target bertahap**\n"
+        f"• **TP1:** **{_fmt(values[0])}**\n"
+        f"• **TP2:** **{_fmt(values[1])}**\n"
+        f"• **TP3:** **{_fmt(values[2])}**\n\n"
+        f"**Basis skenario:** ATR(14) {timeframe_label(interval)} **{relative_atr * 100:.2f}%** dari harga spot · jarak menuju invalidasi **{risk_distance:.2f}%**.\n\n"
+        "Level spot diselaraskan secara bersyarat dengan volatilitas candle timeframe yang diminta; zona ini bukan instruksi eksekusi personal."
     )
 
 
@@ -724,9 +751,9 @@ def build_reply(question: str, snapshot: MarketSnapshot, fundamentals: list[Fund
         quote_time = _wib_time(snapshot.reference_quote_at)
         price_sentence = f"Harga referensi **{_fmt(midpoint)}** tersedia pada **{quote_time}**."
     if intent == "levels_entry" and snapshot.instrument.code == "XAUUSD" and snapshot.reference_spot_price is not None:
-        scenario_section = f"\n\n**SKENARIO LEVEL**\n\n{_spot_entry_scenario(data, float(snapshot.reference_spot_price), snapshot.interval)}"
+        scenario_section = f"\n\n{_spot_entry_scenario(data, float(snapshot.reference_spot_price), snapshot.interval, snapshot.instrument.code)}"
     else:
-        scenario_section = f"\n\n**SKENARIO LEVEL TEKNIKAL**\n\n{_entry_scenario(data, snapshot.interval)}" if intent == "levels_entry" else ""
+        scenario_section = f"\n\n{_entry_scenario(data, snapshot.interval, snapshot.instrument.code)}" if intent == "levels_entry" else ""
     structure_section = (
         f"\n\n{price_structure_section(snapshot)}"
         if intent in {"trend", "levels", "levels_entry", "risk", "signals"}

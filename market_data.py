@@ -63,7 +63,9 @@ INSTRUMENTS: tuple[Instrument, ...] = (
     Instrument("BNBUSD", "BNB / US Dollar", "BNB-USD", "Kripto", ("bnbusd", "bnb/usd", "bnb")),
     Instrument("SOLUSD", "Solana / US Dollar", "SOL-USD", "Kripto", ("solusd", "sol/usd", "solana", "sol")),
     Instrument("XRPUSD", "XRP / US Dollar", "XRP-USD", "Kripto", ("xrpusd", "xrp/usd", "xrp", "ripple")),
-    Instrument("ADAUSD", "Cardano / US Dollar", "ADA-USD", "Kripto", ("adausd", "ada/usd", "cardano", "ada")),
+    # Alias `ada` sengaja tidak digunakan karena merupakan kata kerja Bahasa
+    # Indonesia yang lazim muncul pada pertanyaan seperti "resistance ada di mana".
+    Instrument("ADAUSD", "Cardano / US Dollar", "ADA-USD", "Kripto", ("adausd", "ada/usd", "cardano")),
     Instrument("DOTUSD", "Polkadot / US Dollar", "DOT-USD", "Kripto", ("dotusd", "dot/usd", "polkadot", "dot")),
     Instrument("MATICUSD", "Polygon / US Dollar", "MATIC-USD", "Kripto", ("maticusd", "matic/usd", "polygon", "matic")),
     Instrument("LINKUSD", "Chainlink / US Dollar", "LINK-USD", "Kripto", ("linkusd", "link/usd", "chainlink", "link")),

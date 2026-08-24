@@ -4,7 +4,7 @@
     {
       "name": "levels_entry",
       "priority": 90,
-      "patterns": ["tentukan entry", "area entry", "stop loss", "take profit", "tp1", "tp2", "tp3", "risk reward", "risk to reward", "tentukan level"]
+      "patterns": ["tentukan entry", "area entry", "zona entry", "area buy", "area sell", "zona buy", "zona sell", "buy area", "sell area", "tentukan buy", "tentukan sell", "buy di mana", "sell di mana", "stop loss", "take profit", "tp1", "tp2", "tp3", "risk reward", "risk to reward", "tentukan level"]
     },
     {
       "name": "risk",

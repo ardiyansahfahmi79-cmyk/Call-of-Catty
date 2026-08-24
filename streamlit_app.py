@@ -17,6 +17,7 @@ from fundamental_data import FundamentalSnapshot, fetch_fundamental_context
 from market_chat import agenda_clarification_prompts, build_agenda_reply, build_instrument_confirmation, build_multi_instrument_clarification, build_reply, build_source_unavailable_reply, build_unknown_input_reply, detect_economic_agenda, follow_up_prompts, multi_instrument_clarification_prompts
 from market_intelligence import normalization_section, normalize_market_language
 from market_data import MarketSnapshot, detect_instruments, detect_timeframe, detect_unknown_instrument_candidates, fetch_market_snapshot, normalized_comparison, reference_quote_freshness
+from market_display_policy import chart_requested
 
 
 MIN_ANALYSIS_SECONDS = 13
@@ -131,7 +132,7 @@ def render_fundamentals(items: list[FundamentalSnapshot]) -> None:
         st.markdown(f'<div class="fundamental-card"><b>{html.escape(item.title)}: {html.escape(item.value)} {html.escape(item.unit)}</b><div class="fundamental-meta">{html.escape(item.category)} · observasi {observed} · {html.escape(item.freshness)}<br><a href="{url}" target="_blank" rel="noopener">SUMBER RESMI: {source} ↗</a></div></div>', unsafe_allow_html=True)
 
 
-def render_snapshot(snapshot: MarketSnapshot, fundamentals: list[FundamentalSnapshot]) -> None:
+def render_snapshot(snapshot: MarketSnapshot, fundamentals: list[FundamentalSnapshot], show_chart: bool = False) -> None:
     data, bias = snapshot.indicators, str(snapshot.indicators["bias"])
     signal_class = {"BUY":"signal-buy", "SELL":"signal-sell"}.get(bias, "signal-neutral")
     last_candle = _format_wib(snapshot.last_candle_at)
@@ -153,7 +154,8 @@ def render_snapshot(snapshot: MarketSnapshot, fundamentals: list[FundamentalSnap
         metrics = [("HARGA TERAKHIR", _format_number(data["price"])), ("20 CANDLE", f"{float(data['change_20']):+.2f}%"), ("RSI 14", f"{float(data['rsi14']):.1f}"), ("ADX 14", f"{float(data['adx14']):.1f}"), ("KONDISI", str(data["market_state"])), ("BIAS", bias)]
     markup = ''.join(f'<div class="metric-box"><div class="name">{name}</div><div class="val {signal_class if name in {"KONDISI", "BIAS"} else ""}">{html.escape(value)}</div></div>' for name, value in metrics)
     st.markdown(f'<div class="metric-grid">{markup}</div>', unsafe_allow_html=True)
-    render_line_chart(snapshot)
+    if show_chart:
+        render_line_chart(snapshot)
     states = data["indicator_states"]
     rows = [("Harga vs MA 20", data["ma20"]), ("Harga vs MA 50", data["ma50"]), ("Harga vs MA 200", data["ma200"]), ("RSI 14", data["rsi14"]), ("MACD", data["macd"]), ("ADX 14", data["adx14"]), ("Volume relatif", f"{float(data['relative_volume']):.2f}x"), ("Fibonacci 61.8%", data["fib618"]), ("High 20", data["high20"]), ("Low 20", data["low20"])]
     if snapshot.instrument.code == "XAUUSD":
@@ -278,8 +280,10 @@ def resolve_thread_context(question: str, thread: dict | None) -> str | None:
         return f"Jelaskan {question.strip()} {suffix}"
     if any(token in text for token in ("risiko", "risk", "atr", "volatil")):
         return f"Tinjau risiko {suffix}"
-    if any(token in text for token in ("entry", "stop loss", "take profit", "tp1", "tp2", "tp3")) or " sl " in f" {text} ":
+    if any(token in text for token in ("entry", "stop loss", "take profit", "tp1", "tp2", "tp3", "area buy", "area sell", "zona buy", "zona sell", "buy area", "sell area")) or " sl " in f" {text} ":
         return f"Tentukan Entry, SL, TP1 TP2 TP3 dan Risk {suffix}"
+    if any(token in text for token in ("support", "resistance", "supply", "demand", "order block", "area support", "area resistance")):
+        return f"Jelaskan {question.strip()} {suffix}"
     if any(token in text for token in ("tren", "trend", "momentum", "indikator", "sinyal")):
         return f"Jelaskan {question.strip()} {suffix}"
     return None
@@ -339,13 +343,13 @@ def process_question(question: str, loader_slot) -> None:
             prompt_chips=prompt_chips,
         ))
         return
-    action_words = ("analisa", "analyze", "scan", "bandingkan", "compare", "tren", "trend", "risiko", "risk", "indikator", "sinyal", "signal", "entry", "level", "fundamental", "forecast", "prediksi")
+    action_words = ("analisa", "analyze", "scan", "bandingkan", "compare", "tren", "trend", "risiko", "risk", "indikator", "sinyal", "signal", "entry", "level", "buy", "sell", "support", "resistance", "supply", "demand", "order block", "fundamental", "forecast", "prediksi", "grafik", "chart")
     if len(instruments) == 1 and not detect_economic_agenda(question) and not any(word in question.casefold() for word in action_words) and not re.search(r"\b(?:m15|m30|h\d{1,2}|d1|w1|mn)\b", question.casefold()):
         st.session_state.pending_instrument_confirmation = {"instrument": instruments[0].code, "interval": interval}
         st.session_state.messages.append(_message("assistant", _with_normalization(build_instrument_confirmation(instruments[0].code), normalized_note)))
         return
     snapshots, fundamentals, unavailable_codes = [], {}, []
-    stages = [("Membaca instrumen dan timeframe", 9, 1.2), ("Mengambil data harga yang tersedia", 27, 5.0), ("Meninjau konteks market yang relevan", 49, 8.0), ("Membaca kondisi harga dan risiko", 72, 10.5), ("Merangkum informasi dan menyiapkan grafik", 92, MIN_ANALYSIS_SECONDS)]
+    stages = [("Membaca instrumen dan timeframe", 9, 1.2), ("Mengambil data harga yang tersedia", 27, 5.0), ("Meninjau konteks market yang relevan", 49, 8.0), ("Membaca kondisi harga dan risiko", 72, 10.5), ("Merangkum informasi berdasarkan data", 92, MIN_ANALYSIS_SECONDS)]
     for index, (stage, progress, target_seconds) in enumerate(stages):
         loader_slot.markdown(_loader_markup(stage, progress), unsafe_allow_html=True)
         if index == 1:
@@ -381,6 +385,7 @@ def process_question(question: str, loader_slot) -> None:
         _with_normalization(build_reply(question, snapshots[0], fundamentals.get(snapshots[0].instrument.code, [])), normalized_note),
         snapshots=snapshots,
         fundamentals=fundamentals,
+        show_chart=chart_requested(question),
         prompt_chips=agenda_clarification_prompts(question, snapshots[0].instrument.code),
         animate=True,
     )
@@ -403,10 +408,12 @@ def render_analysis_message(message: dict) -> None:
             st.markdown('<div class="brand-kicker" style="margin-top:18px">KLARIFIKASI FOKUS · GESER DAN PILIH</div>', unsafe_allow_html=True)
             render_prompt_carousel(prompts, scope=f"followup_{message['id']}")
         return
-    if len(snapshots) > 1:
+    show_chart = bool(message.get("show_chart"))
+    comparison_chart = len(snapshots) > 1 and show_chart
+    if comparison_chart:
         render_comparison(snapshots)
     for snapshot in snapshots:
-        render_snapshot(snapshot, fundamentals.get(snapshot.instrument.code, []))
+        render_snapshot(snapshot, fundamentals.get(snapshot.instrument.code, []), show_chart=show_chart and not comparison_chart)
     if st.session_state.get("pending_question"):
         return
     if message["id"] in st.session_state.dismissed_followup_ids:
@@ -419,7 +426,8 @@ def render_analysis_message(message: dict) -> None:
         scope=f"followup_{message['id']}",
     )
     if message["id"] == st.session_state.get("latest_response_id"):
-        st.markdown('<div class="scroll-cue">↓ RESPONS TERBARU, DATA, DAN GRAFIK BERLANJUT DI BAWAH PESAN ANDA ↓</div>', unsafe_allow_html=True)
+        cue = "↓ RESPONS TERBARU, DATA, DAN GRAFIK BERLANJUT DI BAWAH PESAN ANDA ↓" if show_chart else "↓ RESPONS TERBARU DAN DATA BERLANJUT DI BAWAH PESAN ANDA ↓"
+        st.markdown(f'<div class="scroll-cue">{cue}</div>', unsafe_allow_html=True)
 
 
 def contextual_suggestions() -> list[str]:

@@ -32,7 +32,11 @@ def run() -> None:
     for instrument in INSTRUMENTS:
         for interval, label in intervals:
             reply = build_reply(f"Tentukan entry {instrument.code} pada {label}", _snapshot(instrument, interval), [])
-            assert "TP1, TP2, dan TP3" in reply, (instrument.code, interval, reply)
+            assert f"SKENARIO LEVEL · {instrument.code} · {label}" in reply, (instrument.code, interval, reply)
+            if "**Kondisi:** **NEUTRAL**" in reply:
+                assert all(marker in reply for marker in ("Zona observasi", "Trigger bullish", "Trigger bearish", "Tidak ada Entry")), (instrument.code, interval, reply)
+            else:
+                assert all(marker in reply for marker in ("Zona Entry", "Invalidasi / SL observasi", "TP1", "TP2", "TP3")), (instrument.code, interval, reply)
             assert f"ATR(14) {label}" in reply, (instrument.code, interval, reply)
             assert "Catatan risiko" in reply, (instrument.code, interval)
             count += 1

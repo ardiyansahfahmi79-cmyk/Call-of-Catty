@@ -29,7 +29,7 @@ def run() -> None:
         assert snapshot.reference_spot_price is not None
         reply = build_reply(f"Tentukan entry XAUUSD pada {interval}", snapshot, [])
         label = "M15" if interval == "15m" else "M30"
-        assert "SKENARIO LEVEL" in reply and "TP1, TP2, dan TP3" in reply and f"ATR(14) {label}" in reply, reply
+        assert "SKENARIO LEVEL" in reply and all(marker in reply for marker in ("Zona Entry", "Invalidasi / SL observasi", "TP1", "TP2", "TP3")) and f"ATR(14) {label}" in reply, reply
 
     bbca = instrument_from_code("BBCA")
     assert bbca is not None

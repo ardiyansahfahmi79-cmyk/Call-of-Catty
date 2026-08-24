@@ -186,27 +186,62 @@ def _fmt(value: float) -> str:
 
 
 def price_structure_section(snapshot: MarketSnapshot) -> str:
-    """Format ringkas untuk pengguna; istilah teknis selalu dijelaskan secara bersyarat."""
+    """Format struktur harga berorientasi Support/Resistance dan Supply/Demand.
+
+    Tidak ada order-flow atau zona institusional yang dibuat-buat. Label Supply
+    dan Demand hanya memakai swing yang sudah terkonfirmasi atau FVG yang
+    terdeteksi dari candle selesai. Untuk XAUUSD, level candle ditampilkan pada
+    basis spot secara proporsional agar tidak mencampur dua basis harga.
+    """
     structure = build_price_structure(snapshot.candles)
+    candle_price = float(snapshot.indicators.get("price", 0.0))
+    scale = 1.0
+    basis_note = ""
+    if snapshot.instrument.code == "XAUUSD" and snapshot.reference_spot_price and candle_price > 0:
+        scale = float(snapshot.reference_spot_price) / candle_price
+        basis_note = " Level struktur diselaraskan secara proporsional ke referensi spot yang tersedia."
+
+    def level(value: float) -> str:
+        return _fmt(value * scale)
+
+    title = f"**STRUKTUR HARGA · {snapshot.instrument.code} · {snapshot.interval.upper()}**"
     if structure.state in {"DATA OHLC BELUM MEMADAI", "STRUKTUR BELUM CUKUP"}:
         return (
-            "**STRUKTUR HARGA**\n\n"
+            f"{title}\n\n"
             "Candle yang tersedia belum cukup untuk mengonfirmasi rangkaian swing high dan swing low. "
             "Aero AI tidak akan memaksakan arah struktur atau level Fibonacci ketika konfirmasi belum ada."
         )
-    parts = [f"Struktur swing yang sudah terkonfirmasi saat ini **{structure.state}**."]
-    if structure.latest_break and structure.latest_break_level is not None:
-        parts.append(f"Close candle terakhir telah membentuk **{structure.latest_break}** di atas/bawah level **{_fmt(structure.latest_break_level)}**.")
-    else:
-        parts.append("Belum ada penembusan close candle terakhir terhadap swing terkonfirmasi yang lebih dekat.")
+    latest_support = next((swing for swing in reversed(structure.swings) if swing.kind == "low"), None)
+    latest_resistance = next((swing for swing in reversed(structure.swings) if swing.kind == "high"), None)
+    support_text = (
+        f"**Support terkonfirmasi:** **{level(latest_support.level)}** · menjadi referensi Demand struktural, bukan kepastian pantulan."
+        if latest_support else "**Support / Demand:** belum ada swing low yang cukup untuk dikonfirmasi."
+    )
+    resistance_text = (
+        f"**Resistance terkonfirmasi:** **{level(latest_resistance.level)}** · menjadi referensi Supply struktural, bukan kepastian penolakan."
+        if latest_resistance else "**Resistance / Supply:** belum ada swing high yang cukup untuk dikonfirmasi."
+    )
+    imbalance_text = "Tidak ada FVG terakhir yang dapat digunakan sebagai zona ketidakseimbangan tambahan."
     if structure.latest_fvg:
         fvg = structure.latest_fvg
-        parts.append(f"Ketidakseimbangan tiga candle terakhir yang terdeteksi bersifat **{fvg.direction}** pada area **{_fmt(fvg.lower)}–{_fmt(fvg.upper)}**; area ini bukan jaminan harga akan kembali.")
+        side = "Demand / imbalance bullish" if fvg.direction == "bullish" else "Supply / imbalance bearish"
+        imbalance_text = f"**{side}:** **{level(fvg.lower)}–{level(fvg.upper)}**; zona ini perlu respons candle, bukan asumsi harga pasti kembali."
+
+    confirmation = "Belum ada penembusan close candle terakhir terhadap swing terkonfirmasi yang lebih dekat."
+    if structure.latest_break and structure.latest_break_level is not None:
+        confirmation = f"Close candle terakhir membentuk **{structure.latest_break}** pada level **{level(structure.latest_break_level)}**."
+    fib_text = "Fibonacci belum membentuk rentang swing yang cukup jelas."
     if structure.fibonacci:
         fib = structure.fibonacci
-        parts.append(
-            f"Rentang Fibonacci dari swing terkonfirmasi memberi level 38,2% **{_fmt(fib.level_382)}**, "
-            f"50,0% **{_fmt(fib.level_500)}**, 61,8% **{_fmt(fib.level_618)}**, dan 78,6% **{_fmt(fib.level_786)}**."
+        fib_text = (
+            f"Fibonacci swing: 38,2% **{level(fib.level_382)}** · 50,0% **{level(fib.level_500)}** · "
+            f"61,8% **{level(fib.level_618)}** · 78,6% **{level(fib.level_786)}**."
         )
-    parts.append("Pembacaan struktur perlu dievaluasi ulang saat candle baru ditutup dan bukan instruksi transaksi personal.")
-    return "**STRUKTUR HARGA**\n\n" + " ".join(parts)
+    return (
+        f"{title}\n\n"
+        f"**Kondisi swing:** **{structure.state}**. {confirmation}\n\n"
+        f"**SUPPORT / DEMAND**\n\n{support_text}\n{imbalance_text}\n\n"
+        f"**RESISTANCE / SUPPLY**\n\n{resistance_text}\n\n"
+        f"**Konfluensi swing**\n\n{fib_text}{basis_note}\n\n"
+        "Area struktur perlu dievaluasi kembali setelah candle baru ditutup dan bukan instruksi transaksi personal."
+    )
