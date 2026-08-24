@@ -453,9 +453,22 @@ def fetch_market_snapshot(instrument: Instrument, interval: str = "1h") -> Marke
     yahoo_interval = "1h" if resample_hours else requested_interval
     try:
         frame = yf.download(instrument.yahoo_symbol, period=_period_for_interval(requested_interval), interval=yahoo_interval, auto_adjust=False, progress=False, threads=False)
-    except Exception as exc:
-        raise RuntimeError(f"Gagal menghubungi sumber data: {exc}") from exc
+    except Exception:
+        frame = pd.DataFrame()
     candles = _normalize_history(frame)
+    # Jalur alternatif tetap mengambil OHLC publik yang sama; tidak membentuk candle.
+    if len(candles) < 55:
+        try:
+            ticker_frame = yf.Ticker(instrument.yahoo_symbol).history(
+                period=_period_for_interval(requested_interval),
+                interval=yahoo_interval,
+                auto_adjust=False,
+            )
+            ticker_candles = _normalize_history(ticker_frame)
+            if len(ticker_candles) > len(candles):
+                candles = ticker_candles
+        except Exception:
+            pass
     if resample_hours:
         candles = _resample_to_hours(candles, resample_hours)
     source = f"Yahoo Finance chart via yfinance · {instrument.yahoo_symbol}"

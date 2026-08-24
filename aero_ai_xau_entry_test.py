@@ -12,7 +12,8 @@ def main() -> None:
     assert snapshot.reference_spot_at is not None
     reply = build_reply("Tentukan Entry, SL, TP1 TP2 TP3 dan Risk untuk XAUUSD pada H1", snapshot, [])
     assert "SKENARIO LEVEL" in reply
-    assert "tidak ditampilkan" in reply
+    assert "TP1, TP2, dan TP3" in reply
+    assert "ATR(14) H1" in reply
     assert "Harga spot referensi" in reply
     assert "WIB" in reply
     assert "Harga chart" not in reply

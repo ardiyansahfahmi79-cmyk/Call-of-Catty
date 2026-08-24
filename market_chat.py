@@ -556,6 +556,17 @@ def _focus_line(intent: str, data: dict) -> str:
     return mapping[intent]
 
 
+def _level_parameters(interval: str) -> tuple[float, float, tuple[float, float, float]]:
+    """Parameter ATR per timeframe; M15/M30 sengaja paling rapat."""
+    if interval in {"15m", "30m"}:
+        return 0.12, 0.60, (0.40, 0.70, 1.00)
+    if interval in {"1h", "2h", "3h", "4h"}:
+        return 0.15, 0.85, (0.60, 1.00, 1.40)
+    if interval.endswith("h"):
+        return 0.20, 1.05, (0.80, 1.30, 1.90)
+    return 0.25, 1.25, (1.00, 2.00, 3.00)
+
+
 def _entry_scenario(data: dict, interval: str) -> str:
     """Menghitung area observasi dari snapshot, tanpa menentukan ukuran posisi atau instruksi eksekusi."""
     price = float(data["price"])
@@ -563,14 +574,7 @@ def _entry_scenario(data: dict, interval: str) -> str:
     if atr <= 0:
         return "ATR(14) belum memadai untuk membentuk jarak observasi. Aero AI tidak akan membuat level pengganti."
     low20, high20, ma50 = float(data["low20"]), float(data["high20"]), float(data["ma50"])
-    if interval in {"15m", "30m"}:
-        entry_width, stop_multiple, targets = 0.12, 0.60, (0.40, 0.70, 1.00)
-    elif interval in {"1h", "2h", "3h", "4h"}:
-        entry_width, stop_multiple, targets = 0.15, 0.85, (0.60, 1.00, 1.40)
-    elif interval.endswith("h"):
-        entry_width, stop_multiple, targets = 0.20, 1.05, (0.80, 1.30, 1.90)
-    else:
-        entry_width, stop_multiple, targets = 0.25, 1.25, (1.00, 2.00, 3.00)
+    entry_width, stop_multiple, targets = _level_parameters(interval)
     entry_low, entry_high = price - entry_width * atr, price + entry_width * atr
     bias = str(data["bias"])
     if bias == "BUY":
@@ -595,6 +599,32 @@ def _entry_scenario(data: dict, interval: str) -> str:
         f"Bias indikator saat ini **NEUTRAL**, sehingga Aero AI tidak membentuk satu instruksi arah. Area observasi awal berada pada **{_fmt(entry_low)}–{_fmt(entry_high)}**. "
         f"Konfirmasi bullish perlu dievaluasi terhadap high 20 candle **{_fmt(high20)}**, sedangkan konfirmasi bearish terhadap low 20 candle **{_fmt(low20)}**. "
         "Tunggu konfirmasi struktur sesuai rencana risiko pribadi; tidak ada Entry, SL, atau TP satu arah yang dipaksakan ketika indikator belum selaras."
+    )
+
+
+def _spot_entry_scenario(data: dict, spot_price: float, interval: str) -> str:
+    """Selaraskan ATR relatif candle ke harga spot, bukan level nominal candle futures."""
+    candle_price, candle_atr = float(data["price"]), float(data["atr14"])
+    if candle_price <= 0 or candle_atr <= 0 or spot_price <= 0:
+        return "ATR belum memadai untuk membentuk skenario level pada harga spot."
+    relative_atr = candle_atr / candle_price
+    spot_atr = spot_price * relative_atr
+    entry_width, stop_multiple, targets = _level_parameters(interval)
+    entry_low, entry_high = spot_price - entry_width * spot_atr, spot_price + entry_width * spot_atr
+    bias = str(data["bias"])
+    if bias == "BUY":
+        invalidation = entry_low - stop_multiple * spot_atr
+        direction, values = "BUY", (spot_price + targets[0] * spot_atr, spot_price + targets[1] * spot_atr, spot_price + targets[2] * spot_atr)
+    elif bias == "SELL":
+        invalidation = entry_high + stop_multiple * spot_atr
+        direction, values = "SELL", (spot_price - targets[0] * spot_atr, spot_price - targets[1] * spot_atr, spot_price - targets[2] * spot_atr)
+    else:
+        return "Bias indikator masih **NEUTRAL**; Aero AI tidak membentuk Entry/SL/TP sampai kondisi teknikal lebih terarah."
+    risk_distance = abs(spot_price - invalidation) / spot_price * 100
+    return (
+        f"Bias indikator saat ini **{direction}**. Area observasi entry berada pada **{_fmt(entry_low)}–{_fmt(entry_high)}**. "
+        f"Batas risiko observasi berada di **{_fmt(invalidation)}**. TP1, TP2, dan TP3 berada di **{_fmt(values[0])}**, **{_fmt(values[1])}**, dan **{_fmt(values[2])}**. "
+        f"Jarak level disesuaikan dengan volatilitas **ATR(14) {timeframe_label(interval)}** sebesar **{relative_atr * 100:.2f}%** dari harga spot; risiko menuju batas observasi **{risk_distance:.2f}%**."
     )
 
 
@@ -680,11 +710,7 @@ def build_reply(question: str, snapshot: MarketSnapshot, fundamentals: list[Fund
         quote_time = _wib_time(snapshot.reference_quote_at)
         price_sentence = f"Harga referensi **{_fmt(midpoint)}** tersedia pada **{quote_time}**."
     if intent == "levels_entry" and snapshot.instrument.code == "XAUUSD" and snapshot.reference_spot_price is not None:
-        scenario_section = (
-            "\n\n**SKENARIO LEVEL**\n\n"
-            "Harga spot tersedia, tetapi level Entry, SL, dan TP tidak ditampilkan pada pemindaian ini karena candle indikator dan spot belum berada pada basis harga yang sama. "
-            "Aero AI tidak akan memindahkan level dari grafik ke harga spot secara paksa."
-        )
+        scenario_section = f"\n\n**SKENARIO LEVEL**\n\n{_spot_entry_scenario(data, float(snapshot.reference_spot_price), snapshot.interval)}"
     else:
         scenario_section = f"\n\n**SKENARIO LEVEL TEKNIKAL**\n\n{_entry_scenario(data, snapshot.interval)}" if intent == "levels_entry" else ""
     structure_section = (
