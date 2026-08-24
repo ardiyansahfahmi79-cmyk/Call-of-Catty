@@ -12,6 +12,8 @@ from market_intelligence import (
 )
 from market_intent_router import resolve_local_intent
 from market_data import MarketSnapshot, instrument_economic_currencies, timeframe_label, timeframe_was_explicit
+from market_context import market_context_section
+from market_structure import price_structure_section
 
 
 AgendaDefinition = tuple[tuple[str, ...], str, str, tuple[str, ...]]
@@ -646,6 +648,16 @@ def build_reply(question: str, snapshot: MarketSnapshot, fundamentals: list[Fund
         quote_time = snapshot.reference_quote_at.astimezone(timezone.utc).strftime('%d %b %Y %H:%M UTC')
         spot_note = f" Referensi quote terakhir **{_fmt(midpoint)}** tersedia pada **{quote_time}**; nilainya dapat berbeda dari harga chart karena basis harga berbeda."
     scenario_section = f"\n\n**SKENARIO LEVEL TEKNIKAL**\n\n{_entry_scenario(data)}" if intent == "levels_entry" else ""
+    structure_section = (
+        f"\n\n{price_structure_section(snapshot)}"
+        if intent in {"overview", "trend", "levels", "levels_entry", "risk", "signals"}
+        else ""
+    )
+    volatility_context_section = (
+        f"\n\n{market_context_section(snapshot)}"
+        if intent in {"risk", "levels", "levels_entry", "signals"}
+        else ""
+    )
     reaction_section = _release_reaction_section(question, agenda, snapshot)
     agenda_summary = _agenda_summary(agenda, question, snapshot.instrument.code) if agenda else ""
     consensus_note = _market_consensus_note(snapshot)
@@ -663,6 +675,8 @@ def build_reply(question: str, snapshot: MarketSnapshot, fundamentals: list[Fund
         f"**Risiko dan batas data**\n\n"
         f"{data_status}\n\n"
         f"**Konteks pendukung**\n\n{fundamentals_summary}"
+        f"{structure_section}"
+        f"{volatility_context_section}"
         f"{scenario_section}"
         f"{f'\n\n{reaction_section}' if reaction_section else ''}\n\n"
         "Pembacaan ini untuk riset dan edukasi, bukan nasihat finansial personal."
