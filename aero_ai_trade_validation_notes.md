@@ -19,3 +19,5 @@ Setelah panel proposal dan close demo ditambahkan, tampilan tanpa bridge tetap t
 Bridge FastAPI juga dijalankan sementara dengan token uji pada `127.0.0.1:8765` tanpa terminal MT5. Endpoint health menerima autentikasi dan merespons HTTP 200 dengan payload status bridge, kemudian proses dihentikan. Tidak ada terminal Headway, akun demo, quote, proposal, atau order yang digunakan dalam pengujian sandbox ini.
 
 Entrypoint resmi `streamlit_app.py` dijalankan pada port uji terpisah dan berhasil memuat Aero AI Trade. Pada kondisi tanpa bridge, status menunjukkan **BRIDGE DEMO BELUM SIAP**, akun live ditolak, scan/kill switch tidak aktif, dan dashboard tetap merender Paper Trading serta guard risk tanpa error impor modul Aero AI lama.
+
+Mode **HEADWAY MT5 WEBTERMINAL / BROWSER-ONLY** berhasil dirender. Dashboard menampilkan tautan ke WebTerminal demo dan tombol konfirmasi login manual, tanpa field ID, server, password, token broker, maupun kontrol Buy/Sell/Close. Status WebTerminal awal adalah menunggu login manual dan tidak dipresentasikan sebagai validasi broker.

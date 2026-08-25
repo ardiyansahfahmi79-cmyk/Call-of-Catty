@@ -1,9 +1,9 @@
 """Aero AI Trade — prototipe dashboard Headway MT5 berbasis sesi browser.
 
 Desain: command-center cyber-finance yang tenang dan padat informasi.
-Ruang lingkup sengaja dibatasi ke monitoring, guardrail, dan Paper Trading;
-file ini tidak menyimpan kata sandi broker, tidak terhubung ke MT5, dan tidak
-mengirim atau menutup order live.
+Ruang lingkup mencakup Paper Trading, mode WebTerminal manual, dan bridge demo
+opsional. File ini tidak menyimpan kata sandi broker dan tidak mengontrol
+WebTerminal atau mengirim order dari jalur browser-only.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from trade_demo_client import DemoBridgeClient, DemoBridgeError
 WIB = ZoneInfo("Asia/Jakarta")
 HEARTBEAT_TTL_SECONDS = 55
 MAX_PAPER_POSITIONS = 1
+HEADWAY_MT5_DEMO_WEBTERMINAL_URL = "https://hw.online/webterminal/mt5-demo/"
 
 
 TRADE_CSS = """
@@ -57,6 +58,7 @@ def _init_state() -> None:
             ("Risk guard aktif sebelum mode otomatis dapat disimulasikan.", _wib_now()),
         ],
         "trade_positions": [],
+        "trade_webterminal_manual_ack": False,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -167,8 +169,8 @@ def render() -> None:
     st.markdown('<div class="trade-shell">', unsafe_allow_html=True)
     st.markdown('<div class="trade-kicker">AEROVULPIS / EXECUTION CONTROL PROTOTYPE</div>', unsafe_allow_html=True)
     st.markdown('<h1 class="trade-title">Aero AI <b>Trade</b></h1>', unsafe_allow_html=True)
-    st.markdown('<div class="trade-subtitle">Dashboard untuk Paper Trading dan monitoring Headway MT5 akun demo melalui bridge lokal. Kredensial tidak ditulis pada UI, repository, ataupun log dashboard.</div>', unsafe_allow_html=True)
-    st.markdown('<div class="trade-banner"><b>DEMO ONLY · FAIL-CLOSED</b><br>Jika bridge demo belum terpasang, dashboard tetap menjadi Paper Trading. Scan scalping hanya membaca kondisi M1; scan tidak mengirim order broker.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="trade-subtitle">Dashboard untuk Paper Trading, WebTerminal MT5 manual, dan monitoring akun demo melalui bridge lokal opsional. Kredensial tidak ditulis pada UI, repository, ataupun log dashboard.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="trade-banner"><b>DEMO ONLY · FAIL-CLOSED</b><br>WebTerminal dipakai untuk login dan trading manual pada tab broker terpisah. Streamlit tidak dapat membaca password, memvalidasi login, atau mengendalikan tombol WebTerminal.</div>', unsafe_allow_html=True)
 
     auto_label = "PAPER AUTO MODE" if st.session_state.trade_auto_enabled else "PAPER AUTO MODE PAUSED"
     auto_dot = "good" if st.session_state.trade_auto_enabled else "warn"
@@ -181,7 +183,10 @@ def render() -> None:
     bridge_execution_enabled = bool(bridge_state and bridge_state.get("execution_enabled"))
     bridge_mode = "KILL SWITCH AKTIF" if bridge_kill else "BRIDGE DEMO"
     bridge_dot = "off" if bridge_kill else ("good" if bridge_ok else "warn")
-    st.markdown('<div class="status-rail">' + _status_markup(broker_dot, "BROKER", broker_label) + _status_markup(session_dot, "BROWSER SESSION", session_label) + _status_markup(auto_dot, "PAPER", auto_label) + _status_markup(bridge_dot, "SCALPING", bridge_mode) + _status_markup("off", "LIVE ACCOUNT", "DITOLAK") + '</div>', unsafe_allow_html=True)
+    webterminal_active = st.session_state.trade_webterminal_manual_ack
+    webterminal_dot = "good" if webterminal_active else "warn"
+    webterminal_label = "LOGIN MANUAL DIKONFIRMASI" if webterminal_active else "MENUNGGU LOGIN MANUAL"
+    st.markdown('<div class="status-rail">' + _status_markup(broker_dot, "BROKER", broker_label) + _status_markup(webterminal_dot, "WEBTERMINAL", webterminal_label) + _status_markup(session_dot, "BROWSER SESSION", session_label) + _status_markup(auto_dot, "PAPER", auto_label) + _status_markup(bridge_dot, "SCALPING", bridge_mode) + _status_markup("off", "LIVE ACCOUNT", "DITOLAK") + '</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="panel-title">STATUS AKUN / HEADWAY MT5</div>', unsafe_allow_html=True)
     account_col, bridge_col = st.columns([1.1, 1])
@@ -209,6 +214,21 @@ def render() -> None:
             _heartbeat()
             _log_event("Heartbeat browser disegarkan oleh interaksi pengguna.")
             st.rerun()
+
+    st.markdown('<div class="panel-title">HEADWAY MT5 WEBTERMINAL / BROWSER-ONLY</div>', unsafe_allow_html=True)
+    terminal_col, terminal_guard_col = st.columns([1.05, 1])
+    with terminal_col:
+        with st.container(border=True):
+            st.markdown("**Login manual di tab broker terpisah**")
+            st.caption("Buka WebTerminal akun demo, lalu masukkan ID login, password, dan server hanya pada halaman Headway/MetaTrader. Jangan tempelkan kredensial tersebut di Aero AI Trade.")
+            st.link_button("Buka Headway MT5 Demo WebTerminal", HEADWAY_MT5_DEMO_WEBTERMINAL_URL, use_container_width=True)
+            if st.button("Saya sudah login manual di WebTerminal demo", use_container_width=True):
+                st.session_state.trade_webterminal_manual_ack = True
+                _heartbeat()
+                _log_event("Pengguna mengonfirmasi login manual pada WebTerminal demo; status ini bukan verifikasi broker.")
+                st.rerun()
+    with terminal_guard_col:
+        st.markdown('<div class="guard-card"><p><b>Batas browser-only</b><br>Status login di atas adalah konfirmasi pengguna, bukan validasi akun oleh broker. Browser Streamlit tidak memiliki akses resmi ke sesi WebTerminal, quote, posisi, history, atau tombol Buy/Sell.</p><p><b>Yang tetap bisa dilakukan</b><br>Jaga dashboard terbuka sebagai heartbeat dan gunakan Paper Trading/risk guard di Aero AI Trade sambil membuka atau menutup order demo secara manual pada WebTerminal.</p></div>', unsafe_allow_html=True)
 
     st.markdown('<div class="panel-title">RISK GUARD / KEBIJAKAN SIMULASI</div>', unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)

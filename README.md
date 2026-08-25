@@ -11,6 +11,10 @@ streamlit run streamlit_app.py
 
 Tanpa bridge lokal, dashboard tetap berjalan sebagai Paper Trading dan menampilkan status broker belum terhubung.
 
+## Mode browser-only tanpa komputer
+
+Dashboard menyediakan tautan aman ke [Headway MT5 Demo WebTerminal](https://hw.online/webterminal/mt5-demo/). Login ID, password, dan server dimasukkan **hanya** pada halaman broker tersebut. Aero AI Trade tidak menerima atau memvalidasi kredensial WebTerminal, tidak dapat membaca posisi/history WebTerminal, dan tidak dapat menekan tombol Buy, Sell, atau Close di tab broker. Mode ini dipakai untuk menjaga Paper Trading dan risk guard dashboard terbuka sambil Anda melakukan trading demo secara manual pada WebTerminal.
+
 ## Menghubungkan Headway MT5 akun demo secara lokal
 
 Jalankan bridge hanya pada **Windows** yang memiliki terminal Headway MT5, telah login manual ke akun **demo**, serta dibuka pada mesin yang sama dengan dashboard. Jangan masukkan password MT5 ke Streamlit, `.env` yang di-commit, atau GitHub.
