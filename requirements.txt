@@ -1,9 +1,2 @@
 streamlit>=1.36.0
-requests>=2.31.0
 pandas>=2.0.0
-python-dotenv>=1.0.0
-deep-translator>=1.11.4
-pytz
-plotly>=5.18.0
-yfinance>=0.2.65
-scikit-learn==1.5.2

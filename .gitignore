@@ -125,6 +125,8 @@ celerybeat.pid
 
 # Environments
 .env
+.env.*
+!.env.demo-bridge.example
 .venv
 env/
 venv/
@@ -155,6 +157,9 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+# Aero AI Trade local bridge data
+.aero_ai_trade/
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can

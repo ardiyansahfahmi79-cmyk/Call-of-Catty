@@ -11,3 +11,11 @@ Guardrail heartbeat juga diuji setelah versi baru dimuat ulang. Ketika timestamp
 Sesudah tombol **Refresh heartbeat sesi** dipilih, status browser kembali aktif, tetapi pembuatan posisi masih diblokir sampai **Aktifkan Auto Trade Simulasi** dipilih. Urutan ini teruji: Paper mode aktif + heartbeat valid + Paper Auto aktif adalah syarat bersama sebelum catatan posisi simulasi dapat dibuat.
 
 Satu posisi uji `PAPER-001` kemudian dibuat dan menampilkan `XAUUSD`, `BUY`, lot `0.01`, status `OPEN · PAPER`, serta kolom quote yang secara eksplisit menyatakan **Tidak dikutip pada prototipe**. Sesudah itu, guard membatasi entry baru pada satu posisi. Tombol **Close PAPER-001 (Paper)** diuji dan menghapus catatan tersebut, lalu audit mencatat bahwa proses penutupan tidak mengirim perintah broker.
+
+Setelah panel bridge demo ditambahkan, dashboard berhasil merender tanpa variabel environment bridge. Status ditampilkan sebagai **BRIDGE DEMO BELUM SIAP**, konfigurasi hanya ditunjukkan sebagai nama environment tanpa nilai rahasia, dan tombol scan scalping serta kill switch tidak aktif. Jalur Paper Trading tetap dapat dilihat tetapi heartbeat yang kedaluwarsa tetap memblokir tindakan baru.
+
+Setelah panel proposal dan close demo ditambahkan, tampilan tanpa bridge tetap tidak mengizinkan scan, proposal, pengiriman order, ataupun penutupan posisi broker. Ini memverifikasi default fail-closed: UI baru hanya tampil setelah bridge melaporkan akun demo terverifikasi dan eksekusi demo secara lokal telah diaktifkan dengan opt-in terpisah.
+
+Bridge FastAPI juga dijalankan sementara dengan token uji pada `127.0.0.1:8765` tanpa terminal MT5. Endpoint health menerima autentikasi dan merespons HTTP 200 dengan payload status bridge, kemudian proses dihentikan. Tidak ada terminal Headway, akun demo, quote, proposal, atau order yang digunakan dalam pengujian sandbox ini.
+
+Entrypoint resmi `streamlit_app.py` dijalankan pada port uji terpisah dan berhasil memuat Aero AI Trade. Pada kondisi tanpa bridge, status menunjukkan **BRIDGE DEMO BELUM SIAP**, akun live ditolak, scan/kill switch tidak aktif, dan dashboard tetap merender Paper Trading serta guard risk tanpa error impor modul Aero AI lama.

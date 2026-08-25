@@ -9,11 +9,14 @@ mengirim atau menutup order live.
 from __future__ import annotations
 
 from datetime import datetime
+import os
 import time
 from zoneinfo import ZoneInfo
 
 import pandas as pd
 import streamlit as st
+
+from trade_demo_client import DemoBridgeClient, DemoBridgeError
 
 
 WIB = ZoneInfo("Asia/Jakarta")
@@ -58,6 +61,28 @@ def _init_state() -> None:
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+
+
+def _configured_bridge_client() -> DemoBridgeClient | None:
+    """Membaca endpoint/token dari environment, bukan dari UI atau repository."""
+    url, token = os.environ.get("AERO_TRADE_BRIDGE_URL", ""), os.environ.get("AERO_TRADE_BRIDGE_TOKEN", "")
+    if not url and not token:
+        return None
+    if not url or not token:
+        raise DemoBridgeError("Konfigurasi bridge belum lengkap di environment lokal.")
+    return DemoBridgeClient(url, token)
+
+
+def _bridge_status() -> tuple[DemoBridgeClient | None, dict | None, str | None]:
+    """Heartbeat bridge hanya berjalan bila konfigurasi lokal sudah tersedia."""
+    try:
+        client = _configured_bridge_client()
+        if client is None:
+            return None, None, None
+        client.heartbeat()
+        return client, client.health(), None
+    except DemoBridgeError as error:
+        return None, None, str(error)
 
 
 def _session_is_fresh(last_heartbeat: float, now: float, ttl_seconds: int = HEARTBEAT_TTL_SECONDS) -> bool:
@@ -137,33 +162,49 @@ def render() -> None:
     st.markdown(TRADE_CSS, unsafe_allow_html=True)
     _init_state()
     session_active = _enforce_session_guard()
+    bridge_client, bridge_state, bridge_error = _bridge_status()
 
     st.markdown('<div class="trade-shell">', unsafe_allow_html=True)
     st.markdown('<div class="trade-kicker">AEROVULPIS / EXECUTION CONTROL PROTOTYPE</div>', unsafe_allow_html=True)
     st.markdown('<h1 class="trade-title">Aero AI <b>Trade</b></h1>', unsafe_allow_html=True)
-    st.markdown('<div class="trade-subtitle">Dashboard prototipe untuk memantau kesiapan koneksi Headway MT5, browser heartbeat, risk guard, dan Paper Trading. Tidak ada kredensial broker, koneksi MT5, atau order live pada versi ini.</div>', unsafe_allow_html=True)
-    st.markdown('<div class="trade-banner"><b>MODE PROTOTIPE / PAPER TRADING</b><br>Kontrol di bawah hanya mensimulasikan alur dashboard. Browser yang aktif dianggap sebagai heartbeat sesi; bila sesi berakhir, mode otomatis simulasi dipause.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="trade-subtitle">Dashboard untuk Paper Trading dan monitoring Headway MT5 akun demo melalui bridge lokal. Kredensial tidak ditulis pada UI, repository, ataupun log dashboard.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="trade-banner"><b>DEMO ONLY · FAIL-CLOSED</b><br>Jika bridge demo belum terpasang, dashboard tetap menjadi Paper Trading. Scan scalping hanya membaca kondisi M1; scan tidak mengirim order broker.</div>', unsafe_allow_html=True)
 
     auto_label = "PAPER AUTO MODE" if st.session_state.trade_auto_enabled else "PAPER AUTO MODE PAUSED"
     auto_dot = "good" if st.session_state.trade_auto_enabled else "warn"
     session_dot = "good" if session_active else "off"
     session_label = "AKTIF" if session_active else "KEDALUWARSA"
-    st.markdown('<div class="status-rail">' + _status_markup("warn", "BROKER", "BELUM TERHUBUNG") + _status_markup(session_dot, "BROWSER SESSION", session_label) + _status_markup(auto_dot, "MODE", auto_label) + _status_markup("off", "LIVE EXECUTION", "DINONAKTIFKAN") + '</div>', unsafe_allow_html=True)
+    bridge_ok = bool(bridge_state and bridge_state.get("ok") and bridge_state.get("mode") == "demo")
+    broker_dot = "good" if bridge_ok else "warn"
+    broker_label = "DEMO MT5 TERHUBUNG" if bridge_ok else "BRIDGE DEMO BELUM SIAP"
+    bridge_kill = bool(bridge_state and bridge_state.get("kill_switch"))
+    bridge_execution_enabled = bool(bridge_state and bridge_state.get("execution_enabled"))
+    bridge_mode = "KILL SWITCH AKTIF" if bridge_kill else "BRIDGE DEMO"
+    bridge_dot = "off" if bridge_kill else ("good" if bridge_ok else "warn")
+    st.markdown('<div class="status-rail">' + _status_markup(broker_dot, "BROKER", broker_label) + _status_markup(session_dot, "BROWSER SESSION", session_label) + _status_markup(auto_dot, "PAPER", auto_label) + _status_markup(bridge_dot, "SCALPING", bridge_mode) + _status_markup("off", "LIVE ACCOUNT", "DITOLAK") + '</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="panel-title">STATUS AKUN / HEADWAY MT5</div>', unsafe_allow_html=True)
     account_col, bridge_col = st.columns([1.1, 1])
     with account_col:
         with st.container(border=True):
-            st.markdown("**Koneksi broker belum dikonfigurasi**")
-            st.caption("Untuk integrasi nyata, pengguna login di terminal Headway MT5 miliknya. Dashboard tidak meminta atau menyimpan password broker.")
-            left, right = st.columns(2)
-            with left:
-                st.text_input("MT5 Login ID", placeholder="Diisi oleh bridge lokal", disabled=True)
-            with right:
-                st.text_input("Server Headway", value="Headway MT5", disabled=True)
-            st.button("Verifikasi koneksi MT5", disabled=True, help="Dinonaktifkan pada prototipe. Tidak ada koneksi broker yang dibuat.")
+            if bridge_ok:
+                account = bridge_client.account() if bridge_client else {}
+                st.markdown("**Headway MT5 demo terverifikasi**")
+                left, right = st.columns(2)
+                with left:
+                    st.metric("Login demo", account.get("login_masked", "—"))
+                    st.caption("Identitas akun ditampilkan sebagian untuk audit, bukan sebagai kredensial.")
+                with right:
+                    st.metric("Server", account.get("server", "—"))
+                    st.caption(f"Saldo: {account.get('balance', '—')} {account.get('currency', '')}")
+            else:
+                st.markdown("**Koneksi demo belum dikonfigurasi**")
+                st.caption("Login dilakukan manual di terminal Headway MT5 Windows. Setel URL dan token bridge sebagai environment lokal; dashboard tidak meminta password broker.")
+                if bridge_error:
+                    st.error(f"Status bridge: {bridge_error}")
+                st.code('AERO_TRADE_BRIDGE_URL=http://127.0.0.1:8765\nAERO_TRADE_BRIDGE_TOKEN=<secret-lokal>', language="text")
     with bridge_col:
-        st.markdown('<div class="guard-card"><p><b>Aturan sesi browser</b><br>Heartbeat berlaku 55 detik. Ketika halaman mendapatkan rerun setelah TTL berakhir, mode otomatis dipause secara fail-closed dan entry simulasi diblokir. Streamlit tidak mendeteksi penutupan tab secara asynchronous; bridge produksi wajib menerapkan fail-closed sendiri.</p><p><b>Integrasi berikutnya</b><br>Headway MT5 desktop + bridge lokal + database audit. Tahap berikutnya dimulai dari akun demo, bukan akun live.</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="guard-card"><p><b>Aturan sesi browser</b><br>Heartbeat berlaku 55 detik. Ketika panel/bridge mendeteksi TTL terlewati, mode otomatis dipause secara fail-closed dan proposal baru diblokir. Streamlit tidak mendeteksi penutupan tab secara asynchronous; bridge lokal menjadi pengawas utama.</p><p><b>Lingkup konektor saat ini</b><br>Bridge hanya menerima akun demo, membaca akun/posisi/history, menjalankan scan scalping M1, dan menjalankan kill switch. Tidak ada order dikirim oleh tombol scan.</p></div>', unsafe_allow_html=True)
         if st.button("Refresh heartbeat sesi", use_container_width=True):
             _heartbeat()
             _log_event("Heartbeat browser disegarkan oleh interaksi pengguna.")
@@ -179,6 +220,74 @@ def render() -> None:
         st.markdown(_metric("BATAS RISIKO", "0.50%", "per skenario simulasi", "yellow"), unsafe_allow_html=True)
     with c4:
         st.markdown(_metric("WHITELIST", "XAUUSD", "dapat dikonfigurasi nanti", "green"), unsafe_allow_html=True)
+
+    st.markdown('<div class="panel-title">SCALPING DEMO / M1 FILTER</div>', unsafe_allow_html=True)
+    scan_col, result_col, kill_col = st.columns([1, 1.5, .9])
+    with scan_col:
+        scan_disabled = not bridge_ok or bridge_kill
+        if st.button("Scan kondisi M1", type="primary", disabled=scan_disabled, use_container_width=True, help="Membaca candle dan tick dari terminal demo; tidak mengirim order."):
+            try:
+                st.session_state.trade_scalping_scan = bridge_client.scan_scalping() if bridge_client else None
+                _log_event("Scan scalping M1 dilakukan melalui bridge demo tanpa order.")
+            except DemoBridgeError as error:
+                st.error(f"Scan gagal: {error}")
+    with result_col:
+        scan = st.session_state.get("trade_scalping_scan")
+        if scan:
+            decision_class = "green" if scan.get("decision") in {"BUY", "SELL"} else "yellow"
+            st.markdown(_metric("KONDISI M1", scan.get("decision", "NO_TRADE"), scan.get("reason", "—"), decision_class), unsafe_allow_html=True)
+            if scan.get("bid") is not None and scan.get("ask") is not None:
+                st.caption(f"Quote demo broker · Bid {scan['bid']} · Ask {scan['ask']} · Spread {scan.get('spread_points', '—')} points")
+            if scan.get("entry_block"):
+                st.caption(f"Proposal diblokir: {scan['entry_block']}")
+            else:
+                st.caption("Kondisi teknis dapat ditinjau. Proposal order demo belum disiapkan pada dashboard ini.")
+        else:
+            st.caption("Scan menunggu bridge demo terverifikasi. Kondisi ambigu selalu dibaca sebagai NO_TRADE.")
+    with kill_col:
+        if st.button("Aktifkan kill switch", disabled=not bridge_ok, use_container_width=True):
+            try:
+                bridge_client.set_kill_switch() if bridge_client else None
+                _log_event("Kill switch bridge demo diaktifkan dari dashboard.")
+                st.rerun()
+            except DemoBridgeError as error:
+                st.error(f"Kill switch gagal: {error}")
+
+    if bridge_ok:
+        st.markdown('<div class="panel-title">PROPOSAL ORDER DEMO</div>', unsafe_allow_html=True)
+        proposal_col, approval_col, execution_col = st.columns([1.15, 1.15, .9])
+        with proposal_col:
+            if st.button("Buat proposal dari scan", disabled=bridge_kill, use_container_width=True, help="Bridge menjalankan filter risiko dan order_check; tindakan ini belum mengirim order."):
+                try:
+                    st.session_state.trade_demo_proposal = bridge_client.create_scalping_proposal() if bridge_client else None
+                    _log_event("Proposal order demo dibuat; belum ada order broker yang dikirim.")
+                except DemoBridgeError as error:
+                    st.error(f"Proposal tidak tersedia: {error}")
+            proposal = st.session_state.get("trade_demo_proposal")
+            if proposal:
+                st.markdown(_metric("PROPOSAL", proposal["direction"], f"{proposal['symbol']} · {proposal['volume']:.2f} lot · berlaku {proposal['expires_in_seconds']} detik", "yellow"), unsafe_allow_html=True)
+                st.caption(f"Entry {proposal['price']} · SL {proposal['sl']} · TP {proposal['tp']}")
+        with approval_col:
+            proposal = st.session_state.get("trade_demo_proposal")
+            if proposal:
+                demo_phrase = st.text_input("Frasa konfirmasi demo", placeholder="salin frasa dari proposal", key="trade-demo-confirmation")
+                deliberate = st.checkbox("Saya meninjau detail order akun demo ini", key="trade-demo-deliberate")
+                if not bridge_execution_enabled:
+                    st.warning("Bridge demo masih mode aman. Set opt-in eksekusi pada Windows lokal hanya setelah meninjau proposal.")
+            else:
+                demo_phrase, deliberate = "", False
+                st.caption("Frasa konfirmasi muncul hanya untuk proposal aktif dan tidak disimpan setelah sesi berakhir.")
+        with execution_col:
+            proposal = st.session_state.get("trade_demo_proposal")
+            ready_to_execute = bool(proposal and bridge_execution_enabled and deliberate and demo_phrase == proposal["confirmation_phrase"])
+            if st.button("Kirim order demo", type="primary", disabled=not ready_to_execute, use_container_width=True, help="Hanya aktif untuk proposal valid dengan frasa konfirmasi yang tepat."):
+                try:
+                    result = bridge_client.execute_proposal(proposal["proposal_id"], demo_phrase) if bridge_client else None
+                    st.session_state.trade_demo_proposal = None
+                    _log_event(f"Order demo dikonfirmasi broker: ticket {result.get('order', '—')}.")
+                    st.success("Order demo diterima broker. Periksa tab posisi dan history MT5.")
+                except DemoBridgeError as error:
+                    st.error(f"Order demo tidak dikirim: {error}")
 
     st.markdown('<div class="panel-title">KONTROL PAPER TRADING</div>', unsafe_allow_html=True)
     control_left, control_mid, control_right = st.columns([1.1, 1, 1])
@@ -240,13 +349,42 @@ def render() -> None:
             st.caption("Belum ada posisi simulasi. Koneksi broker dan eksekusi live sengaja tidak tersedia pada prototipe ini.")
             st.dataframe(pd.DataFrame(columns=["ID", "Simbol", "Arah", "Lot", "Status", "Quote"]), use_container_width=True, hide_index=True)
         st.button("Close semua posisi", disabled=True, help="Dinonaktifkan: prototipe tidak memiliki posisi atau akses broker.")
+        if bridge_ok:
+            st.markdown("**Posisi Headway MT5 demo milik Aero AI Trade**")
+            try:
+                broker_positions = (bridge_client.positions() if bridge_client else {}).get("items", [])
+                if broker_positions:
+                    st.dataframe(pd.DataFrame(broker_positions), use_container_width=True, hide_index=True)
+                    for position in broker_positions:
+                        ticket = int(position["ticket"])
+                        close_phrase = st.text_input(f"Konfirmasi close {ticket}", placeholder=f"CLOSE-{ticket}", key=f"broker-close-phrase-{ticket}")
+                        if st.button(f"Close demo {ticket}", disabled=not (bridge_execution_enabled and close_phrase == f"CLOSE-{ticket}"), key=f"broker-close-{ticket}"):
+                            try:
+                                result = bridge_client.close_position(ticket, close_phrase) if bridge_client else None
+                                _log_event(f"Close demo dikonfirmasi broker: posisi {result.get('closed_ticket', ticket)}.")
+                                st.success(f"Posisi demo {ticket} dikirim untuk ditutup.")
+                            except DemoBridgeError as error:
+                                st.error(f"Close demo tidak dikirim: {error}")
+                else:
+                    st.caption("Tidak ada posisi Aero AI Trade terbuka pada akun demo.")
+            except DemoBridgeError as error:
+                st.error(f"Posisi demo tidak dapat dibaca: {error}")
+            st.markdown("**Riwayat deal Aero AI Trade · 7 hari**")
+            try:
+                broker_history = (bridge_client.history() if bridge_client else {}).get("items", [])
+                if broker_history:
+                    st.dataframe(pd.DataFrame(broker_history), use_container_width=True, hide_index=True)
+                else:
+                    st.caption("Belum ada deal Aero AI Trade pada riwayat akun demo.")
+            except DemoBridgeError as error:
+                st.error(f"Riwayat demo tidak dapat dibaca: {error}")
     with audit:
         st.markdown("**Audit trail sesi**")
         for event, timestamp in st.session_state.trade_audit:
             st.markdown(f'<div class="audit-line"><span>{event}</span><span class="audit-time">{timestamp}</span></div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="panel-title">KONDISI SEBELUM INTEGRASI LIVE</div>', unsafe_allow_html=True)
-    st.markdown('<div class="guard-card"><p>Versi live hanya boleh dipertimbangkan setelah bridge Headway MT5 berhasil diverifikasi pada akun demo, risk guard diuji, audit log tersimpan, dan tombol pengiriman order memiliki konfirmasi eksplisit. Tidak ada data login, password, token broker, atau instruksi order live yang dikumpulkan oleh halaman ini.</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel-title">JALUR EKSEKUSI DEMO</div>', unsafe_allow_html=True)
+    st.markdown('<div class="guard-card"><p>Urutan aman adalah: terminal Headway MT5 login ke akun demo → bridge memverifikasi mode demo → panel mengirim heartbeat → scan M1 menghasilkan kondisi teknis → order demo diringkas sebagai proposal yang berumur singkat → pengguna meninjau detail dan memberi konfirmasi eksplisit → bridge menjalankan pemeriksaan margin lalu mengirim order demo. Saat ini dashboard berhenti pada tahap scan dan proposal; tidak ada order yang dikirim otomatis.</p><p>Untuk akun live, mode ini tetap ditolak. Eksekusi live hanya dapat dipertimbangkan setelah periode uji demo, audit log stabil, dan konfirmasi terpisah untuk setiap tindakan broker.</p></div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 
