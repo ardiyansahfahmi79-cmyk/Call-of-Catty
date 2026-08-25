@@ -1,4 +1,0 @@
-# Instal hanya pada Windows yang menjalankan terminal Headway MT5 demo.
-fastapi>=0.111.0,<1.0
-uvicorn>=0.30.0,<1.0
-MetaTrader5>=5.0.45
