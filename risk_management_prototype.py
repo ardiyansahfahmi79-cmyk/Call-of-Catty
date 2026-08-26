@@ -12,6 +12,11 @@ from urllib.request import Request, urlopen
 
 import streamlit as st
 
+from currency_converter_core import (
+    available_currency_codes,
+    convert_from_usd_reference,
+    currency_label,
+)
 from risk_management_core import calculate_risk_snapshot
 
 
@@ -89,12 +94,12 @@ def fetch_usd_idr_rate() -> dict[str, object]:
         )
         with urlopen(request, timeout=8) as response:  # nosec B310 - fixed HTTPS endpoint
             payload = json.loads(response.read().decode("utf-8"))
-        rate = float(payload["rates"]["IDR"])
-        if payload.get("result") != "success" or rate <= 0:
+        rates = {str(code): float(rate) for code, rate in payload["rates"].items()}
+        if payload.get("result") != "success" or not available_currency_codes(rates):
             raise ValueError("Respons kurs tidak valid")
         return {
             "ok": True,
-            "rate": rate,
+            "rates": rates,
             "updated": str(payload.get("time_last_update_utc", "waktu pembaruan tidak tersedia")),
             "next_update": str(payload.get("time_next_update_utc", "jadwal pembaruan tidak tersedia")),
         }
@@ -183,31 +188,39 @@ else:
     else:
         st.markdown("<div class='notice'>Ringkasan: rencana Anda memiliki Stop Loss yang terisi dan target lebih besar atau sama dengan risiko. Ini bukan rekomendasi untuk entry; gunakan sebagai bahan mengecek rencana sendiri.</div>", unsafe_allow_html=True)
 
-st.markdown("<div class='mini' style='margin:1.7rem 0 .45rem'>KONVERTER USD → RUPIAH</div>", unsafe_allow_html=True)
-st.markdown("<div class='card'><div class='step'>Konversi USD ke Rupiah</div>", unsafe_allow_html=True)
+st.markdown("<div class='mini' style='margin:1.7rem 0 .45rem'>KONVERTER MATA UANG</div>", unsafe_allow_html=True)
+st.markdown("<div class='card'><div class='step'>Konversi antar mata uang</div>", unsafe_allow_html=True)
 amount_col, update_col = st.columns([1.2, 1], gap="medium")
 with amount_col:
-    usd_amount = st.number_input("Jumlah USD", min_value=0.0, value=100.0, step=10.0, format="%.2f")
+    currency_amount = st.number_input("Jumlah yang akan dikonversi", min_value=0.0, value=100.0, step=10.0, format="%.2f")
 with update_col:
-    refresh_rate = st.button("PERBARUI KURS", use_container_width=True)
+    refresh_rate = st.button("MUAT DAFTAR & KURS", use_container_width=True)
 if refresh_rate:
     st.session_state["usd_idr_rate"] = fetch_usd_idr_rate()
 
 fx = st.session_state.get("usd_idr_rate")
 if fx and fx.get("ok"):
-    idr_value = usd_amount * float(fx["rate"])
-    st.markdown(f"<div class='fx-value'>{money(usd_amount)} = {rupiah(idr_value)}</div>", unsafe_allow_html=True)
-    st.caption(f"Kurs referensi: 1 USD = {rupiah(float(fx['rate']))} · pembaruan sumber: {fx['updated']}")
+    rates = fx["rates"]
+    codes = available_currency_codes(rates)
+    st.caption(f"Tersedia {len(codes)} pilihan kode mata uang dari sumber publik. Satu kode mata uang dikecualikan dari aplikasi.")
+    from_col, to_col = st.columns(2, gap="medium")
+    with from_col:
+        from_code = st.selectbox("Dari", codes, index=codes.index("USD"), format_func=currency_label)
+    with to_col:
+        to_code = st.selectbox("Ke", codes, index=codes.index("IDR"), format_func=currency_label)
+    converted_value = convert_from_usd_reference(currency_amount, from_code, to_code, rates)
+    st.markdown(f"<div class='fx-value'>{currency_amount:,.2f} {from_code} = {converted_value:,.2f} {to_code}</div>", unsafe_allow_html=True)
+    st.caption(f"Kurs referensi dihitung dari basis USD · pembaruan sumber: {fx['updated']}")
     st.caption(f"Pembaruan berikutnya menurut sumber: {fx['next_update']}")
     st.markdown("Sumber: [Rates By Exchange Rate API](https://www.exchangerate-api.com)")
 elif fx and not fx.get("ok"):
     st.warning("Kurs publik tidak dapat dimuat. Tidak ada kurs pengganti yang dibuat oleh aplikasi.")
-    manual_rate = st.number_input("Masukkan kurs USD–IDR manual (opsional)", min_value=0.0, value=0.0, step=10.0, format="%.2f")
+    manual_rate = st.number_input("Masukkan kurs manual (opsional)", min_value=0.0, value=0.0, step=10.0, format="%.2f")
     if manual_rate > 0:
-        st.markdown(f"<div class='fx-value'>{money(usd_amount)} = {rupiah(usd_amount * manual_rate)}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='fx-value'>{currency_amount:,.2f} USD = {rupiah(currency_amount * manual_rate)}</div>", unsafe_allow_html=True)
         st.caption("Menggunakan kurs manual yang Anda masukkan, bukan kurs dari sumber publik.")
 else:
-    st.markdown("<div class='empty-result'>Tekan <b>Perbarui Kurs</b> untuk mengambil kurs referensi USD–Rupiah beserta waktu pembaruannya.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='empty-result'>Tekan <b>Muat Daftar & Kurs</b> untuk memilih mata uang dan mengambil kurs referensi beserta waktu pembaruannya.</div>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown("<div class='footer-note'>AEROVULPIS KALKULATOR RISIKO · UNTUK EDUKASI DAN PERENCANAAN · BUKAN NASIHAT FINANSIAL PERSONAL ATAU SISTEM EKSEKUSI</div>", unsafe_allow_html=True)

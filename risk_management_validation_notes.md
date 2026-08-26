@@ -22,3 +22,12 @@ Catatan: nilai lot bergantung pada nilai pergerakan harga per lot yang diinput p
 | Konverter USD–Rupiah | Lulus: nilai USD dan kurs publik hanya tampil setelah tombol `Perbarui Kurs` ditekan. |
 | Transparansi kurs | Lulus: UI menampilkan nilai referensi, waktu pembaruan, jadwal pembaruan berikutnya, serta atribusi sumber. |
 | Fallback | Diterapkan: jika kurs publik gagal dimuat, aplikasi tidak membuat nilai baru dan menawarkan input kurs manual opsional. |
+
+## Konverter multi-mata uang — 26 Agustus 2026
+
+| Area | Hasil |
+|---|---|
+| Cakupan awal sumber | Endpoint sumber mengembalikan 166 kode kurs, termasuk basis USD. |
+| Pilihan aplikasi | Lulus: UI menampilkan 165 pilihan mata uang setelah satu kode dikecualikan. |
+| Hasil default | Lulus: 100 USD dikonversi ke IDR sesudah tombol pemuatan kurs ditekan. |
+| Pengecualian kode | Diterapkan pada mesin daftar dan fungsi konversi, sehingga kode terblokir tidak muncul dan tidak dapat dikonversi. |
