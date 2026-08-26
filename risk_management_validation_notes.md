@@ -71,3 +71,10 @@ Catatan: nilai lot bergantung pada nilai pergerakan harga per lot yang diinput p
 | Riwayat 30 hari | Lulus: pasangan IDR–USD menampilkan 22 hari kurs yang tersedia pada rentang 27 Juli–25 Agustus 2026; hari tanpa publikasi tidak ditambahkan. |
 | Grafik Plotly statis | Lulus: konfigurasi render menunjukkan `staticPlot=true`, `scrollZoom=false`, `displayModeBar=false`, `dragmode=false`, serta sumbu X/Y `fixedrange=true`. |
 | Tampilan ponsel | Lulus pada viewport 375 px: alur memuat kurs, pencarian, dan grafik tiga puluh hari berjalan tanpa overflow horizontal. |
+
+## Transparansi nilai referensi — 26 Agustus 2026
+
+| Area | Hasil |
+|---|---|
+| Posisi pemberitahuan | Lulus: catatan tampil tepat setelah sumber dan waktu pembaruan kurs, sebelum tombol grafik tren. |
+| Isi pemberitahuan | Lulus: menjelaskan perbedaan nilai akibat waktu pembaruan, spread, biaya, dan metode penetapan kurs, tanpa menjanjikan kesetaraan dengan nilai transaksi atau harga eksekusi. |

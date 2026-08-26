@@ -269,6 +269,10 @@ if fx and fx.get("ok"):
     st.caption(f"Kurs referensi dihitung dari basis USD · pembaruan sumber: {fx['updated']}")
     st.caption(f"Pembaruan berikutnya menurut sumber: {fx['next_update']}")
     st.markdown("Sumber: [Rates By Exchange Rate API](https://www.exchangerate-api.com)")
+    st.markdown(
+        "<div class='notice'><b>Catatan nilai referensi.</b> Nilai yang ditampilkan dapat berbeda dari bank, aplikasi, penyedia remitansi, atau broker. Perbedaan dapat terjadi karena waktu pembaruan, spread, biaya, serta metode penetapan kurs pada masing-masing layanan. Gunakan hasil ini untuk perbandingan informasi, bukan sebagai jaminan nilai transaksi atau harga eksekusi.</div>",
+        unsafe_allow_html=True,
+    )
 
     trend_key = f"{from_code}_{to_code}"
     if st.button(f"TAMPILKAN GRAFIK TREN {CURRENCY_TREND_DAYS} HARI", use_container_width=True, key=f"trend_{trend_key}"):

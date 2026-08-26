@@ -12,6 +12,10 @@ Jika sumber tidak dapat diakses atau respons tidak valid, konverter tidak membua
 
 Grafik menggunakan endpoint historis Frankfurter `https://api.frankfurter.dev/v1/` dengan mata uang asal dan tujuan yang dipilih pengguna. Rentangnya tiga puluh hari kalender; jumlah titik dapat lebih sedikit karena kurs referensi umumnya tidak diterbitkan saat akhir pekan atau hari tanpa publikasi.
 
+## Catatan perbedaan nilai antar layanan
+
+Nilai pada konverter adalah kurs referensi dari sumber publik. Nilai tersebut dapat berbeda dari bank, aplikasi, penyedia remitansi, maupun broker karena perbedaan waktu pembaruan, spread, biaya, dan metode penetapan kurs. Antarmuka menyatakan batas ini secara eksplisit agar hasil tidak dibaca sebagai jaminan nilai transaksi atau harga eksekusi.
+
 Grafik adalah referensi kurs harian, bukan harga broker, harga transfer bank, atau kuotasi eksekusi trading. Bila riwayat pasangan tidak tersedia, aplikasi menampilkan status gagal dan tidak membuat garis sintetis.
 
 Referensi:
