@@ -1,6 +1,6 @@
 """Kontrak deterministik normalisasi data grafik tren kurs."""
 
-from currency_trend_core import CURRENCY_TREND_DAYS, parse_historical_rates, trend_change_percent
+from currency_trend_core import CURRENCY_TREND_DAYS, format_axis_value, parse_historical_rates, trend_axis_ticks, trend_change_percent
 
 
 PAYLOAD = {
@@ -19,6 +19,14 @@ def run() -> None:
     assert round(trend_change_percent(points) or 0, 2) == -1.12
     assert parse_historical_rates({"rates": {"2026-08-19": {"IDR": 0}}}, "IDR") == []
     assert trend_change_percent(points[:1]) is None
+    small_points = [{"Tanggal": "2026-08-19", "Kurs": 0.000055}, {"Tanggal": "2026-08-20", "Kurs": 0.000057}]
+    tick_values, tick_labels, chart_range = trend_axis_ticks(small_points)
+    assert len(tick_values) == 4
+    assert all("µ" not in label for label in tick_labels)
+    assert tick_labels[0].startswith("0.000")
+    assert len(set(tick_labels)) == len(tick_labels)
+    assert chart_range[0] < 0.000055 < chart_range[1]
+    assert format_axis_value(0.000056) == "0.000056"
     print("Currency trend contract: PASS")
 
 

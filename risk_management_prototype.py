@@ -23,7 +23,7 @@ from currency_converter_core import (
     currency_label,
     currency_pair_label,
 )
-from currency_trend_core import CURRENCY_TREND_DAYS, parse_historical_rates, trend_change_percent
+from currency_trend_core import CURRENCY_TREND_DAYS, format_axis_value, parse_historical_rates, trend_axis_ticks, trend_change_percent
 from risk_management_core import calculate_risk_snapshot
 
 
@@ -66,6 +66,9 @@ st.markdown(
     .notice { background:rgba(31,100,130,.12); border-left:3px solid var(--blue); color:#bfdae8; padding:.8rem .9rem; border-radius:0 9px 9px 0; font-size:.83rem; line-height:1.45; }
     .empty-result { border:1px dashed #2d465c; background:rgba(15,27,39,.5); border-radius:14px; padding:1rem; color:var(--muted); font-size:.88rem; }
     .trend-summary { color:var(--muted); font-size:.82rem; line-height:1.5; margin:.45rem 0 .3rem; }
+    .trend-stat { background:rgba(15,31,44,.82); border:1px solid rgba(70,201,255,.16); border-radius:10px; padding:.65rem .7rem; min-height:72px; }
+    .trend-stat-label { display:block; color:var(--muted); font-family:'DM Mono',monospace; font-size:.63rem; letter-spacing:.06em; text-transform:uppercase; margin-bottom:.22rem; }
+    .trend-stat-value { color:var(--text); font-family:'Manrope',sans-serif; font-size:.92rem; font-weight:800; letter-spacing:-.02em; line-height:1.25; overflow-wrap:anywhere; }
     .pair-readout { font-family:'DM Mono',monospace; color:var(--blue); font-size:.9rem; padding:.72rem .82rem; border:1px solid rgba(70,201,255,.22); border-radius:10px; background:rgba(20,56,74,.22); margin:.2rem 0 .75rem; }
     .footer-note { margin-top:1.7rem; color:#718697; font-size:.73rem; text-align:center; line-height:1.55; }
     @media (max-width:700px) { .block-container { padding:1.25rem 1rem 2.4rem; } .title { font-size:2.45rem; } .result-card { min-height:104px; padding:.85rem; } .result-value { font-size:1.38rem; } }
@@ -111,6 +114,15 @@ def result_card(label: str, value: str, description: str, color: str) -> str:
       <div class='result-copy'>{description}</div>
     </div>
     """
+
+
+def trend_stat_card(label: str, value: str, tone: str = "") -> str:
+    return f"<div class='trend-stat'><span class='trend-stat-label'>{label}</span><div class='trend-stat-value {tone}'>{value}</div></div>"
+
+
+def date_tick_label(raw_date: str) -> str:
+    """Meringkas tanggal sumbu horizontal untuk layar sempit."""
+    return datetime.strptime(raw_date, "%Y-%m-%d").strftime("%d %b")
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -319,36 +331,76 @@ if fx and fx.get("ok"):
         if trend.get("ok"):
             points = trend["points"]
             change = trend_change_percent(points)
+            first_value = float(points[0]["Kurs"])
+            last_value = float(points[-1]["Kurs"])
+            axis_ticks, axis_labels, axis_range = trend_axis_ticks(points)
+            date_indices = sorted({round(index * (len(points) - 1) / 3) for index in range(4)}) if len(points) > 1 else [0]
+            date_tick_values = [str(points[index]["Tanggal"]) for index in date_indices]
+            date_tick_labels = [date_tick_label(value) for value in date_tick_values]
             st.markdown(f"<div class='mini' style='margin:1rem 0 .2rem'>GRAFIK TREN KURS · {CURRENCY_TREND_DAYS} HARI KALENDER</div>", unsafe_allow_html=True)
+            summary_columns = st.columns(3, gap="small")
+            with summary_columns[0]:
+                st.markdown(trend_stat_card("Nilai awal", format_axis_value(first_value)), unsafe_allow_html=True)
+            with summary_columns[1]:
+                st.markdown(trend_stat_card("Nilai terbaru", format_axis_value(last_value), "blue"), unsafe_allow_html=True)
+            with summary_columns[2]:
+                change_display = "—" if change is None else f"{change:+.2f}%"
+                change_tone = "green" if (change or 0) >= 0 else "red"
+                st.markdown(trend_stat_card("Perubahan", change_display, change_tone), unsafe_allow_html=True)
             figure = go.Figure(
                 go.Scatter(
                     x=[point["Tanggal"] for point in points],
                     y=[point["Kurs"] for point in points],
-                    mode="lines+markers",
+                    mode="lines",
                     line={"color": "#46c9ff", "width": 3},
-                    marker={"color": "#36e49a", "size": 5},
+                    hoverinfo="skip",
+                )
+            )
+            figure.add_trace(
+                go.Scatter(
+                    x=[points[0]["Tanggal"], points[-1]["Tanggal"]],
+                    y=[first_value, last_value],
+                    mode="markers",
+                    marker={"color": ["#9fb0bf", "#36e49a"], "size": [8, 10], "line": {"color": "#0c1721", "width": 2}},
                     hoverinfo="skip",
                 )
             )
             figure.update_layout(
-                height=270,
-                margin={"l": 10, "r": 10, "t": 10, "b": 10},
+                height=250,
+                margin={"l": 78, "r": 14, "t": 12, "b": 28},
                 paper_bgcolor="#0c1721",
                 plot_bgcolor="#0c1721",
                 font={"family": "Manrope, sans-serif", "color": "#c9d8e2", "size": 11},
                 showlegend=False,
                 dragmode=False,
             )
-            figure.update_xaxes(title=None, fixedrange=True, showgrid=False, tickfont={"color": "#9fb0bf"})
-            figure.update_yaxes(title=f"{to_code} per 1 {from_code}", fixedrange=True, gridcolor="#203347", zeroline=False, tickfont={"color": "#9fb0bf"})
+            figure.update_xaxes(
+                title=None,
+                fixedrange=True,
+                showgrid=False,
+                tickmode="array",
+                tickvals=date_tick_values,
+                ticktext=date_tick_labels,
+                tickfont={"color": "#9fb0bf", "size": 10},
+            )
+            figure.update_yaxes(
+                title=None,
+                fixedrange=True,
+                range=axis_range,
+                gridcolor="#203347",
+                zeroline=False,
+                tickmode="array",
+                tickvals=axis_ticks,
+                ticktext=axis_labels,
+                tickfont={"color": "#c9d8e2", "size": 10},
+            )
             st.plotly_chart(
                 figure,
                 use_container_width=True,
                 config={"displayModeBar": False, "scrollZoom": False, "staticPlot": True, "responsive": True},
             )
-            change_text = "belum dapat dihitung" if change is None else f"{change:+.2f}%"
             st.markdown(
-                f"<div class='trend-summary'>Data tersedia {len(points)} hari kurs pada rentang {trend['start']} sampai {trend['end']} · perubahan dari titik pertama ke terakhir: <b>{change_text}</b>.</div>",
+                f"<div class='trend-summary'>{to_code} per 1 {from_code} · data tersedia {len(points)} hari kurs pada rentang {trend['start']} sampai {trend['end']}. Penanda abu-abu menunjukkan nilai awal; penanda hijau menunjukkan nilai terbaru.</div>",
                 unsafe_allow_html=True,
             )
             st.caption("Grafik bersifat statis: tidak dapat di-zoom, digeser, disentuh, atau diunduh. Hari tanpa publikasi kurs tidak menghasilkan titik grafik.")

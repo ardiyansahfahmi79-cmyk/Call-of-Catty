@@ -93,3 +93,12 @@ Catatan: nilai lot bergantung pada nilai pergerakan harga per lot yang diinput p
 |---|---|
 | Judul utama | Lulus: kata `Risiko` tampil dengan aksen biru neon yang konsisten dengan elemen biru aplikasi. |
 | Sumber kurs | Lulus: tampil sebagai teks `Sumber kurs referensi: ExchangeRate-API`, tanpa tautan yang dapat diklik. |
+
+## Keterbacaan grafik tren — 26 Agustus 2026
+
+| Area | Hasil |
+|---|---|
+| Label sumbu kiri | Lulus: nilai kecil tampil sebagai desimal eksplisit dan unik seperti `0.00005464`, `0.00005555`, `0.00005645`, hingga `0.00005736`, tanpa simbol mikro atau label duplikat. |
+| Ringkasan grafik | Lulus: nilai awal `0.000055`, nilai terbaru `0.000056`, dan perubahan `+1.82%` tampil sebelum grafik untuk konteks cepat. |
+| Fokus data | Lulus: grafik hanya memakai garis dan penanda awal/akhir agar deret harian tidak tampak terlalu ramai. |
+| Konfigurasi grafik | Lulus: Plotly merender `staticPlot=true`, `scrollZoom=false`, `dragmode=false`, dan label sumbu aktual `0.00005464`, `0.00005555`, `0.00005645`, `0.00005736`. |

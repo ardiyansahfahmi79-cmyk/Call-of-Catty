@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from math import ceil, log10
 from typing import Mapping
 
 
@@ -34,3 +35,32 @@ def trend_change_percent(points: list[dict[str, object]]) -> float | None:
     if first <= 0:
         return None
     return ((last - first) / first) * 100
+
+
+def format_axis_value(value: float, decimals: int | None = None) -> str:
+    """Menampilkan angka sumbu dengan desimal eksplisit, bukan notasi mikro."""
+    magnitude = abs(value)
+    if decimals is None:
+        decimals = 2 if magnitude >= 1 else 4 if magnitude >= 0.01 else 6 if magnitude >= 0.000001 else 8
+    return f"{value:.{decimals}f}"
+
+
+def trend_axis_ticks(points: list[dict[str, object]], tick_count: int = 4) -> tuple[list[float], list[str], list[float]]:
+    """Menyusun rentang dan label sumbu yang memberi ruang napas pada data asli."""
+    values = [float(point["Kurs"]) for point in points]
+    if not values:
+        return [], [], []
+    lower_value = min(values)
+    upper_value = max(values)
+    spread = upper_value - lower_value
+    padding = max(spread * 0.18, abs(upper_value) * 0.003, 1e-10)
+    lower_bound = max(0.0, lower_value - padding)
+    upper_bound = upper_value + padding
+    if tick_count < 2 or upper_bound == lower_bound:
+        ticks = [lower_value]
+        decimals = None
+    else:
+        step = (upper_bound - lower_bound) / (tick_count - 1)
+        ticks = [lower_bound + step * index for index in range(tick_count)]
+        decimals = min(8, max(2, ceil(-log10(step)) + 1))
+    return ticks, [format_axis_value(value, decimals) for value in ticks], [lower_bound, upper_bound]
