@@ -12,6 +12,7 @@ from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+import plotly.graph_objects as go
 import streamlit as st
 
 from currency_converter_core import (
@@ -20,7 +21,7 @@ from currency_converter_core import (
     currency_label,
     currency_pair_label,
 )
-from currency_trend_core import parse_historical_rates, trend_change_percent
+from currency_trend_core import CURRENCY_TREND_DAYS, parse_historical_rates, trend_change_percent
 from risk_management_core import calculate_risk_snapshot
 
 
@@ -121,14 +122,14 @@ def fetch_usd_idr_rate() -> dict[str, object]:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_currency_trend(base_code: str, quote_code: str) -> dict[str, object]:
-    """Mengambil maksimum tujuh hari kalender kurs referensi historis tanpa API key."""
+    """Mengambil maksimum tiga puluh hari kalender kurs referensi historis tanpa API key."""
     if base_code == quote_code:
         return {"ok": False, "error": "Pilih dua mata uang yang berbeda untuk grafik tren."}
     if base_code not in available_currency_codes({base_code: 1.0}) or quote_code not in available_currency_codes({quote_code: 1.0}):
         return {"ok": False, "error": "Pasangan mata uang tidak tersedia untuk grafik."}
 
     end_date = datetime.now(UTC).date()
-    start_date = end_date - timedelta(days=7)
+    start_date = end_date - timedelta(days=CURRENCY_TREND_DAYS)
     parameters = urlencode({"base": base_code, "symbols": quote_code})
     url = f"https://api.frankfurter.dev/v1/{start_date.isoformat()}..{end_date.isoformat()}?{parameters}"
     try:
@@ -241,11 +242,26 @@ if fx and fx.get("ok"):
     rates = fx["rates"]
     codes = available_currency_codes(rates)
     st.caption(f"Tersedia {len(codes)} pilihan mata uang negara dari sumber publik.")
+    search_term = st.text_input(
+        "Pencarian cepat mata uang",
+        placeholder="Cari kode, misalnya IDR atau USD",
+        key="currency_search_term",
+    ).strip().upper()
+    matching_codes = [code for code in codes if search_term in code or search_term in currency_label(code).upper()]
+    if search_term and not matching_codes:
+        st.info("Tidak ada kode mata uang yang cocok. Kosongkan pencarian untuk melihat seluruh daftar.")
+
+    selected_from = st.session_state.get("currency_from_code", "IDR")
+    selected_to = st.session_state.get("currency_to_code", "USD")
+    from_choices = matching_codes if selected_from in matching_codes else [selected_from, *matching_codes]
+    to_choices = matching_codes if selected_to in matching_codes else [selected_to, *matching_codes]
+    from_index = from_choices.index(selected_from) if selected_from in from_choices else 0
+    to_index = to_choices.index(selected_to) if selected_to in to_choices else 0
     from_col, to_col = st.columns(2, gap="medium")
     with from_col:
-        from_code = st.selectbox("Mata uang asal", codes, index=codes.index("IDR"), format_func=currency_label)
+        from_code = st.selectbox("Mata uang asal", from_choices, index=from_index, format_func=currency_label, key="currency_from_code")
     with to_col:
-        to_code = st.selectbox("Mata uang pembanding", codes, index=codes.index("USD"), format_func=currency_label)
+        to_code = st.selectbox("Mata uang pembanding", to_choices, index=to_index, format_func=currency_label, key="currency_to_code")
     compared_rate = convert_from_usd_reference(1.0, from_code, to_code, rates)
     st.markdown(f"<div class='pair-readout'>{currency_pair_label(from_code, to_code)}</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='fx-value'>1 {from_code} = {format_exchange_rate(compared_rate)} {to_code}</div>", unsafe_allow_html=True)
@@ -255,7 +271,7 @@ if fx and fx.get("ok"):
     st.markdown("Sumber: [Rates By Exchange Rate API](https://www.exchangerate-api.com)")
 
     trend_key = f"{from_code}_{to_code}"
-    if st.button("TAMPILKAN GRAFIK TREN 7 HARI", use_container_width=True, key=f"trend_{trend_key}"):
+    if st.button(f"TAMPILKAN GRAFIK TREN {CURRENCY_TREND_DAYS} HARI", use_container_width=True, key=f"trend_{trend_key}"):
         st.session_state["currency_trend"] = {
             "pair": trend_key,
             "data": fetch_currency_trend(from_code, to_code),
@@ -267,29 +283,39 @@ if fx and fx.get("ok"):
         if trend.get("ok"):
             points = trend["points"]
             change = trend_change_percent(points)
-            st.markdown("<div class='mini' style='margin:1rem 0 .2rem'>GRAFIK TREN KURS · 7 HARI KALENDER</div>", unsafe_allow_html=True)
-            st.vega_lite_chart(
-                points,
-                {
-                    "mark": {"type": "line", "point": True, "color": "#46c9ff", "strokeWidth": 3},
-                    "encoding": {
-                        "x": {"field": "Tanggal", "type": "temporal", "title": "Tanggal"},
-                        "y": {"field": "Kurs", "type": "quantitative", "title": f"{to_code} per 1 {from_code}", "zero": False},
-                        "tooltip": [
-                            {"field": "Tanggal", "type": "temporal", "title": "Tanggal"},
-                            {"field": "Kurs", "type": "quantitative", "title": "Kurs", "format": ",.4f"},
-                        ],
-                    },
-                    "height": 260,
-                },
+            st.markdown(f"<div class='mini' style='margin:1rem 0 .2rem'>GRAFIK TREN KURS · {CURRENCY_TREND_DAYS} HARI KALENDER</div>", unsafe_allow_html=True)
+            figure = go.Figure(
+                go.Scatter(
+                    x=[point["Tanggal"] for point in points],
+                    y=[point["Kurs"] for point in points],
+                    mode="lines+markers",
+                    line={"color": "#46c9ff", "width": 3},
+                    marker={"color": "#36e49a", "size": 5},
+                    hoverinfo="skip",
+                )
+            )
+            figure.update_layout(
+                height=270,
+                margin={"l": 10, "r": 10, "t": 10, "b": 10},
+                paper_bgcolor="#0c1721",
+                plot_bgcolor="#0c1721",
+                font={"family": "Manrope, sans-serif", "color": "#c9d8e2", "size": 11},
+                showlegend=False,
+                dragmode=False,
+            )
+            figure.update_xaxes(title=None, fixedrange=True, showgrid=False, tickfont={"color": "#9fb0bf"})
+            figure.update_yaxes(title=f"{to_code} per 1 {from_code}", fixedrange=True, gridcolor="#203347", zeroline=False, tickfont={"color": "#9fb0bf"})
+            st.plotly_chart(
+                figure,
                 use_container_width=True,
+                config={"displayModeBar": False, "scrollZoom": False, "staticPlot": True, "responsive": True},
             )
             change_text = "belum dapat dihitung" if change is None else f"{change:+.2f}%"
             st.markdown(
                 f"<div class='trend-summary'>Data tersedia {len(points)} hari kurs pada rentang {trend['start']} sampai {trend['end']} · perubahan dari titik pertama ke terakhir: <b>{change_text}</b>.</div>",
                 unsafe_allow_html=True,
             )
-            st.caption("Hari tanpa publikasi kurs, termasuk akhir pekan atau hari libur tertentu, tidak menghasilkan titik grafik.")
+            st.caption("Grafik bersifat statis: tidak dapat di-zoom, digeser, disentuh, atau diunduh. Hari tanpa publikasi kurs tidak menghasilkan titik grafik.")
             st.markdown("Sumber tren: [Frankfurter](https://frankfurter.dev/) — kurs referensi historis dari bank sentral, bukan harga broker real-time.")
         else:
             st.warning(f"Grafik tren belum tersedia: {trend['error']}")

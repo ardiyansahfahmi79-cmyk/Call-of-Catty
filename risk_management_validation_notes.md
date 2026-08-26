@@ -61,3 +61,13 @@ Catatan: nilai lot bergantung pada nilai pergerakan harga per lot yang diinput p
 | Label ponsel | Lulus: dropdown memakai bendera dan kode, dengan pasangan hasil seperti `🇮🇩 IDR → 🇺🇸 USD`. |
 | Hasil awal | Lulus: nilai standar membandingkan satu IDR terhadap USD tanpa meminta pengguna memasukkan nominal. |
 | Grafik pasangan awal | Lulus: grafik tren IDR–USD tujuh hari tetap muncul beserta titik data, perubahan persentase, dan atribusi sumber. |
+
+## Pencarian dan tren 30 hari — 26 Agustus 2026
+
+| Area | Hasil |
+|---|---|
+| Pencarian cepat | Lulus: kata kunci `USD` menyaring daftar pembanding menjadi satu opsi, yaitu `🇺🇸 USD`. |
+| Nilai awal | Lulus: sesi baru dimulai dengan pasangan `🇮🇩 IDR → 🇺🇸 USD`. |
+| Riwayat 30 hari | Lulus: pasangan IDR–USD menampilkan 22 hari kurs yang tersedia pada rentang 27 Juli–25 Agustus 2026; hari tanpa publikasi tidak ditambahkan. |
+| Grafik Plotly statis | Lulus: konfigurasi render menunjukkan `staticPlot=true`, `scrollZoom=false`, `displayModeBar=false`, `dragmode=false`, serta sumbu X/Y `fixedrange=true`. |
+| Tampilan ponsel | Lulus pada viewport 375 px: alur memuat kurs, pencarian, dan grafik tiga puluh hari berjalan tanpa overflow horizontal. |

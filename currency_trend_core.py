@@ -5,6 +5,9 @@ from __future__ import annotations
 from typing import Mapping
 
 
+CURRENCY_TREND_DAYS = 30
+
+
 def parse_historical_rates(payload: Mapping[str, object], quote_code: str) -> list[dict[str, object]]:
     """Membaca respons Frankfurter v1 dan mengembalikan titik valid menurut tanggal."""
     rate_days = payload.get("rates")

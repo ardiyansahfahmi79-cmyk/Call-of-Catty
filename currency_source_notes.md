@@ -8,9 +8,9 @@ Antarmuka dikurasi menjadi 90 mata uang negara dari Asia, Eropa, Afrika, Amerika
 
 Jika sumber tidak dapat diakses atau respons tidak valid, konverter tidak membuat nilai kurs baru dan meminta pengguna mencoba memuat ulang.
 
-## Grafik tren tujuh hari
+## Grafik tren tiga puluh hari
 
-Grafik menggunakan endpoint historis Frankfurter `https://api.frankfurter.dev/v1/` dengan mata uang asal dan tujuan yang dipilih pengguna. Dokumentasi Frankfurter menyatakan data historis tersedia tanpa API key dan bersumber dari bank sentral; jumlah titik dapat kurang dari tujuh karena kurs referensi umumnya tidak diterbitkan saat akhir pekan atau hari tanpa publikasi.
+Grafik menggunakan endpoint historis Frankfurter `https://api.frankfurter.dev/v1/` dengan mata uang asal dan tujuan yang dipilih pengguna. Rentangnya tiga puluh hari kalender; jumlah titik dapat lebih sedikit karena kurs referensi umumnya tidak diterbitkan saat akhir pekan atau hari tanpa publikasi.
 
 Grafik adalah referensi kurs harian, bukan harga broker, harga transfer bank, atau kuotasi eksekusi trading. Bila riwayat pasangan tidak tersedia, aplikasi menampilkan status gagal dan tidak membuat garis sintetis.
 

@@ -1,6 +1,6 @@
 """Kontrak deterministik normalisasi data grafik tren kurs."""
 
-from currency_trend_core import parse_historical_rates, trend_change_percent
+from currency_trend_core import CURRENCY_TREND_DAYS, parse_historical_rates, trend_change_percent
 
 
 PAYLOAD = {
@@ -13,6 +13,7 @@ PAYLOAD = {
 
 
 def run() -> None:
+    assert CURRENCY_TREND_DAYS == 30
     points = parse_historical_rates(PAYLOAD, "IDR")
     assert [point["Tanggal"] for point in points] == ["2026-08-19", "2026-08-20", "2026-08-21"]
     assert round(trend_change_percent(points) or 0, 2) == -1.12
