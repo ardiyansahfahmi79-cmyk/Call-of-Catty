@@ -189,12 +189,27 @@ else:
         st.markdown("<div class='notice'>Ringkasan: rencana Anda memiliki Stop Loss yang terisi dan target lebih besar atau sama dengan risiko. Ini bukan rekomendasi untuk entry; gunakan sebagai bahan mengecek rencana sendiri.</div>", unsafe_allow_html=True)
 
 st.markdown("<div class='mini' style='margin:1.7rem 0 .45rem'>KONVERTER MATA UANG</div>", unsafe_allow_html=True)
-st.markdown("<div class='card'><div class='step'>Konversi antar mata uang</div>", unsafe_allow_html=True)
+st.markdown("<div class='card'><div class='step'>Pilih konversi atau perbandingan kurs</div>", unsafe_allow_html=True)
+conversion_mode = st.radio(
+    "Yang ingin Anda lakukan",
+    options=("Konversi nilai", "Bandingkan kurs"),
+    horizontal=True,
+)
 amount_col, update_col = st.columns([1.2, 1], gap="medium")
 with amount_col:
-    currency_amount = st.number_input("Jumlah yang akan dikonversi", min_value=0.0, value=100.0, step=10.0, format="%.2f")
+    if conversion_mode == "Konversi nilai":
+        currency_amount = st.number_input(
+            "Ketik jumlah yang ingin dikonversi",
+            min_value=0.0,
+            value=100.0,
+            step=10.0,
+            format="%.2f",
+        )
+    else:
+        currency_amount = 1.0
+        st.markdown("<div class='input-hint'>Mode ini membandingkan nilai <b>1 unit</b> mata uang asal ke mata uang tujuan.</div>", unsafe_allow_html=True)
 with update_col:
-    refresh_rate = st.button("MUAT DAFTAR & KURS", use_container_width=True)
+    refresh_rate = st.button("MUAT MATA UANG & KURS", use_container_width=True)
 if refresh_rate:
     st.session_state["usd_idr_rate"] = fetch_usd_idr_rate()
 
@@ -205,11 +220,16 @@ if fx and fx.get("ok"):
     st.caption(f"Tersedia {len(codes)} pilihan kode mata uang dari sumber publik. Satu kode mata uang dikecualikan dari aplikasi.")
     from_col, to_col = st.columns(2, gap="medium")
     with from_col:
-        from_code = st.selectbox("Dari", codes, index=codes.index("USD"), format_func=currency_label)
+        from_code = st.selectbox("Dari mata uang", codes, index=codes.index("USD"), format_func=currency_label)
     with to_col:
-        to_code = st.selectbox("Ke", codes, index=codes.index("IDR"), format_func=currency_label)
+        to_code = st.selectbox("Ke mata uang", codes, index=codes.index("IDR"), format_func=currency_label)
     converted_value = convert_from_usd_reference(currency_amount, from_code, to_code, rates)
-    st.markdown(f"<div class='fx-value'>{currency_amount:,.2f} {from_code} = {converted_value:,.2f} {to_code}</div>", unsafe_allow_html=True)
+    if conversion_mode == "Konversi nilai":
+        st.markdown(f"<div class='fx-value'>{currency_amount:,.2f} {from_code} = {converted_value:,.2f} {to_code}</div>", unsafe_allow_html=True)
+        st.caption("Hasil menunjukkan nilai uang yang Anda ketik setelah dikonversi ke mata uang tujuan.")
+    else:
+        st.markdown(f"<div class='fx-value'>1 {from_code} = {converted_value:,.4f} {to_code}</div>", unsafe_allow_html=True)
+        st.caption("Hasil menunjukkan perbandingan nilai untuk satu unit mata uang asal.")
     st.caption(f"Kurs referensi dihitung dari basis USD · pembaruan sumber: {fx['updated']}")
     st.caption(f"Pembaruan berikutnya menurut sumber: {fx['next_update']}")
     st.markdown("Sumber: [Rates By Exchange Rate API](https://www.exchangerate-api.com)")
@@ -220,7 +240,7 @@ elif fx and not fx.get("ok"):
         st.markdown(f"<div class='fx-value'>{currency_amount:,.2f} USD = {rupiah(currency_amount * manual_rate)}</div>", unsafe_allow_html=True)
         st.caption("Menggunakan kurs manual yang Anda masukkan, bukan kurs dari sumber publik.")
 else:
-    st.markdown("<div class='empty-result'>Tekan <b>Muat Daftar & Kurs</b> untuk memilih mata uang dan mengambil kurs referensi beserta waktu pembaruannya.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='empty-result'>Pilih mode, lalu tekan <b>Muat Mata Uang & Kurs</b> untuk memilih mata uang dan mengambil kurs referensi beserta waktu pembaruannya.</div>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown("<div class='footer-note'>AEROVULPIS KALKULATOR RISIKO · UNTUK EDUKASI DAN PERENCANAAN · BUKAN NASIHAT FINANSIAL PERSONAL ATAU SISTEM EKSEKUSI</div>", unsafe_allow_html=True)

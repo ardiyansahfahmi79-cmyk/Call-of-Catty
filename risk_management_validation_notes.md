@@ -31,3 +31,12 @@ Catatan: nilai lot bergantung pada nilai pergerakan harga per lot yang diinput p
 | Pilihan aplikasi | Lulus: UI menampilkan 165 pilihan mata uang setelah satu kode dikecualikan. |
 | Hasil default | Lulus: 100 USD dikonversi ke IDR sesudah tombol pemuatan kurs ditekan. |
 | Pengecualian kode | Diterapkan pada mesin daftar dan fungsi konversi, sehingga kode terblokir tidak muncul dan tidak dapat dikonversi. |
+
+## Pilihan mode konverter — 26 Agustus 2026
+
+| Area | Hasil |
+|---|---|
+| Mode awal | Lulus: `Konversi nilai` menjadi pilihan awal dan menampilkan input jumlah yang jelas. |
+| Mode kedua | Tersedia: `Bandingkan kurs` untuk membandingkan nilai satu unit mata uang asal dan tujuan. |
+| Keadaan sebelum kurs dimuat | Lulus: pilihan mata uang serta hasil tetap tersembunyi sampai pengguna menekan `Muat Mata Uang & Kurs`. |
+| Bandingkan Kurs setelah dimuat | Lulus: hasil menampilkan `1 USD = 17.714,5656 IDR` dengan pilihan mata uang asal dan tujuan yang jelas. |
