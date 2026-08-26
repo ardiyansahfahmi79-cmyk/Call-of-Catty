@@ -86,3 +86,10 @@ Catatan: nilai lot bergantung pada nilai pergerakan harga per lot yang diinput p
 | Nominal kurs | Lulus: pasangan `🇺🇸 USD → 🇮🇩 IDR` dengan nominal `1` menampilkan `1 USD = 17,714.57 IDR` dari kurs referensi yang dimuat. |
 | Pencarian mata uang | Lulus: kolom pencarian cepat tidak lagi ditampilkan. |
 | Harga Masuk | Lulus: nilai `158.293` tetap tampil persis sama setelah tombol Hitung Risiko Saya ditekan; aplikasi tidak menambah nol atau memformat ulang teks. |
+
+## Penyempurnaan visual dan atribusi — 26 Agustus 2026
+
+| Area | Hasil |
+|---|---|
+| Judul utama | Lulus: kata `Risiko` tampil dengan aksen biru neon yang konsisten dengan elemen biru aplikasi. |
+| Sumber kurs | Lulus: tampil sebagai teks `Sumber kurs referensi: ExchangeRate-API`, tanpa tautan yang dapat diklik. |

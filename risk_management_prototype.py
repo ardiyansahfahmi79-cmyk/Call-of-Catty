@@ -46,7 +46,7 @@ st.markdown(
     header, footer, #MainMenu { visibility:hidden; }
     .mini { font-family:'DM Mono',monospace; font-size:.69rem; color:var(--blue); letter-spacing:.1em; text-transform:uppercase; }
     .title { font-family:'Manrope',sans-serif; font-size:clamp(2rem,8vw,3.25rem); font-weight:800; letter-spacing:-.06em; line-height:1; margin:.45rem 0 .7rem; color:var(--text); }
-    .title span { color:var(--green); }
+    .title span { color:var(--blue); text-shadow:0 0 18px rgba(70,201,255,.32); }
     .intro { color:var(--muted); font-family:'Manrope',sans-serif; line-height:1.6; font-size:.98rem; max-width:650px; margin-bottom:1.35rem; }
     .card { background:linear-gradient(145deg,rgba(20,31,45,.96),rgba(13,21,31,.96)); border:1px solid var(--line); border-radius:16px; padding:1rem; margin:.5rem 0 1rem; }
     .step { font-family:'Manrope',sans-serif; font-size:1.02rem; font-weight:700; margin:0 0 .9rem; color:var(--text); }
@@ -300,7 +300,7 @@ if fx and fx.get("ok"):
         st.caption("Hasil dihitung sesuai nominal yang Anda ketik dan mata uang yang dipilih.")
     st.caption(f"Kurs referensi dihitung dari basis USD · pembaruan sumber: {fx['updated']}")
     st.caption(f"Pembaruan berikutnya menurut sumber: {fx['next_update']}")
-    st.markdown("Sumber: [Rates By Exchange Rate API](https://www.exchangerate-api.com)")
+    st.caption("Sumber kurs referensi: ExchangeRate-API")
     st.markdown(
         "<div class='notice'><b>Catatan nilai referensi.</b> Nilai yang ditampilkan dapat berbeda dari bank, aplikasi, penyedia remitansi, atau broker. Perbedaan dapat terjadi karena waktu pembaruan, spread, biaya, serta metode penetapan kurs pada masing-masing layanan. Gunakan hasil ini untuk perbandingan informasi, bukan sebagai jaminan nilai transaksi atau harga eksekusi.</div>",
         unsafe_allow_html=True,
@@ -352,7 +352,7 @@ if fx and fx.get("ok"):
                 unsafe_allow_html=True,
             )
             st.caption("Grafik bersifat statis: tidak dapat di-zoom, digeser, disentuh, atau diunduh. Hari tanpa publikasi kurs tidak menghasilkan titik grafik.")
-            st.markdown("Sumber tren: [Frankfurter](https://frankfurter.dev/) — kurs referensi historis dari bank sentral, bukan harga broker real-time.")
+            st.caption("Sumber tren historis: Frankfurter — kurs referensi bank sentral, bukan harga broker real-time.")
         else:
             st.warning(f"Grafik tren belum tersedia: {trend['error']}")
 elif fx and not fx.get("ok"):

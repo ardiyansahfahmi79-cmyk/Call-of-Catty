@@ -14,7 +14,7 @@ Grafik menggunakan endpoint historis Frankfurter `https://api.frankfurter.dev/v1
 
 ## Catatan perbedaan nilai antar layanan
 
-Nilai pada konverter adalah kurs referensi dari sumber publik. Nilai tersebut dapat berbeda dari bank, aplikasi, penyedia remitansi, maupun broker karena perbedaan waktu pembaruan, spread, biaya, dan metode penetapan kurs. Antarmuka menyatakan batas ini secara eksplisit agar hasil tidak dibaca sebagai jaminan nilai transaksi atau harga eksekusi.
+Nilai pada konverter adalah kurs referensi dari sumber publik. Nilai tersebut dapat berbeda dari bank, aplikasi, penyedia remitansi, maupun broker karena perbedaan waktu pembaruan, spread, biaya, dan metode penetapan kurs. Antarmuka menyatakan batas ini secara eksplisit agar hasil tidak dibaca sebagai jaminan nilai transaksi atau harga eksekusi. Untuk menjaga antarmuka ringkas, atribusi ditampilkan sebagai judul sumber tanpa tautan yang dapat diklik: `ExchangeRate-API` untuk kurs referensi dan `Frankfurter` untuk riwayat kurs.
 
 Grafik adalah referensi kurs harian, bukan harga broker, harga transfer bank, atau kuotasi eksekusi trading. Bila riwayat pasangan tidak tersedia, aplikasi menampilkan status gagal dan tidak membuat garis sintetis.
 
