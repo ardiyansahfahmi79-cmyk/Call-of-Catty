@@ -12,3 +12,13 @@ Tanggal validasi: 26 Agustus 2026.
 | Koneksi eksternal | Tidak ada: prototipe tidak menggunakan broker, akun, database, harga live, atau perintah transaksi. |
 
 Catatan: nilai lot bergantung pada nilai pergerakan harga per lot yang diinput pengguna. Nilai tersebut harus diverifikasi terhadap spesifikasi kontrak broker sebelum digunakan sebagai dasar keputusan.
+
+## Perbaikan tombol dan kurs — 26 Agustus 2026
+
+| Area | Hasil |
+|---|---|
+| Keadaan awal | Lulus: hasil risiko tersembunyi dan hanya menampilkan pesan bahwa pengguna perlu menekan tombol perhitungan. |
+| Tombol `Hitung Risiko Saya` | Lulus: empat hasil inti baru tampil setelah formulir disubmit. |
+| Konverter USD–Rupiah | Lulus: nilai USD dan kurs publik hanya tampil setelah tombol `Perbarui Kurs` ditekan. |
+| Transparansi kurs | Lulus: UI menampilkan nilai referensi, waktu pembaruan, jadwal pembaruan berikutnya, serta atribusi sumber. |
+| Fallback | Diterapkan: jika kurs publik gagal dimuat, aplikasi tidak membuat nilai baru dan menawarkan input kurs manual opsional. |
