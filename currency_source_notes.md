@@ -4,9 +4,9 @@ Kalkulator menggunakan endpoint publik ExchangeRate-API `https://open.er-api.com
 
 UI harus mencantumkan atribusi **Rates By Exchange Rate API** dengan tautan ke dokumentasi sumber. Kurs ditampilkan sebagai kurs referensi harian untuk perencanaan, bukan kurs eksekusi broker, harga transfer bank, atau jaminan nilai transaksi.
 
-Dokumentasi sumber menyebut 165 mata uang yang umum beredar. Aplikasi membangun pilihan dari respons sumber yang terbaru dan mengecualikan satu kode mata uang secara eksplisit, sehingga jumlah pilihan aktual tampil pada UI dan dapat berubah jika cakupan sumber berubah.
+Antarmuka dikurasi menjadi 90 mata uang negara dari Asia, Eropa, Afrika, Amerika, dan Oseania. Sebuah kode hanya muncul bila juga tersedia pada respons sumber publik; satu kode yang diblokir tidak masuk ke daftar atau perhitungan.
 
-Jika sumber tidak dapat diakses atau respons tidak valid, konverter tidak membuat nilai kurs baru. UI hanya menampilkan input kurs manual yang dapat diisi pengguna beserta status bahwa pembaruan publik tidak tersedia.
+Jika sumber tidak dapat diakses atau respons tidak valid, konverter tidak membuat nilai kurs baru dan meminta pengguna mencoba memuat ulang.
 
 ## Grafik tren tujuh hari
 

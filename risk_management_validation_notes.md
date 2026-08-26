@@ -51,3 +51,13 @@ Catatan: nilai lot bergantung pada nilai pergerakan harga per lot yang diinput p
 | Transparansi | Lulus: UI menyebut rentang tanggal, jumlah hari kurs yang tersedia, perubahan persentase, tautan Frankfurter, serta batas bahwa ini bukan harga broker real-time. |
 | Fallback | Diterapkan: bila riwayat pasangan tidak tersedia, aplikasi memberi peringatan dan tidak membuat garis sintetis. |
 | Tampilan ponsel | Lulus pada viewport 375 px: alur memuat kurs lalu grafik dapat dijalankan, dan lebar dokumen tetap 375 px tanpa overflow horizontal. |
+
+## Penyederhanaan Bandingkan Kurs — 26 Agustus 2026
+
+| Area | Hasil |
+|---|---|
+| Mode tunggal | Lulus: pilihan radio Konversi Nilai/Bandingkan Kurs dan kolom jumlah telah dihapus. |
+| Daftar pilihan | Lulus: sumber publik menyediakan 90 mata uang negara hasil kurasi pada antarmuka. |
+| Label ponsel | Lulus: dropdown memakai bendera dan kode, dengan pasangan hasil seperti `🇮🇩 IDR → 🇺🇸 USD`. |
+| Hasil awal | Lulus: nilai standar membandingkan satu IDR terhadap USD tanpa meminta pengguna memasukkan nominal. |
+| Grafik pasangan awal | Lulus: grafik tren IDR–USD tujuh hari tetap muncul beserta titik data, perubahan persentase, dan atribusi sumber. |
