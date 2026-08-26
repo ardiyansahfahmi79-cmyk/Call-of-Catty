@@ -78,3 +78,11 @@ Catatan: nilai lot bergantung pada nilai pergerakan harga per lot yang diinput p
 |---|---|
 | Posisi pemberitahuan | Lulus: catatan tampil tepat setelah sumber dan waktu pembaruan kurs, sebelum tombol grafik tren. |
 | Isi pemberitahuan | Lulus: menjelaskan perbedaan nilai akibat waktu pembaruan, spread, biaya, dan metode penetapan kurs, tanpa menjanjikan kesetaraan dengan nilai transaksi atau harga eksekusi. |
+
+## Input nominal dan angka rencana — 26 Agustus 2026
+
+| Area | Hasil |
+|---|---|
+| Nominal kurs | Lulus: pasangan `🇺🇸 USD → 🇮🇩 IDR` dengan nominal `1` menampilkan `1 USD = 17,714.57 IDR` dari kurs referensi yang dimuat. |
+| Pencarian mata uang | Lulus: kolom pencarian cepat tidak lagi ditampilkan. |
+| Harga Masuk | Lulus: nilai `158.293` tetap tampil persis sama setelah tombol Hitung Risiko Saya ditekan; aplikasi tidak menambah nol atau memformat ulang teks. |

@@ -7,6 +7,8 @@ hasil hanya muncul setelah pengguna menekan tombol, dan kurs selalu beratribusi.
 from __future__ import annotations
 
 import json
+from html import escape
+from math import isfinite
 from datetime import UTC, datetime, timedelta
 from urllib.error import URLError
 from urllib.parse import urlencode
@@ -55,8 +57,8 @@ st.markdown(
     .result-copy { font-size:.75rem; color:var(--muted); line-height:1.35; }
     .fx-value { font-family:'Manrope',sans-serif; font-size:2rem; color:var(--green); font-weight:800; letter-spacing:-.04em; margin:.35rem 0; }
     .green { color:var(--green); } .blue { color:var(--blue); } .red { color:var(--red); }
-    div[data-testid='stNumberInput'] label, div[data-testid='stSlider'] label { font-family:'Manrope',sans-serif!important; font-size:.84rem!important; font-weight:700!important; color:#dfeaf2!important; }
-    div[data-testid='stNumberInput'] input { background:#09121c!important; color:var(--text)!important; border:1px solid #2a4055!important; border-radius:10px!important; font-family:'DM Mono',monospace!important; }
+    div[data-testid='stNumberInput'] label, div[data-testid='stTextInput'] label, div[data-testid='stSlider'] label { font-family:'Manrope',sans-serif!important; font-size:.84rem!important; font-weight:700!important; color:#dfeaf2!important; }
+    div[data-testid='stNumberInput'] input, div[data-testid='stTextInput'] input { background:#09121c!important; color:var(--text)!important; border:1px solid #2a4055!important; border-radius:10px!important; font-family:'DM Mono',monospace!important; }
     div[data-testid='stNumberInput'] button { background:#122333!important; color:var(--blue)!important; border-color:#2a4055!important; }
     .stButton>button { background:var(--green)!important; color:#062116!important; border:0!important; border-radius:10px!important; min-height:48px!important; font-family:'Manrope',sans-serif!important; font-weight:800!important; }
     .stButton>button:active { transform:scale(.98); }
@@ -85,6 +87,20 @@ def format_exchange_rate(value: float) -> str:
     """Mempertahankan detail kurs kecil tanpa membebani hasil kurs bernilai besar."""
     decimals = 2 if value >= 100 else 4 if value >= 1 else 6
     return f"{value:,.{decimals}f}"
+
+
+def parse_decimal_text(raw_value: str, label: str) -> float:
+    """Membaca angka hanya saat dibutuhkan tanpa mengubah teks yang diketik pengguna."""
+    cleaned = raw_value.strip().replace(" ", "")
+    if cleaned.count(",") == 1 and "." not in cleaned:
+        cleaned = cleaned.replace(",", ".")
+    try:
+        value = float(cleaned)
+    except ValueError as error:
+        raise ValueError(f"{label} harus diisi dengan angka yang valid.") from error
+    if not isfinite(value) or value <= 0:
+        raise ValueError(f"{label} harus lebih besar dari 0.")
+    return value
 
 
 def result_card(label: str, value: str, description: str, color: str) -> str:
@@ -166,11 +182,11 @@ with st.form("risk_calculator_form", clear_on_submit=False):
     st.markdown("<div class='card'><div class='step'>2. Masukkan rencana harga</div>", unsafe_allow_html=True)
     p1, p2, p3 = st.columns(3, gap="small")
     with p1:
-        entry = st.number_input("Harga masuk", min_value=0.0001, value=2350.0, step=0.1, format="%.4f")
+        entry_text = st.text_input("Harga masuk", value="2350", placeholder="Contoh: 158.293", key="risk_entry_text")
     with p2:
-        stop_loss = st.number_input("Stop Loss", min_value=0.0001, value=2345.0, step=0.1, format="%.4f")
+        stop_loss_text = st.text_input("Stop Loss", value="2345", placeholder="Contoh: 157.500", key="risk_stop_loss_text")
     with p3:
-        take_profit = st.number_input("Target Profit", min_value=0.0001, value=2360.0, step=0.1, format="%.4f")
+        take_profit_text = st.text_input("Target Profit", value="2360", placeholder="Contoh: 160.000", key="risk_take_profit_text")
     st.markdown("<div class='helper'>Harga masuk adalah rencana entry. Stop Loss membatasi kerugian. Target Profit adalah target rencana Anda.</div></div>", unsafe_allow_html=True)
 
     with st.expander("Pengaturan tambahan (opsional)"):
@@ -189,22 +205,30 @@ with st.form("risk_calculator_form", clear_on_submit=False):
     calculate_pressed = st.form_submit_button("HITUNG RISIKO SAYA", use_container_width=True)
 
 if calculate_pressed:
-    snapshot = calculate_risk_snapshot(
-        balance=balance,
-        risk_percent=risk_percent,
-        daily_loss_percent=daily_loss_percent,
-        daily_profit_percent=100.0,
-        entry=entry,
-        stop_loss=stop_loss,
-        take_profit=take_profit,
-        price_move_value_per_lot=price_move_value_per_lot,
-        wins=0,
-        losses=0,
-    )
-    st.session_state["risk_result"] = {
-        "snapshot": snapshot,
-        "risk_percent": risk_percent,
-    }
+    try:
+        entry = parse_decimal_text(entry_text, "Harga masuk")
+        stop_loss = parse_decimal_text(stop_loss_text, "Stop Loss")
+        take_profit = parse_decimal_text(take_profit_text, "Target Profit")
+    except ValueError as error:
+        st.session_state.pop("risk_result", None)
+        st.error(str(error))
+    else:
+        snapshot = calculate_risk_snapshot(
+            balance=balance,
+            risk_percent=risk_percent,
+            daily_loss_percent=daily_loss_percent,
+            daily_profit_percent=100.0,
+            entry=entry,
+            stop_loss=stop_loss,
+            take_profit=take_profit,
+            price_move_value_per_lot=price_move_value_per_lot,
+            wins=0,
+            losses=0,
+        )
+        st.session_state["risk_result"] = {
+            "snapshot": snapshot,
+            "risk_percent": risk_percent,
+        }
 
 st.markdown("<div class='mini' style='margin:1.6rem 0 .45rem'>HASIL PERHITUNGAN</div>", unsafe_allow_html=True)
 result = st.session_state.get("risk_result")
@@ -242,19 +266,10 @@ if fx and fx.get("ok"):
     rates = fx["rates"]
     codes = available_currency_codes(rates)
     st.caption(f"Tersedia {len(codes)} pilihan mata uang negara dari sumber publik.")
-    search_term = st.text_input(
-        "Pencarian cepat mata uang",
-        placeholder="Cari kode, misalnya IDR atau USD",
-        key="currency_search_term",
-    ).strip().upper()
-    matching_codes = [code for code in codes if search_term in code or search_term in currency_label(code).upper()]
-    if search_term and not matching_codes:
-        st.info("Tidak ada kode mata uang yang cocok. Kosongkan pencarian untuk melihat seluruh daftar.")
-
     selected_from = st.session_state.get("currency_from_code", "IDR")
     selected_to = st.session_state.get("currency_to_code", "USD")
-    from_choices = matching_codes if selected_from in matching_codes else [selected_from, *matching_codes]
-    to_choices = matching_codes if selected_to in matching_codes else [selected_to, *matching_codes]
+    from_choices = codes
+    to_choices = codes
     from_index = from_choices.index(selected_from) if selected_from in from_choices else 0
     to_index = to_choices.index(selected_to) if selected_to in to_choices else 0
     from_col, to_col = st.columns(2, gap="medium")
@@ -262,10 +277,27 @@ if fx and fx.get("ok"):
         from_code = st.selectbox("Mata uang asal", from_choices, index=from_index, format_func=currency_label, key="currency_from_code")
     with to_col:
         to_code = st.selectbox("Mata uang pembanding", to_choices, index=to_index, format_func=currency_label, key="currency_to_code")
-    compared_rate = convert_from_usd_reference(1.0, from_code, to_code, rates)
+    compared_amount_text = st.text_input(
+        f"Nominal {from_code} yang ingin dibandingkan",
+        value="1",
+        placeholder="Contoh: 1",
+        key="currency_amount_text",
+    )
+    try:
+        compared_amount = parse_decimal_text(compared_amount_text, "Nominal kurs")
+    except ValueError as error:
+        st.warning(str(error))
+        compared_amount = None
+    compared_value = (
+        convert_from_usd_reference(compared_amount, from_code, to_code, rates)
+        if compared_amount is not None
+        else None
+    )
     st.markdown(f"<div class='pair-readout'>{currency_pair_label(from_code, to_code)}</div>", unsafe_allow_html=True)
-    st.markdown(f"<div class='fx-value'>1 {from_code} = {format_exchange_rate(compared_rate)} {to_code}</div>", unsafe_allow_html=True)
-    st.caption("Perbandingan kurs untuk satu unit mata uang asal.")
+    if compared_value is not None:
+        typed_amount = escape(compared_amount_text.strip())
+        st.markdown(f"<div class='fx-value'>{typed_amount} {from_code} = {format_exchange_rate(compared_value)} {to_code}</div>", unsafe_allow_html=True)
+        st.caption("Hasil dihitung sesuai nominal yang Anda ketik dan mata uang yang dipilih.")
     st.caption(f"Kurs referensi dihitung dari basis USD · pembaruan sumber: {fx['updated']}")
     st.caption(f"Pembaruan berikutnya menurut sumber: {fx['next_update']}")
     st.markdown("Sumber: [Rates By Exchange Rate API](https://www.exchangerate-api.com)")
