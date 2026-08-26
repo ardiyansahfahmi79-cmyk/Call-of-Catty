@@ -8,6 +8,12 @@ Dokumentasi sumber menyebut 165 mata uang yang umum beredar. Aplikasi membangun 
 
 Jika sumber tidak dapat diakses atau respons tidak valid, konverter tidak membuat nilai kurs baru. UI hanya menampilkan input kurs manual yang dapat diisi pengguna beserta status bahwa pembaruan publik tidak tersedia.
 
+## Grafik tren tujuh hari
+
+Grafik menggunakan endpoint historis Frankfurter `https://api.frankfurter.dev/v1/` dengan mata uang asal dan tujuan yang dipilih pengguna. Dokumentasi Frankfurter menyatakan data historis tersedia tanpa API key dan bersumber dari bank sentral; jumlah titik dapat kurang dari tujuh karena kurs referensi umumnya tidak diterbitkan saat akhir pekan atau hari tanpa publikasi.
+
+Grafik adalah referensi kurs harian, bukan harga broker, harga transfer bank, atau kuotasi eksekusi trading. Bila riwayat pasangan tidak tersedia, aplikasi menampilkan status gagal dan tidak membuat garis sintetis.
+
 Referensi:
 
 - https://www.exchangerate-api.com/docs/free

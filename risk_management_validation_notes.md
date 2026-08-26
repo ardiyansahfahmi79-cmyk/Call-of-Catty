@@ -40,3 +40,14 @@ Catatan: nilai lot bergantung pada nilai pergerakan harga per lot yang diinput p
 | Mode kedua | Tersedia: `Bandingkan kurs` untuk membandingkan nilai satu unit mata uang asal dan tujuan. |
 | Keadaan sebelum kurs dimuat | Lulus: pilihan mata uang serta hasil tetap tersembunyi sampai pengguna menekan `Muat Mata Uang & Kurs`. |
 | Bandingkan Kurs setelah dimuat | Lulus: hasil menampilkan `1 USD = 17.714,5656 IDR` dengan pilihan mata uang asal dan tujuan yang jelas. |
+
+## Grafik tren kurs tujuh hari — 26 Agustus 2026
+
+| Area | Hasil |
+|---|---|
+| Pengambilan riwayat | Lulus: endpoint historis Frankfurter mengembalikan lima hari kurs USD–IDR dalam jendela tujuh hari kalender; akhir pekan tidak memiliki publikasi kurs. |
+| Tombol grafik | Lulus: tombol `Tampilkan Grafik Tren 7 Hari` baru muncul sesudah kurs dan pilihan mata uang tersedia. |
+| Render grafik | Lulus pada desktop: grafik garis menampilkan lima titik USD–IDR, sumbu tanggal, sumbu kurs, tooltip, dan perubahan dari titik pertama ke terakhir. |
+| Transparansi | Lulus: UI menyebut rentang tanggal, jumlah hari kurs yang tersedia, perubahan persentase, tautan Frankfurter, serta batas bahwa ini bukan harga broker real-time. |
+| Fallback | Diterapkan: bila riwayat pasangan tidak tersedia, aplikasi memberi peringatan dan tidak membuat garis sintetis. |
+| Tampilan ponsel | Lulus pada viewport 375 px: alur memuat kurs lalu grafik dapat dijalankan, dan lebar dokumen tetap 375 px tanpa overflow horizontal. |

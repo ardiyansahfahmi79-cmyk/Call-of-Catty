@@ -7,7 +7,9 @@ hasil hanya muncul setelah pengguna menekan tombol, dan kurs selalu beratribusi.
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from urllib.error import URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 import streamlit as st
@@ -17,6 +19,7 @@ from currency_converter_core import (
     convert_from_usd_reference,
     currency_label,
 )
+from currency_trend_core import parse_historical_rates, trend_change_percent
 from risk_management_core import calculate_risk_snapshot
 
 
@@ -58,6 +61,7 @@ st.markdown(
     div[data-testid='stExpander'] { background:rgba(10,17,25,.72); border:1px solid var(--line); border-radius:12px; }
     .notice { background:rgba(31,100,130,.12); border-left:3px solid var(--blue); color:#bfdae8; padding:.8rem .9rem; border-radius:0 9px 9px 0; font-size:.83rem; line-height:1.45; }
     .empty-result { border:1px dashed #2d465c; background:rgba(15,27,39,.5); border-radius:14px; padding:1rem; color:var(--muted); font-size:.88rem; }
+    .trend-summary { color:var(--muted); font-size:.82rem; line-height:1.5; margin:.45rem 0 .3rem; }
     .footer-note { margin-top:1.7rem; color:#718697; font-size:.73rem; text-align:center; line-height:1.55; }
     @media (max-width:700px) { .block-container { padding:1.25rem 1rem 2.4rem; } .title { font-size:2.45rem; } .result-card { min-height:104px; padding:.85rem; } .result-value { font-size:1.38rem; } }
     </style>
@@ -102,6 +106,36 @@ def fetch_usd_idr_rate() -> dict[str, object]:
             "rates": rates,
             "updated": str(payload.get("time_last_update_utc", "waktu pembaruan tidak tersedia")),
             "next_update": str(payload.get("time_next_update_utc", "jadwal pembaruan tidak tersedia")),
+        }
+    except (URLError, TimeoutError, ValueError, KeyError, json.JSONDecodeError) as error:
+        return {"ok": False, "error": str(error)}
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_currency_trend(base_code: str, quote_code: str) -> dict[str, object]:
+    """Mengambil maksimum tujuh hari kalender kurs referensi historis tanpa API key."""
+    if base_code == quote_code:
+        return {"ok": False, "error": "Pilih dua mata uang yang berbeda untuk grafik tren."}
+    if base_code not in available_currency_codes({base_code: 1.0}) or quote_code not in available_currency_codes({quote_code: 1.0}):
+        return {"ok": False, "error": "Pasangan mata uang tidak tersedia untuk grafik."}
+
+    end_date = datetime.now(UTC).date()
+    start_date = end_date - timedelta(days=7)
+    parameters = urlencode({"base": base_code, "symbols": quote_code})
+    url = f"https://api.frankfurter.dev/v1/{start_date.isoformat()}..{end_date.isoformat()}?{parameters}"
+    try:
+        request = Request(url, headers={"User-Agent": "AeroVulpisRiskCalculator/1.0"})
+        with urlopen(request, timeout=8) as response:  # nosec B310 - fixed HTTPS endpoint
+            payload = json.loads(response.read().decode("utf-8"))
+        points = parse_historical_rates(payload, quote_code)
+        if not points:
+            raise ValueError("Riwayat kurs tidak tersedia untuk pasangan ini")
+        return {
+            "ok": True,
+            "points": points,
+            "start": str(payload.get("start_date", start_date.isoformat())),
+            "end": str(payload.get("end_date", end_date.isoformat())),
+            "source": "Frankfurter — kurs referensi bank sentral",
         }
     except (URLError, TimeoutError, ValueError, KeyError, json.JSONDecodeError) as error:
         return {"ok": False, "error": str(error)}
@@ -233,6 +267,46 @@ if fx and fx.get("ok"):
     st.caption(f"Kurs referensi dihitung dari basis USD · pembaruan sumber: {fx['updated']}")
     st.caption(f"Pembaruan berikutnya menurut sumber: {fx['next_update']}")
     st.markdown("Sumber: [Rates By Exchange Rate API](https://www.exchangerate-api.com)")
+
+    trend_key = f"{from_code}_{to_code}"
+    if st.button("TAMPILKAN GRAFIK TREN 7 HARI", use_container_width=True, key=f"trend_{trend_key}"):
+        st.session_state["currency_trend"] = {
+            "pair": trend_key,
+            "data": fetch_currency_trend(from_code, to_code),
+        }
+
+    trend_state = st.session_state.get("currency_trend")
+    if trend_state and trend_state.get("pair") == trend_key:
+        trend = trend_state["data"]
+        if trend.get("ok"):
+            points = trend["points"]
+            change = trend_change_percent(points)
+            st.markdown("<div class='mini' style='margin:1rem 0 .2rem'>GRAFIK TREN KURS · 7 HARI KALENDER</div>", unsafe_allow_html=True)
+            st.vega_lite_chart(
+                points,
+                {
+                    "mark": {"type": "line", "point": True, "color": "#46c9ff", "strokeWidth": 3},
+                    "encoding": {
+                        "x": {"field": "Tanggal", "type": "temporal", "title": "Tanggal"},
+                        "y": {"field": "Kurs", "type": "quantitative", "title": f"{to_code} per 1 {from_code}", "zero": False},
+                        "tooltip": [
+                            {"field": "Tanggal", "type": "temporal", "title": "Tanggal"},
+                            {"field": "Kurs", "type": "quantitative", "title": "Kurs", "format": ",.4f"},
+                        ],
+                    },
+                    "height": 260,
+                },
+                use_container_width=True,
+            )
+            change_text = "belum dapat dihitung" if change is None else f"{change:+.2f}%"
+            st.markdown(
+                f"<div class='trend-summary'>Data tersedia {len(points)} hari kurs pada rentang {trend['start']} sampai {trend['end']} · perubahan dari titik pertama ke terakhir: <b>{change_text}</b>.</div>",
+                unsafe_allow_html=True,
+            )
+            st.caption("Hari tanpa publikasi kurs, termasuk akhir pekan atau hari libur tertentu, tidak menghasilkan titik grafik.")
+            st.markdown("Sumber tren: [Frankfurter](https://frankfurter.dev/) — kurs referensi historis dari bank sentral, bukan harga broker real-time.")
+        else:
+            st.warning(f"Grafik tren belum tersedia: {trend['error']}")
 elif fx and not fx.get("ok"):
     st.warning("Kurs publik tidak dapat dimuat. Tidak ada kurs pengganti yang dibuat oleh aplikasi.")
     manual_rate = st.number_input("Masukkan kurs manual (opsional)", min_value=0.0, value=0.0, step=10.0, format="%.2f")
