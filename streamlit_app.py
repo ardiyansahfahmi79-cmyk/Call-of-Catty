@@ -1,416 +1,622 @@
-"""AeroVulpis Kalkulator Risiko — perencanaan lokal tanpa koneksi broker.
-
-Filosofi visual: satu tugas per bagian, istilah bahasa Indonesia sederhana,
-hasil hanya muncul setelah pengguna menekan tombol, dan kurs selalu beratribusi.
+"""
+AERO AI TRADE v2.1
+Streamlit + TradingView (chart real-time) + MetaApi.cloud (auto-trade)
+Scoring system: EMA + RSI + ATR — porting dari EA MQL5
 """
 
-from __future__ import annotations
-
-import json
-from html import escape
-from math import isfinite
-from datetime import UTC, datetime, timedelta
-from urllib.error import URLError
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
-
-import plotly.graph_objects as go
 import streamlit as st
+import pandas as pd
+import numpy as np
+import requests
+import json
+from datetime import datetime, timedelta
+import streamlit.components.v1 as components
 
-from currency_converter_core import (
-    available_currency_codes,
-    convert_from_usd_reference,
-    currency_label,
-    currency_pair_label,
-)
-from currency_trend_core import CURRENCY_TREND_DAYS, format_axis_value, parse_historical_rates, trend_axis_ticks, trend_change_percent
-from risk_management_core import calculate_risk_snapshot
+# ================================================================
+# PAGE CONFIG
+# ================================================================
+st.set_page_config(page_title="Aero AI Trade", page_icon="✈", layout="wide", initial_sidebar_state="collapsed")
+
+# ================================================================
+# DARK THEME OVERRIDE
+# ================================================================
+st.markdown("""<style>
+[data-testid="stHeader"]{visibility:hidden}
+[data-testid="stToolbar"]{visibility:hidden}
+.stApp{background:#060610;color:#e2e2f0}
+.block-container{padding-top:1rem;max-width:100%}
+.stTabs [data-baseweb="tab-list"]{gap:2px;background:#0b0b1a;border-radius:6px;padding:3px}
+.stTabs [data-baseweb="tab"]{border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:#3e3e60;padding:6px 14px}
+.stTabs [aria-selected="true"]{background:#101028;color:#00d4aa}
+.stTabs [data-baseweb="tab-highlight"]{background-color:#00d4aa;height:2px}
+.stDataFrame{background:#0b0b1a;border:1px solid #1c1c40;border-radius:6px}
+.stDataFrame td{font-size:11px;padding:4px 8px}
+.stDataFrame th{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#3e3e60;background:#0b0b1a}
+div[data-testid="stTextInput"] label{font-size:10px;color:#6a6a90;text-transform:uppercase;letter-spacing:.5px}
+div[data-testid="stTextInput"] input{background:#151535;border:1px solid #1c1c40;color:#e2e2f0;font-size:12px}
+div[data-testid="stSelectbox"] label{font-size:10px;color:#6a6a90;text-transform:uppercase;letter-spacing:.5px}
+div[data-testid="stSelectbox"] div[data-baseweb="select"]{background:#151535;border:1px solid #1c1c40}
+div[data-testid="stSelectbox"] span{color:#e2e2f0;font-size:12px}
+.stButton>button{font-size:11px;font-weight:600;border-radius:5px;padding:6px 16px}
+.stAlert{font-size:11px;padding:8px 12px;border-radius:6px}
+div[data-testid="stMetric"]{background:#0b0b1a;border:1px solid #1c1c40;border-radius:6px;padding:8px 12px}
+div[data-testid="stMetricLabel"]{font-size:9px;text-transform:uppercase;letter-spacing:.8px;color:#3e3e60}
+div[data-testid="stMetricValue"]{font-size:13px;font-weight:700}
+.sig-card{background:#101028;border:1px solid #1c1c40;border-radius:8px;padding:12px 14px;text-align:center}
+.sig-card .sig-label{font-size:9px;color:#3e3e60;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;font-weight:600}
+.sig-card .sig-val{font-size:18px;font-weight:700;font-family:monospace}
+.sig-card .sig-sub{font-size:10px;color:#6a6a90;margin-top:2px}
+</style>""", unsafe_allow_html=True)
+
+# ================================================================
+# KONSTANTA
+# ================================================================
+PAIRS = {
+    'EURUSD': {'name':'EUR/USD','tv':'FX:EURUSD','digits':5,'pip':10},
+    'GBPUSD': {'name':'GBP/USD','tv':'FX:GBPUSD','digits':5,'pip':10},
+    'USDJPY': {'name':'USD/JPY','tv':'FX:USDJPY','digits':3,'pip':6.67},
+    'AUDUSD': {'name':'AUD/USD','tv':'FX:AUDUSD','digits':5,'pip':10},
+    'USDCAD': {'name':'USD/CAD','tv':'FX:USDCAD','digits':5,'pip':7.33},
+    'NZDUSD': {'name':'NZD/USD','tv':'FX:NZDUSD','digits':5,'pip':10},
+    'XAUUSD': {'name':'XAU/USD','tv':'OANDA:XAUUSD','digits':2,'pip':1},
+    'BTCUSD': {'name':'BTC/USD','tv':'BITSTAMP:BTCUSD','digits':2,'pip':1},
+}
+TF_TV = {'M1':'1','M5':'5','M15':'15','M30':'30','H1':'60','H4':'240','D1':'D','W1':'W'}
+TF_API = {'M1':'1m','M5':'5m','M15':'15m','M30':'30m','H1':'1h','H4':'4h','D1':'1d','W1':'1w'}
+
+# ================================================================
+# SESSION STATE
+# ================================================================
+defaults = {
+    'bot_active': False, 'connected': False, 'metaapi_ready': False,
+    'journal': [], 'score': 0, 'last_signal': 'WAIT',
+    'ema_status': '—', 'rsi_val': 50.0, 'atr_val': 0.0,
+    'sl_calc': 0.0, 'tp_calc': 0.0,
+}
+for k, v in defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
+
+def add_log(tp, msg):
+    st.session_state.journal.insert(0, {'time': datetime.now().strftime('%H:%M:%S'), 'type': tp, 'msg': msg})
+    if len(st.session_state.journal) > 200:
+        st.session_state.journal = st.session_state.journal[:200]
+
+# ================================================================
+# META API BRIDGE (REST API — tanpa SDK async, murni requests)
+# ================================================================
+class MetaApiBridge:
+    """Komunikasi dengan MetaApi.cloud via REST API — 100% synchronous, aman untuk Streamlit"""
+    BASE = 'https://metaapi.cloud/api/v2'
+
+    def __init__(self, token):
+        self.token = token
+        self.h = {'auth-token': token, 'Accept': 'application/json', 'Content-Type': 'application/json'}
+
+    def get_accounts(self):
+        try:
+            r = requests.get(f'{self.BASE}/users/current/accounts', headers=self.h, timeout=10)
+            return r.json()
+        except Exception as e:
+            return {'error': str(e)}
+
+    def ensure_rpc(self, account_id):
+        """Pastikan RPC connection aktif (terminal MT5 berjalan di cloud MetaApi)"""
+        try:
+            # Cek state
+            r = requests.get(f'{self.BASE}/users/current/accounts/{account_id}', headers=self.h, timeout=10)
+            acc = r.json()
+            if acc.get('state') != 'DEPLOYED':
+                requests.post(f'{self.BASE}/users/current/accounts/{account_id}/deploy', headers=self.h, timeout=30)
+                return False  # Perlu tunggu deploy
+            # Connect RPC
+            requests.post(f'{self.BASE}/users/current/accounts/{account_id}/rpc/connect', headers=self.h, timeout=15)
+            return True
+        except Exception as e:
+            add_log('error', f'MetaApi connect error: {e}')
+            return False
+
+    def get_candles(self, account_id, symbol, timeframe, limit=100):
+        """Ambil data candle dari MT5 via MetaApi"""
+        try:
+            tf = TF_API.get(timeframe, '1h')
+            r = requests.get(
+                f'{self.BASE}/users/current/accounts/{account_id}/history/candles',
+                headers=self.h, timeout=15,
+                params={'symbol': symbol, 'timeframe': tf, 'limit': limit}
+            )
+            data = r.json()
+            if 'history' in data:
+                return data['history']
+            return []
+        except Exception as e:
+            add_log('error', f'Get candles error: {e}')
+            return []
+
+    def get_price(self, account_id, symbol):
+        """Ambil harga terkini"""
+        try:
+            r = requests.get(
+                f'{self.BASE}/users/current/accounts/{account_id}/symbols/{symbol}/price',
+                headers=self.h, timeout=10
+            )
+            return r.json()
+        except Exception as e:
+            return {}
+
+    def open_trade(self, account_id, symbol, trade_type, volume, sl=None, tp=None, magic=123456):
+        """Buka order BUY atau SELL"""
+        try:
+            body = {'symbol': symbol, 'volume': volume, 'type': trade_type, 'magic': magic}
+            if sl: body['stopLoss'] = sl
+            if tp: body['takeProfit'] = tp
+            r = requests.post(
+                f'{self.BASE}/users/current/accounts/{account_id}/trade',
+                headers=self.h, timeout=15, json=body
+            )
+            return r.json()
+        except Exception as e:
+            return {'error': str(e)}
+
+    def get_positions(self, account_id):
+        """Ambil posisi terbuka"""
+        try:
+            r = requests.get(
+                f'{self.BASE}/users/current/accounts/{account_id}/positions',
+                headers=self.h, timeout=10
+            )
+            return r.json()
+        except Exception as e:
+            return []
+
+    def close_position(self, account_id, position_id):
+        """Tutup posisi"""
+        try:
+            r = requests.post(
+                f'{self.BASE}/users/current/accounts/{account_id}/trade',
+                headers=self.h, timeout=15,
+                json={'positionId': position_id}
+            )
+            return r.json()
+        except Exception as e:
+            return {'error': str(e)}
 
 
-st.set_page_config(
-    page_title="AeroVulpis — Kalkulator Risiko",
-    page_icon="◈",
-    layout="centered",
-    initial_sidebar_state="collapsed",
-)
+@st.cache_resource
+def get_metaapi():
+    """Inisialisasi MetaApi bridge — di-cache supaya tidak buat ulang setiap rerun"""
+    token = st.secrets.get('META_API_TOKEN', '')
+    acc_id = st.secrets.get('META_API_ACCOUNT_ID', '')
+    if not token or not acc_id:
+        return None
+    api = MetaApiBridge(token)
+    # Test koneksi
+    accs = api.get_accounts()
+    if 'error' in accs:
+        return None
+    return {'api': api, 'account_id': acc_id}
 
+# ================================================================
+# INDIKATOR (sama persis logika dengan MQL5 EA)
+# ================================================================
+def calc_ema(close_series, period):
+    """EMA calculation — identik dengan iMA() di MQL5"""
+    if len(close_series) < period:
+        return close_series
+    k = 2.0 / (period + 1)
+    ema = [close_series[0]]
+    for i in range(1, len(close_series)):
+        ema.append(close_series[i] * k + ema[-1] * (1 - k))
+    return ema
 
-st.markdown(
+def calc_rsi(close_series, period=14):
+    """RSI calculation — identik dengan iRSI() di MQL5"""
+    if len(close_series) < period + 1:
+        return [50.0] * len(close_series)
+    rsi = [50.0] * (period)
+    gains, losses = [], []
+    for i in range(1, period + 1):
+        d = close_series[i] - close_series[i-1]
+        gains.append(max(d, 0))
+        losses.append(max(-d, 0))
+    avg_gain = sum(gains) / period
+    avg_loss = sum(losses) / period
+    rsi.append(100 if avg_loss == 0 else 100 - 100 / (1 + avg_gain / avg_loss))
+    for i in range(period + 1, len(close_series)):
+        d = close_series[i] - close_series[i-1]
+        avg_gain = (avg_gain * (period - 1) + max(d, 0)) / period
+        avg_loss = (avg_loss * (period - 1) + max(-d, 0)) / period
+        rsi.append(100 if avg_loss == 0 else 100 - 100 / (1 + avg_gain / avg_loss))
+    return rsi
+
+def calc_atr(high, low, close, period=14):
+    """ATR calculation — identik dengan iATR() di MQL5"""
+    if len(high) < period + 1:
+        return [0.0] * len(high)
+    tr_list = []
+    for i in range(1, len(high)):
+        tr = max(high[i]-low[i], abs(high[i]-close[i-1]), abs(low[i]-close[i-1]))
+        tr_list.append(tr)
+    atr = [0.0] * period
+    atr.append(sum(tr_list[:period]) / period)
+    for i in range(period, len(tr_list)):
+        atr.append((atr[-1] * (period - 1) + tr_list[i]) / period)
+    return atr
+
+# ================================================================
+# SCORING SYSTEM — porting 1:1 dari MQL5 EA
+# ================================================================
+def calc_score(ema_fast, ema_slow, rsi_vals, ema_fast_period=9, rsi_ob=70, rsi_os=30):
     """
-    <style>
-    /* Simple Risk visual system: calm dark surface, one task, readable mobile controls. */
-    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
-    :root { --bg:#081018; --card:#101a26; --line:#203347; --blue:#46c9ff; --green:#36e49a; --red:#ff6c8e; --text:#eef5fa; --muted:#9fb0bf; }
-    .stApp { background:radial-gradient(circle at 85% 2%,rgba(41,126,174,.16),transparent 27%),var(--bg); color:var(--text); }
-    .block-container { max-width:780px; padding-top:2.2rem; padding-bottom:3rem; }
-    header, footer, #MainMenu { visibility:hidden; }
-    .mini { font-family:'DM Mono',monospace; font-size:.69rem; color:var(--blue); letter-spacing:.1em; text-transform:uppercase; }
-    .title { font-family:'Manrope',sans-serif; font-size:clamp(2rem,8vw,3.25rem); font-weight:800; letter-spacing:-.06em; line-height:1; margin:.45rem 0 .7rem; color:var(--text); }
-    .title span { color:var(--blue); text-shadow:0 0 18px rgba(70,201,255,.32); }
-    .intro { color:var(--muted); font-family:'Manrope',sans-serif; line-height:1.6; font-size:.98rem; max-width:650px; margin-bottom:1.35rem; }
-    .card { background:linear-gradient(145deg,rgba(20,31,45,.96),rgba(13,21,31,.96)); border:1px solid var(--line); border-radius:16px; padding:1rem; margin:.5rem 0 1rem; }
-    .step { font-family:'Manrope',sans-serif; font-size:1.02rem; font-weight:700; margin:0 0 .9rem; color:var(--text); }
-    .helper { color:var(--muted); font-size:.82rem; line-height:1.45; margin-top:-.25rem; margin-bottom:.75rem; }
-    .result-card { background:linear-gradient(145deg,rgba(18,42,56,.92),rgba(13,24,34,.98)); border:1px solid rgba(70,201,255,.18); border-radius:14px; padding:1rem; min-height:122px; }
-    .result-label { font-family:'Manrope',sans-serif; color:var(--muted); font-size:.78rem; font-weight:600; }
-    .result-value { font-family:'Manrope',sans-serif; color:var(--text); font-size:1.7rem; font-weight:800; letter-spacing:-.04em; margin:.4rem 0 .22rem; }
-    .result-copy { font-size:.75rem; color:var(--muted); line-height:1.35; }
-    .fx-value { font-family:'Manrope',sans-serif; font-size:2rem; color:var(--green); font-weight:800; letter-spacing:-.04em; margin:.35rem 0; }
-    .green { color:var(--green); } .blue { color:var(--blue); } .red { color:var(--red); }
-    div[data-testid='stNumberInput'] label, div[data-testid='stTextInput'] label, div[data-testid='stSlider'] label { font-family:'Manrope',sans-serif!important; font-size:.84rem!important; font-weight:700!important; color:#dfeaf2!important; }
-    div[data-testid='stNumberInput'] input, div[data-testid='stTextInput'] input { background:#09121c!important; color:var(--text)!important; border:1px solid #2a4055!important; border-radius:10px!important; font-family:'DM Mono',monospace!important; }
-    div[data-testid='stNumberInput'] button { background:#122333!important; color:var(--blue)!important; border-color:#2a4055!important; }
-    .stButton>button { background:var(--green)!important; color:#062116!important; border:0!important; border-radius:10px!important; min-height:48px!important; font-family:'Manrope',sans-serif!important; font-weight:800!important; }
-    .stButton>button:active { transform:scale(.98); }
-    div[data-testid='stExpander'] { background:rgba(10,17,25,.72); border:1px solid var(--line); border-radius:12px; }
-    .notice { background:rgba(31,100,130,.12); border-left:3px solid var(--blue); color:#bfdae8; padding:.8rem .9rem; border-radius:0 9px 9px 0; font-size:.83rem; line-height:1.45; }
-    .empty-result { border:1px dashed #2d465c; background:rgba(15,27,39,.5); border-radius:14px; padding:1rem; color:var(--muted); font-size:.88rem; }
-    .trend-summary { color:var(--muted); font-size:.82rem; line-height:1.5; margin:.45rem 0 .3rem; }
-    .trend-stat { background:rgba(15,31,44,.82); border:1px solid rgba(70,201,255,.16); border-radius:10px; padding:.65rem .7rem; min-height:72px; }
-    .trend-stat-label { display:block; color:var(--muted); font-family:'DM Mono',monospace; font-size:.63rem; letter-spacing:.06em; text-transform:uppercase; margin-bottom:.22rem; }
-    .trend-stat-value { color:var(--text); font-family:'Manrope',sans-serif; font-size:.92rem; font-weight:800; letter-spacing:-.02em; line-height:1.25; overflow-wrap:anywhere; }
-    .pair-readout { font-family:'DM Mono',monospace; color:var(--blue); font-size:.9rem; padding:.72rem .82rem; border:1px solid rgba(70,201,255,.22); border-radius:10px; background:rgba(20,56,74,.22); margin:.2rem 0 .75rem; }
-    .footer-note { margin-top:1.7rem; color:#718697; font-size:.73rem; text-align:center; line-height:1.55; }
-    @media (max-width:700px) { .block-container { padding:1.25rem 1rem 2.4rem; } .title { font-size:2.45rem; } .result-card { min-height:104px; padding:.85rem; } .result-value { font-size:1.38rem; } }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-
-def money(value: float) -> str:
-    return f"${value:,.2f}"
-
-
-def rupiah(value: float) -> str:
-    return "Rp " + f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-
-def format_exchange_rate(value: float) -> str:
-    """Mempertahankan detail kurs kecil tanpa membebani hasil kurs bernilai besar."""
-    decimals = 2 if value >= 100 else 4 if value >= 1 else 6
-    return f"{value:,.{decimals}f}"
-
-
-def parse_decimal_text(raw_value: str, label: str) -> float:
-    """Membaca angka hanya saat dibutuhkan tanpa mengubah teks yang diketik pengguna."""
-    cleaned = raw_value.strip().replace(" ", "")
-    if cleaned.count(",") == 1 and "." not in cleaned:
-        cleaned = cleaned.replace(",", ".")
-    try:
-        value = float(cleaned)
-    except ValueError as error:
-        raise ValueError(f"{label} harus diisi dengan angka yang valid.") from error
-    if not isfinite(value) or value <= 0:
-        raise ValueError(f"{label} harus lebih besar dari 0.")
-    return value
-
-
-def result_card(label: str, value: str, description: str, color: str) -> str:
-    return f"""
-    <div class='result-card'>
-      <div class='result-label'>{label}</div>
-      <div class='result-value {color}'>{value}</div>
-      <div class='result-copy'>{description}</div>
-    </div>
+    Scoring identik dengan EA MQL5:
+    - EMA crossover/trend: ±1
+    - RSI zone/momentum: ±1
+    - Total skor -2 s/d +2
     """
+    n = len(ema_fast)
+    if n < 3:
+        return 0
+    score = 0
 
+    # 1. EMA Trend (sama persis MQL5)
+    if ema_fast[n-1] > ema_slow[n-1] and ema_fast[n-2] <= ema_slow[n-2]:
+        score += 1   # Bullish crossover
+    elif ema_fast[n-1] < ema_slow[n-1] and ema_fast[n-2] >= ema_slow[n-2]:
+        score -= 1   # Bearish crossover
+    elif ema_fast[n-1] > ema_slow[n-1]:
+        score += 1   # Masih tren naik
+    elif ema_fast[n-1] < ema_slow[n-1]:
+        score -= 1   # Masih tren turun
 
-def trend_stat_card(label: str, value: str, tone: str = "") -> str:
-    return f"<div class='trend-stat'><span class='trend-stat-label'>{label}</span><div class='trend-stat-value {tone}'>{value}</div></div>"
+    # 2. RSI Momentum (sama persis MQL5)
+    r = rsi_vals[n-1] if n-1 < len(rsi_vals) else 50
+    if r < rsi_os:
+        score += 1   # Oversold → buy
+    elif r > rsi_ob:
+        score -= 1   # Overbought → sell
+    elif r > 50:
+        score += 1   # Momentum naik
+    elif r < 50:
+        score -= 1   # Momentum turun
 
+    return score
 
-def date_tick_label(raw_date: str) -> str:
-    """Meringkas tanggal sumbu horizontal untuk layar sempit."""
-    return datetime.strptime(raw_date, "%Y-%m-%d").strftime("%d %b")
+# ================================================================
+# TRADINGVIEW WIDGET — chart real-time 100%
+# ================================================================
+def render_tv_chart(symbol_tv, interval_tv, height=480):
+    """Embed TradingView Advanced Chart — harga REAL dari market"""
+    widget_id = f"tv_{symbol_tv.replace(':','_')}_{interval_tv}"
+    html = f"""
+    <div style="width:100%;height:{height}px;border-radius:8px;overflow:hidden;border:1px solid #1c1c40">
+        <div id="{widget_id}" style="height:100%;width:100%"></div>
+        <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+        <script type="text/javascript">
+        new TradingView.widget({{
+            "autosize": true,
+            "symbol": "{symbol_tv}",
+            "interval": "{interval_tv}",
+            "timezone": "Asia/Jakarta",
+            "theme": "dark",
+            "style": "1",
+            "locale": "id_ID",
+            "backgroundColor": "#080812",
+            "gridColor": "#1c1c40",
+            "hide_side_toolbar": false,
+            "allow_symbol_change": true,
+            "save_image": false,
+            "container_id": "{widget_id}",
+            "hide_volume": false,
+            "studies": [
+                "MAExp@tv-basicstudies",
+                "RSI@tv-basicstudies",
+                "ATR@tv-basicstudies"
+            ],
+            "study_overrides": {{
+                "MAExp.length": 9,
+                "RSI.length": 14
+            }}
+        }});
+        </script>
+    </div>"""
+    components.html(html, height=height + 4)
 
+# ================================================================
+# MAIN APP
+# ================================================================
+def main():
+    # --- MetaApi init ---
+    ma = get_metaapi()
+    if ma and not st.session_state.metaapi_ready:
+        ma['api'].ensure_rpc(ma['account_id'])
+        st.session_state.metaapi_ready = True
+        add_log('system', 'MetaApi.cloud terhubung — auto-entry siap')
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def fetch_usd_idr_rate() -> dict[str, object]:
-    """Mengambil kurs referensi harian tanpa API key dan tanpa fallback fiktif."""
-    try:
-        request = Request(
-            "https://open.er-api.com/v6/latest/USD",
-            headers={"User-Agent": "AeroVulpisRiskCalculator/1.0"},
-        )
-        with urlopen(request, timeout=8) as response:  # nosec B310 - fixed HTTPS endpoint
-            payload = json.loads(response.read().decode("utf-8"))
-        rates = {str(code): float(rate) for code, rate in payload["rates"].items()}
-        if payload.get("result") != "success" or not available_currency_codes(rates):
-            raise ValueError("Respons kurs tidak valid")
-        return {
-            "ok": True,
-            "rates": rates,
-            "updated": str(payload.get("time_last_update_utc", "waktu pembaruan tidak tersedia")),
-            "next_update": str(payload.get("time_next_update_utc", "jadwal pembaruan tidak tersedia")),
-        }
-    except (URLError, TimeoutError, ValueError, KeyError, json.JSONDecodeError) as error:
-        return {"ok": False, "error": str(error)}
+    metaapi_connected = ma is not None and st.session_state.metaapi_ready
 
+    # ============================================================
+    # HEADER
+    # ============================================================
+    col_logo, col_spacer, col_metrics = st.columns([0.15, 0.55, 0.3])
+    with col_logo:
+        st.markdown("""
+        <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:30px;height:30px;border-radius:7px;background:linear-gradient(135deg,#00d4aa,#006b55);
+                        display:flex;align-items:center;justify-content:center;box-shadow:0 0 16px rgba(0,212,170,.12)">
+                <span style="font-size:13px">✈</span>
+            </div>
+            <div style="font-weight:700;font-size:14px;letter-spacing:1.5px"><span style="color:#00d4aa">AERO</span> AI TRADE</div>
+        </div>""", unsafe_allow_html=True)
+    with col_metrics:
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Balance", "$10,000.00")
+        m2.metric("Equity", "$10,000.00")
+        m3.metric("Margin", "$0.00")
+        m4.metric("Free Margin", "$10,000.00")
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def fetch_currency_trend(base_code: str, quote_code: str) -> dict[str, object]:
-    """Mengambil maksimum tiga puluh hari kalender kurs referensi historis tanpa API key."""
-    if base_code == quote_code:
-        return {"ok": False, "error": "Pilih dua mata uang yang berbeda untuk grafik tren."}
-    if base_code not in available_currency_codes({base_code: 1.0}) or quote_code not in available_currency_codes({quote_code: 1.0}):
-        return {"ok": False, "error": "Pasangan mata uang tidak tersedia untuk grafik."}
+    st.divider()
 
-    end_date = datetime.now(UTC).date()
-    start_date = end_date - timedelta(days=CURRENCY_TREND_DAYS)
-    parameters = urlencode({"base": base_code, "symbols": quote_code})
-    url = f"https://api.frankfurter.dev/v1/{start_date.isoformat()}..{end_date.isoformat()}?{parameters}"
-    try:
-        request = Request(url, headers={"User-Agent": "AeroVulpisRiskCalculator/1.0"})
-        with urlopen(request, timeout=8) as response:  # nosec B310 - fixed HTTPS endpoint
-            payload = json.loads(response.read().decode("utf-8"))
-        points = parse_historical_rates(payload, quote_code)
-        if not points:
-            raise ValueError("Riwayat kurs tidak tersedia untuk pasangan ini")
-        return {
-            "ok": True,
-            "points": points,
-            "start": str(payload.get("start_date", start_date.isoformat())),
-            "end": str(payload.get("end_date", end_date.isoformat())),
-            "source": "Frankfurter — kurs referensi bank sentral",
-        }
-    except (URLError, TimeoutError, ValueError, KeyError, json.JSONDecodeError) as error:
-        return {"ok": False, "error": str(error)}
-
-
-st.markdown("<div class='mini'>AEROVULPIS / SIMULASI LOKAL</div>", unsafe_allow_html=True)
-st.markdown("<div class='title'>Kalkulator <span>Risiko</span></div>", unsafe_allow_html=True)
-st.markdown("<p class='intro'>Isi angka di bawah, lalu tekan tombol hitung. Hasil tidak akan ditampilkan sebelum Anda menjalankan perhitungan. Tidak terhubung ke akun broker.</p>", unsafe_allow_html=True)
-
-with st.form("risk_calculator_form", clear_on_submit=False):
-    st.markdown("<div class='card'><div class='step'>1. Tentukan saldo dan risiko</div>", unsafe_allow_html=True)
-    left, right = st.columns(2, gap="medium")
-    with left:
-        balance = st.number_input("Saldo akun (USD)", min_value=10.0, max_value=10_000_000.0, value=1000.0, step=50.0, format="%.2f")
-    with right:
-        risk_percent = st.slider("Risiko per transaksi (%)", min_value=0.25, max_value=10.0, value=1.0, step=0.25)
-    st.markdown("<div class='helper'>Contoh sederhana: saldo $1.000 dengan risiko 1% berarti risiko maksimal $10 untuk satu rencana transaksi.</div></div>", unsafe_allow_html=True)
-
-    st.markdown("<div class='card'><div class='step'>2. Masukkan rencana harga</div>", unsafe_allow_html=True)
-    p1, p2, p3 = st.columns(3, gap="small")
-    with p1:
-        entry_text = st.text_input("Harga masuk", value="2350", placeholder="Contoh: 158.293", key="risk_entry_text")
-    with p2:
-        stop_loss_text = st.text_input("Stop Loss", value="2345", placeholder="Contoh: 157.500", key="risk_stop_loss_text")
-    with p3:
-        take_profit_text = st.text_input("Target Profit", value="2360", placeholder="Contoh: 160.000", key="risk_take_profit_text")
-    st.markdown("<div class='helper'>Harga masuk adalah rencana entry. Stop Loss membatasi kerugian. Target Profit adalah target rencana Anda.</div></div>", unsafe_allow_html=True)
-
-    with st.expander("Pengaturan tambahan (opsional)"):
-        instrument = st.selectbox("Instrumen", ["XAUUSD / Emas", "Forex mayor", "Indeks / CFD", "Lainnya"], index=0)
-        default_value = 100.0 if instrument == "XAUUSD / Emas" else 10.0 if instrument == "Forex mayor" else 1.0
-        price_move_value_per_lot = st.number_input(
-            "Nilai pergerakan harga untuk 1 lot (USD)",
-            min_value=0.0001,
-            value=default_value,
-            step=1.0,
-            format="%.4f",
-            help="Nilai ini berbeda pada setiap broker/instrumen. Cek spesifikasi kontrak broker untuk hasil lot yang lebih akurat.",
-        )
-        daily_loss_percent = st.slider("Batas rugi harian (%)", min_value=0.5, max_value=20.0, value=5.0, step=0.5)
-
-    calculate_pressed = st.form_submit_button("HITUNG RISIKO SAYA", use_container_width=True)
-
-if calculate_pressed:
-    try:
-        entry = parse_decimal_text(entry_text, "Harga masuk")
-        stop_loss = parse_decimal_text(stop_loss_text, "Stop Loss")
-        take_profit = parse_decimal_text(take_profit_text, "Target Profit")
-    except ValueError as error:
-        st.session_state.pop("risk_result", None)
-        st.error(str(error))
-    else:
-        snapshot = calculate_risk_snapshot(
-            balance=balance,
-            risk_percent=risk_percent,
-            daily_loss_percent=daily_loss_percent,
-            daily_profit_percent=100.0,
-            entry=entry,
-            stop_loss=stop_loss,
-            take_profit=take_profit,
-            price_move_value_per_lot=price_move_value_per_lot,
-            wins=0,
-            losses=0,
-        )
-        st.session_state["risk_result"] = {
-            "snapshot": snapshot,
-            "risk_percent": risk_percent,
-        }
-
-st.markdown("<div class='mini' style='margin:1.6rem 0 .45rem'>HASIL PERHITUNGAN</div>", unsafe_allow_html=True)
-result = st.session_state.get("risk_result")
-if not result:
-    st.markdown("<div class='empty-result'>Hasil akan muncul di sini setelah Anda menekan <b>Hitung Risiko Saya</b>.</div>", unsafe_allow_html=True)
-else:
-    snapshot = result["snapshot"]
-    calculated_risk_percent = float(result["risk_percent"])
-    cards = st.columns(2, gap="medium")
-    with cards[0]:
-        st.markdown(result_card("Jika Stop Loss terkena", money(snapshot.risk_amount), f"{calculated_risk_percent:.2f}% dari saldo Anda", "red"), unsafe_allow_html=True)
-    with cards[1]:
-        potential = snapshot.risk_amount * snapshot.reward_risk
-        st.markdown(result_card("Jika target tercapai", money(potential), "Potensi berdasarkan jarak target", "green"), unsafe_allow_html=True)
-    with cards[0]:
-        st.markdown(result_card("Perbandingan risiko : target", f"1 : {snapshot.reward_risk:.2f}", "Semakin besar angka kanan, semakin besar target dibanding risiko", "blue"), unsafe_allow_html=True)
-    with cards[1]:
-        st.markdown(result_card("Perkiraan ukuran lot", f"{snapshot.estimated_lots:.3f}", "Selalu cocokkan dengan spesifikasi broker", "blue"), unsafe_allow_html=True)
-
-    if snapshot.stop_distance <= 0:
-        st.error("Stop Loss harus berbeda dari Harga Masuk agar risiko dapat dihitung.")
-    elif snapshot.reward_risk < 1:
-        st.warning("Target Anda lebih kecil daripada risiko. Periksa kembali Stop Loss atau Target Profit sebelum membuat keputusan.")
-    else:
-        st.markdown("<div class='notice'>Ringkasan: rencana Anda memiliki Stop Loss yang terisi dan target lebih besar atau sama dengan risiko. Ini bukan rekomendasi untuk entry; gunakan sebagai bahan mengecek rencana sendiri.</div>", unsafe_allow_html=True)
-
-st.markdown("<div class='mini' style='margin:1.7rem 0 .45rem'>KONVERTER MATA UANG</div>", unsafe_allow_html=True)
-st.markdown("<div class='card'><div class='step'>Bandingkan kurs antar mata uang</div><div class='helper'>Pilih dua mata uang untuk melihat nilai <b>1 unit</b>. Daftar dibatasi pada 90 mata uang negara lintas kawasan.</div>", unsafe_allow_html=True)
-refresh_rate = st.button("MUAT KURS & 90 MATA UANG", use_container_width=True)
-if refresh_rate:
-    st.session_state["usd_idr_rate"] = fetch_usd_idr_rate()
-
-fx = st.session_state.get("usd_idr_rate")
-if fx and fx.get("ok"):
-    rates = fx["rates"]
-    codes = available_currency_codes(rates)
-    st.caption(f"Tersedia {len(codes)} pilihan mata uang negara dari sumber publik.")
-    selected_from = st.session_state.get("currency_from_code", "IDR")
-    selected_to = st.session_state.get("currency_to_code", "USD")
-    from_choices = codes
-    to_choices = codes
-    from_index = from_choices.index(selected_from) if selected_from in from_choices else 0
-    to_index = to_choices.index(selected_to) if selected_to in to_choices else 0
-    from_col, to_col = st.columns(2, gap="medium")
-    with from_col:
-        from_code = st.selectbox("Mata uang asal", from_choices, index=from_index, format_func=currency_label, key="currency_from_code")
-    with to_col:
-        to_code = st.selectbox("Mata uang pembanding", to_choices, index=to_index, format_func=currency_label, key="currency_to_code")
-    compared_amount_text = st.text_input(
-        f"Nominal {from_code} yang ingin dibandingkan",
-        value="1",
-        placeholder="Contoh: 1",
-        key="currency_amount_text",
-    )
-    try:
-        compared_amount = parse_decimal_text(compared_amount_text, "Nominal kurs")
-    except ValueError as error:
-        st.warning(str(error))
-        compared_amount = None
-    compared_value = (
-        convert_from_usd_reference(compared_amount, from_code, to_code, rates)
-        if compared_amount is not None
-        else None
-    )
-    st.markdown(f"<div class='pair-readout'>{currency_pair_label(from_code, to_code)}</div>", unsafe_allow_html=True)
-    if compared_value is not None:
-        typed_amount = escape(compared_amount_text.strip())
-        st.markdown(f"<div class='fx-value'>{typed_amount} {from_code} = {format_exchange_rate(compared_value)} {to_code}</div>", unsafe_allow_html=True)
-        st.caption("Hasil dihitung sesuai nominal yang Anda ketik dan mata uang yang dipilih.")
-    st.caption(f"Kurs referensi dihitung dari basis USD · pembaruan sumber: {fx['updated']}")
-    st.caption(f"Pembaruan berikutnya menurut sumber: {fx['next_update']}")
-    st.caption("Sumber kurs referensi: ExchangeRate-API")
-    st.markdown(
-        "<div class='notice'><b>Catatan nilai referensi.</b> Nilai yang ditampilkan dapat berbeda dari bank, aplikasi, penyedia remitansi, atau broker. Perbedaan dapat terjadi karena waktu pembaruan, spread, biaya, serta metode penetapan kurs pada masing-masing layanan. Gunakan hasil ini untuk perbandingan informasi, bukan sebagai jaminan nilai transaksi atau harga eksekusi.</div>",
-        unsafe_allow_html=True,
-    )
-
-    trend_key = f"{from_code}_{to_code}"
-    if st.button(f"TAMPILKAN GRAFIK TREN {CURRENCY_TREND_DAYS} HARI", use_container_width=True, key=f"trend_{trend_key}"):
-        st.session_state["currency_trend"] = {
-            "pair": trend_key,
-            "data": fetch_currency_trend(from_code, to_code),
-        }
-
-    trend_state = st.session_state.get("currency_trend")
-    if trend_state and trend_state.get("pair") == trend_key:
-        trend = trend_state["data"]
-        if trend.get("ok"):
-            points = trend["points"]
-            change = trend_change_percent(points)
-            first_value = float(points[0]["Kurs"])
-            last_value = float(points[-1]["Kurs"])
-            axis_ticks, axis_labels, axis_range = trend_axis_ticks(points)
-            date_indices = sorted({round(index * (len(points) - 1) / 3) for index in range(4)}) if len(points) > 1 else [0]
-            date_tick_values = [str(points[index]["Tanggal"]) for index in date_indices]
-            date_tick_labels = [date_tick_label(value) for value in date_tick_values]
-            st.markdown(f"<div class='mini' style='margin:1rem 0 .2rem'>GRAFIK TREN KURS · {CURRENCY_TREND_DAYS} HARI KALENDER</div>", unsafe_allow_html=True)
-            summary_columns = st.columns(3, gap="small")
-            with summary_columns[0]:
-                st.markdown(trend_stat_card("Nilai awal", format_axis_value(first_value)), unsafe_allow_html=True)
-            with summary_columns[1]:
-                st.markdown(trend_stat_card("Nilai terbaru", format_axis_value(last_value), "blue"), unsafe_allow_html=True)
-            with summary_columns[2]:
-                change_display = "—" if change is None else f"{change:+.2f}%"
-                change_tone = "green" if (change or 0) >= 0 else "red"
-                st.markdown(trend_stat_card("Perubahan", change_display, change_tone), unsafe_allow_html=True)
-            figure = go.Figure(
-                go.Scatter(
-                    x=[point["Tanggal"] for point in points],
-                    y=[point["Kurs"] for point in points],
-                    mode="lines",
-                    line={"color": "#46c9ff", "width": 3},
-                    hoverinfo="skip",
-                )
-            )
-            figure.add_trace(
-                go.Scatter(
-                    x=[points[0]["Tanggal"], points[-1]["Tanggal"]],
-                    y=[first_value, last_value],
-                    mode="markers",
-                    marker={"color": ["#9fb0bf", "#36e49a"], "size": [8, 10], "line": {"color": "#0c1721", "width": 2}},
-                    hoverinfo="skip",
-                )
-            )
-            figure.update_layout(
-                height=250,
-                margin={"l": 78, "r": 14, "t": 12, "b": 28},
-                paper_bgcolor="#0c1721",
-                plot_bgcolor="#0c1721",
-                font={"family": "Manrope, sans-serif", "color": "#c9d8e2", "size": 11},
-                showlegend=False,
-                dragmode=False,
-            )
-            figure.update_xaxes(
-                title=None,
-                fixedrange=True,
-                showgrid=False,
-                tickmode="array",
-                tickvals=date_tick_values,
-                ticktext=date_tick_labels,
-                tickfont={"color": "#9fb0bf", "size": 10},
-            )
-            figure.update_yaxes(
-                title=None,
-                fixedrange=True,
-                range=axis_range,
-                gridcolor="#203347",
-                zeroline=False,
-                tickmode="array",
-                tickvals=axis_ticks,
-                ticktext=axis_labels,
-                tickfont={"color": "#c9d8e2", "size": 10},
-            )
-            st.plotly_chart(
-                figure,
-                use_container_width=True,
-                config={"displayModeBar": False, "scrollZoom": False, "staticPlot": True, "responsive": True},
-            )
-            st.markdown(
-                f"<div class='trend-summary'>{to_code} per 1 {from_code} · data tersedia {len(points)} hari kurs pada rentang {trend['start']} sampai {trend['end']}. Penanda abu-abu menunjukkan nilai awal; penanda hijau menunjukkan nilai terbaru.</div>",
-                unsafe_allow_html=True,
-            )
-            st.caption("Grafik bersifat statis: tidak dapat di-zoom, digeser, disentuh, atau diunduh. Hari tanpa publikasi kurs tidak menghasilkan titik grafik.")
-            st.caption("Sumber tren historis: Frankfurter — kurs referensi bank sentral, bukan harga broker real-time.")
+    # ============================================================
+    # KONTROL BAR (horizontal, bukan sidebar)
+    # ============================================================
+    c1, c2, c3, c4, c5, c6, c7 = st.columns([1.5, 0.8, 0.6, 0.8, 1.2, 0.4, 0.7])
+    with c1:
+        pair = st.selectbox('Pair', list(PAIRS.keys()), format_func=lambda x: PAIRS[x]['name'])
+    with c2:
+        tf = st.selectbox('TF', ['M1','M5','M15','M30','H1','H4','D1','W1'])
+    with c3:
+        mode = st.selectbox('Mode', ['scoring', 'limit'])
+    with c4:
+        if mode == 'limit':
+            limit_entry = st.text_input('Limit Entry', placeholder='0.00000')
         else:
-            st.warning(f"Grafik tren belum tersedia: {trend['error']}")
-elif fx and not fx.get("ok"):
-    st.warning("Kurs publik tidak dapat dimuat. Coba muat ulang; aplikasi tidak membuat kurs pengganti.")
-else:
-    st.markdown("<div class='empty-result'>Tekan <b>Muat Kurs & 90 Mata Uang</b> untuk memilih pasangan dan melihat perbandingan kurs satu unit.</div>", unsafe_allow_html=True)
-st.markdown("</div>", unsafe_allow_html=True)
+            limit_entry = ''
+    with c5:
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            btn_bot = st.button(
+                '⏹ Deactivate' if st.session_state.bot_active else '▶ Activate Bot',
+                use_container_width=True,
+                type='primary' if not st.session_state.bot_active else 'secondary'
+            )
+        with col_btn2:
+            score_color = '🟢' if st.session_state.score > 0 else ('🔴' if st.session_state.score < 0 else '⚪')
+            st.markdown(f"""
+            <div style="text-align:center;margin-top:4px">
+                <div style="font-size:9px;color:#3e3e60;text-transform:uppercase;letter-spacing:.5px">Score</div>
+                <div style="font-size:20px;font-weight:700;font-family:monospace;color:{'#10b981' if st.session_state.score > 0 else '#f43f5e' if st.session_state.score < 0 else '#3e3e60'}">
+                    {score_color} {st.session_state.score:+d}
+                </div>
+            </div>""", unsafe_allow_html=True)
+    with c6:
+        st.markdown(f"""<div style="margin-top:8px;font-size:11px;font-weight:600;color:{'#10b981' if st.session_state.bot_active else '#3e3e60'}">
+            {'● ACTIVE' if st.session_state.bot_active else '○ IDLE'}
+        </div>""", unsafe_allow_html=True)
+    with c7:
+        if metaapi_connected:
+            st.markdown("""<div style="margin-top:8px;font-size:10px;color:#10b981"><i>● MetaApi Live</i></div>""", unsafe_allow_html=True)
+        else:
+            st.markdown("""<div style="margin-top:8px;font-size:10px;color:#eab308"><i>○ Demo Mode</i></div>""", unsafe_allow_html=True)
 
-st.markdown("<div class='footer-note'>AEROVULPIS KALKULATOR RISIKO · UNTUK EDUKASI DAN PERENCANAAN · BUKAN NASIHAT FINANSIAL PERSONAL ATAU SISTEM EKSEKUSI</div>", unsafe_allow_html=True)
+    # Handle bot toggle
+    if btn_bot:
+        st.session_state.bot_active = not st.session_state.bot_active
+        if st.session_state.bot_active:
+            add_log('bot', f'Bot AKTIF — {mode} | {PAIRS[pair]["name"]} {tf}')
+        else:
+            add_log('bot', 'Bot DIMATIKAN')
+        st.rerun()
+
+    # ============================================================
+    # TRADINGVIEW CHART — REAL-TIME 100%
+    # ============================================================
+    tv_symbol = PAIRS[pair]['tv']
+    tv_interval = TF_TV.get(tf, '60')
+    render_tv_chart(tv_symbol, tv_interval, height=440)
+
+    # ============================================================
+    # SIGNAL CARDS
+    # ============================================================
+    sc1, sc2, sc3, sc4 = st.columns(4)
+    with sc1:
+        ema_color = '#10b981' if 'BULL' in st.session_state.ema_status else '#f43f5e'
+        st.markdown(f"""<div class="sig-card">
+            <div class="sig-label">EMA Trend</div>
+            <div class="sig-val" style="color:{ema_color}">{st.session_state.ema_status}</div>
+            <div class="sig-sub">Fast({st.secrets.get('EMA_FAST',9)}/Slow({st.secrets.get('EMA_SLOW',21)}))</div>
+        </div>""", unsafe_allow_html=True)
+    with sc2:
+        rsi_color = '#f43f5e' if st.session_state.rsi_val > 70 else ('#10b981' if st.session_state.rsi_val < 30 else '#e2e2f0')
+        st.markdown(f"""<div class="sig-card">
+            <div class="sig-label">RSI Momentum</div>
+            <div class="sig-val" style="color:{rsi_color}">{st.session_state.rsi_val:.1f}</div>
+            <div class="sig-sub">{'Overbought' if st.session_state.rsi_val>70 else 'Oversold' if st.session_state.rsi_val<30 else 'Neutral zone'}</div>
+        </div>""", unsafe_allow_html=True)
+    with sc3:
+        st.markdown(f"""<div class="sig-card">
+            <div class="sig-label">ATR Volatility</div>
+            <div class="sig-val">{st.session_state.atr_val:.5f}</div>
+            <div class="sig-sub">SL: {st.session_state.sl_calc:.5f} | TP: {st.session_state.tp_calc:.5f}</div>
+        </div>""", unsafe_allow_html=True)
+    with sc4:
+        dec_color = '#10b981' if st.session_state.last_signal == 'BUY' else ('#f43f5e' if st.session_state.last_signal == 'SELL' else '#3e3e60')
+        min_s = int(st.secrets.get('MIN_SCORE', 2))
+        st.markdown(f"""<div class="sig-card">
+            <div class="sig-label">Decision (min ±{min_s})</div>
+            <div class="sig-val" style="color:{dec_color}">{st.session_state.last_signal}</div>
+            <div class="sig-sub">{'Auto-execute via MetaApi' if metaapi_connected else 'Demo — butuh MetaApi'}</div>
+        </div>""", unsafe_allow_html=True)
+
+    # ============================================================
+    # BOTTOM TABS
+    # ============================================================
+    tab_sig, tab_pos, tab_log, tab_set = st.tabs(['Signals', 'Positions', 'Journal', 'Settings'])
+
+    with tab_pos:
+        if metaapi_connected and ma:
+            positions = ma['api'].get_positions(ma['account_id'])
+            if isinstance(positions, list) and positions:
+                rows = []
+                for p in positions:
+                    rows.append({
+                        'Ticket': p.get('id', '—'),
+                        'Pair': p.get('symbol', '—'),
+                        'Type': p.get('type', '—'),
+                        'Lot': p.get('volume', 0),
+                        'Open': p.get('openPrice', 0),
+                        'S/L': p.get('stopLoss', '—'),
+                        'T/P': p.get('takeProfit', '—'),
+                        'Profit': p.get('profit', 0),
+                    })
+                st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            else:
+                st.info('Tidak ada posisi terbuka')
+        else:
+            st.info('Tidak ada posisi terbuka (Demo Mode)')
+
+    with tab_log:
+        if st.session_state.journal:
+            log_rows = []
+            for j in st.session_state.journal[:50]:
+                tp_color = {'system':'🟢','trade':'🟡','error':'🔴','bot':'🔵','signal':'🟣'}.get(j['type'], '⚪')
+                log_rows.append({'⏰': j['time'], '': tp_color, 'Type': j['type'], 'Message': j['msg']})
+            st.dataframe(pd.DataFrame(log_rows), use_container_width=True, hide_index=True)
+        else:
+            st.info('Journal kosong')
+
+    with tab_set:
+        st.markdown('### MetaApi.cloud Configuration')
+        st.markdown("""
+        Untuk mengaktifkan **auto-entry real** (bot mengeksekusi order ke MT5 secara otomatis):
+
+        1. Daftar gratis di [metaapi.cloud](https://metaapi.cloud)
+        2. Tambahkan akun MT5 Anda di dashboard MetaApi
+        3. Copy **API Token** dan **Account ID**
+        4. Isi di file `.streamlit/secrets.toml`:
+
+        ```
+        META_API_TOKEN = "token_anda_di_sini"
+        META_API_ACCOUNT_ID = "account_id_anda_di_sini"
+        ```
+        """)
+        st.markdown('### EA Parameters')
+        st.markdown('Edit di `.streamlit/secrets.toml`:')
+        st.code("""
+EMA_FAST = 9
+EMA_SLOW = 21
+RSI_PERIOD = 14
+RSI_OVERBOUGHT = 70
+RSI_OVERSOLD = 30
+ATR_PERIOD = 14
+ATR_SL_MULT = 1.5
+ATR_TP_MULT = 2.5
+MIN_SCORE = 2
+LOT_SIZE = 0.01
+MAGIC_NUMBER = 123456
+        """, language='toml')
+
+    # ============================================================
+    # BOT TICK — dijalankan setiap rerun
+    # ============================================================
+    if st.session_state.bot_active:
+        if metaapi_connected and ma:
+            # === MODE LIVE: Data dari MetaApi, eksekusi real ===
+            candles = ma['api'].get_candles(ma['account_id'], pair, tf, limit=100)
+            if candles and len(candles) >= 25:
+                closes = [c['close'] for c in candles]
+                highs = [c['high'] for c in candles]
+                lows = [c['low'] for c in candles]
+                ema_f = int(st.secrets.get('EMA_FAST', 9))
+                ema_s = int(st.secrets.get('EMA_SLOW', 21))
+                rsi_p = int(st.secrets.get('RSI_PERIOD', 14))
+                atr_p = int(st.secrets.get('ATR_PERIOD', 14))
+                sl_m = float(st.secrets.get('ATR_SL_MULT', 1.5))
+                tp_m = float(st.secrets.get('ATR_TP_MULT', 2.5))
+                min_s = int(st.secrets.get('MIN_SCORE', 2))
+
+                ef = calc_ema(closes, ema_f)
+                es = calc_ema(closes, ema_s)
+                rsi = calc_rsi(closes, rsi_p)
+                atr = calc_atr(highs, lows, closes, atr_p)
+
+                score = calc_score(ef, es, rsi)
+                st.session_state.score = score
+                st.session_state.rsi_val = rsi[-1]
+                st.session_state.atr_val = atr[-1]
+                st.session_state.sl_calc = closes[-1] - atr[-1] * sl_m
+                st.session_state.tp_calc = closes[-1] + atr[-1] * tp_m
+                st.session_state.ema_status = 'BULLISH' if ef[-1] > es[-1] else 'BEARISH'
+
+                # Cek posisi terbuka
+                positions = ma['api'].get_positions(ma['account_id'])
+                has_pos = isinstance(positions, list) and len(positions) > 0
+
+                if mode == 'scoring' and not has_pos:
+                    if score >= min_s:
+                        st.session_state.last_signal = 'BUY'
+                        result = ma['api'].open_trade(
+                            ma['account_id'], pair, 'BUY',
+                            float(st.secrets.get('LOT_SIZE', 0.01)),
+                            sl=round(st.session_state.sl_calc, PAIRS[pair]['digits']),
+                            tp=round(st.session_state.tp_calc, PAIRS[pair]['digits']),
+                            magic=int(st.secrets.get('MAGIC_NUMBER', 123456))
+                        )
+                        add_log('signal', f'SCORE {score:+d} → AUTO BUY {PAIRS[pair]["name"]} @ {closes[-1]:.5f} via MetaApi')
+                        if 'error' in result:
+                            add_log('error', f'Order error: {result["error"]}')
+                    elif score <= -min_s:
+                        st.session_state.last_signal = 'SELL'
+                        result = ma['api'].open_trade(
+                            ma['account_id'], pair, 'SELL',
+                            float(st.secrets.get('LOT_SIZE', 0.01)),
+                            sl=round(closes[-1] + atr[-1] * sl_m, PAIRS[pair]['digits']),
+                            tp=round(closes[-1] - atr[-1] * tp_m, PAIRS[pair]['digits']),
+                            magic=int(st.secrets.get('MAGIC_NUMBER', 123456))
+                        )
+                        add_log('signal', f'SCORE {score:+d} → AUTO SELL {PAIRS[pair]["name"]} @ {closes[-1]:.5f} via MetaApi')
+                        if 'error' in result:
+                            add_log('error', f'Order error: {result["error"]}')
+                    else:
+                        st.session_state.last_signal = 'WAIT'
+
+                elif mode == 'limit' and not has_pos and limit_entry:
+                    try:
+                        le = float(limit_entry)
+                        price = ma['api'].get_price(ma['account_id'], pair)
+                        bid = price.get('bid', 0)
+                        cfg = PAIRS[pair]
+                        if abs(bid - le) < cfg['pip'] * 2:  # Toleransi 2 pip
+                            result = ma['api'].open_trade(
+                                ma['account_id'], pair, 'BUY',
+                                float(st.secrets.get('LOT_SIZE', 0.01)),
+                                magic=int(st.secrets.get('MAGIC_NUMBER', 123456))
+                            )
+                            add_log('signal', f'Limit {le} tersentuh @ {bid} → AUTO BUY via MetaApi')
+                            st.session_state.bot_active = False
+                            st.rerun()
+                        else:
+                            add_log('bot', f'Limit {le} — bid {bid:.5f}, menunggu...')
+                    except ValueError:
+                        pass
+
+        else:
+            # === MODE DEMO: Tampilkan info tanpa eksekusi ===
+            st.session_state.last_signal = 'DEMO'
+            st.session_state.ema_status = 'DEMO'
+            st.session_state.rsi_val = 50.0
+            st.session_state.atr_val = 0.0
+            add_log('bot', f'[DEMO] Monitoring {PAIRS[pair]["name"]} {tf} — isi MetaApi Token di Settings untuk eksekusi real')
+
+    # ============================================================
+    # AUTO-REFRESH — trigger rerun setiap 5 detik saat bot aktif
+    # ============================================================
+    if st.session_state.bot_active:
+        import time
+        time.sleep(5)
+        st.rerun()
+
+# ================================================================
+# RUN
+# ================================================================
+if __name__ == '__main__':
+    main()
