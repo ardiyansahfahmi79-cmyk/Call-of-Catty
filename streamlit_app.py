@@ -1,622 +1,744 @@
 """
-AERO AI TRADE v2.1
-Streamlit + TradingView (chart real-time) + MetaApi.cloud (auto-trade)
-Scoring system: EMA + RSI + ATR — porting dari EA MQL5
+economic_radar_page.py
+Aerovulpis V4.1 — Economic Radar Module
+Fitur: Pemantauan indikator makroekonomi global secara real-time untuk trader dan investor.
 """
 
 import streamlit as st
-import pandas as pd
-import numpy as np
 import requests
-import json
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
 from datetime import datetime, timedelta
-import streamlit.components.v1 as components
+import json
 
-# ================================================================
-# PAGE CONFIG
-# ================================================================
-st.set_page_config(page_title="Aero AI Trade", page_icon="✈", layout="wide", initial_sidebar_state="collapsed")
+# ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
-# ================================================================
-# DARK THEME OVERRIDE
-# ================================================================
-st.markdown("""<style>
-[data-testid="stHeader"]{visibility:hidden}
-[data-testid="stToolbar"]{visibility:hidden}
-.stApp{background:#060610;color:#e2e2f0}
-.block-container{padding-top:1rem;max-width:100%}
-.stTabs [data-baseweb="tab-list"]{gap:2px;background:#0b0b1a;border-radius:6px;padding:3px}
-.stTabs [data-baseweb="tab"]{border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:#3e3e60;padding:6px 14px}
-.stTabs [aria-selected="true"]{background:#101028;color:#00d4aa}
-.stTabs [data-baseweb="tab-highlight"]{background-color:#00d4aa;height:2px}
-.stDataFrame{background:#0b0b1a;border:1px solid #1c1c40;border-radius:6px}
-.stDataFrame td{font-size:11px;padding:4px 8px}
-.stDataFrame th{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#3e3e60;background:#0b0b1a}
-div[data-testid="stTextInput"] label{font-size:10px;color:#6a6a90;text-transform:uppercase;letter-spacing:.5px}
-div[data-testid="stTextInput"] input{background:#151535;border:1px solid #1c1c40;color:#e2e2f0;font-size:12px}
-div[data-testid="stSelectbox"] label{font-size:10px;color:#6a6a90;text-transform:uppercase;letter-spacing:.5px}
-div[data-testid="stSelectbox"] div[data-baseweb="select"]{background:#151535;border:1px solid #1c1c40}
-div[data-testid="stSelectbox"] span{color:#e2e2f0;font-size:12px}
-.stButton>button{font-size:11px;font-weight:600;border-radius:5px;padding:6px 16px}
-.stAlert{font-size:11px;padding:8px 12px;border-radius:6px}
-div[data-testid="stMetric"]{background:#0b0b1a;border:1px solid #1c1c40;border-radius:6px;padding:8px 12px}
-div[data-testid="stMetricLabel"]{font-size:9px;text-transform:uppercase;letter-spacing:.8px;color:#3e3e60}
-div[data-testid="stMetricValue"]{font-size:13px;font-weight:700}
-.sig-card{background:#101028;border:1px solid #1c1c40;border-radius:8px;padding:12px 14px;text-align:center}
-.sig-card .sig-label{font-size:9px;color:#3e3e60;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;font-weight:600}
-.sig-card .sig-val{font-size:18px;font-weight:700;font-family:monospace}
-.sig-card .sig-sub{font-size:10px;color:#6a6a90;margin-top:2px}
-</style>""", unsafe_allow_html=True)
+WORLD_BANK_BASE = "https://api.worldbank.org/v2/country/{iso}/indicator/{ind}?format=json&mrv=10&per_page=10"
 
-# ================================================================
-# KONSTANTA
-# ================================================================
-PAIRS = {
-    'EURUSD': {'name':'EUR/USD','tv':'FX:EURUSD','digits':5,'pip':10},
-    'GBPUSD': {'name':'GBP/USD','tv':'FX:GBPUSD','digits':5,'pip':10},
-    'USDJPY': {'name':'USD/JPY','tv':'FX:USDJPY','digits':3,'pip':6.67},
-    'AUDUSD': {'name':'AUD/USD','tv':'FX:AUDUSD','digits':5,'pip':10},
-    'USDCAD': {'name':'USD/CAD','tv':'FX:USDCAD','digits':5,'pip':7.33},
-    'NZDUSD': {'name':'NZD/USD','tv':'FX:NZDUSD','digits':5,'pip':10},
-    'XAUUSD': {'name':'XAU/USD','tv':'OANDA:XAUUSD','digits':2,'pip':1},
-    'BTCUSD': {'name':'BTC/USD','tv':'BITSTAMP:BTCUSD','digits':2,'pip':1},
+INDICATORS = {
+    "GDP (PDB)": {
+        "code": "NY.GDP.MKTP.CD",
+        "unit": "USD",
+        "format": "triliun",
+        "desc": "Produk Domestik Bruto — ukuran total output ekonomi.",
+        "color": "#00FFC8",
+        "icon": "📊",
+    },
+    "Inflasi": {
+        "code": "FP.CPI.TOTL.ZG",
+        "unit": "%",
+        "format": "persen",
+        "desc": "Tingkat inflasi tahunan — menggerus daya beli.",
+        "color": "#FF6B6B",
+        "icon": "🔥",
+    },
+    "Pengangguran": {
+        "code": "SL.UEM.TOTL.ZS",
+        "unit": "%",
+        "format": "persen",
+        "desc": "Persentase angkatan kerja tanpa pekerjaan.",
+        "color": "#FFD93D",
+        "icon": "👥",
+    },
+    "Utang/PDB": {
+        "code": "GC.DOD.TOTL.GD.ZS",
+        "unit": "%",
+        "format": "persen",
+        "desc": "Rasio utang pemerintah terhadap PDB — keberlanjutan fiskal.",
+        "color": "#C77DFF",
+        "icon": "💰",
+    },
+    "Neraca Perdagangan": {
+        "code": "BN.CAB.XOKA.CD",
+        "unit": "USD",
+        "format": "miliar",
+        "desc": "Selisih ekspor dan impor barang/jasa.",
+        "color": "#4FC3F7",
+        "icon": "⚖️",
+    },
 }
-TF_TV = {'M1':'1','M5':'5','M15':'15','M30':'30','H1':'60','H4':'240','D1':'D','W1':'W'}
-TF_API = {'M1':'1m','M5':'5m','M15':'15m','M30':'30m','H1':'1h','H4':'4h','D1':'1d','W1':'1w'}
 
-# ================================================================
-# SESSION STATE
-# ================================================================
-defaults = {
-    'bot_active': False, 'connected': False, 'metaapi_ready': False,
-    'journal': [], 'score': 0, 'last_signal': 'WAIT',
-    'ema_status': '—', 'rsi_val': 50.0, 'atr_val': 0.0,
-    'sl_calc': 0.0, 'tp_calc': 0.0,
+COUNTRIES = {
+    "🇮🇩 Indonesia": "ID",
+    "🇺🇸 Amerika Serikat": "US",
+    "🇨🇳 China": "CN",
+    "🇯🇵 Jepang": "JP",
+    "🇩🇪 Jerman": "DE",
+    "🇬🇧 Inggris": "GB",
+    "🇦🇺 Australia": "AU",
+    "🇮🇳 India": "IN",
+    "🇰🇷 Korea Selatan": "KR",
+    "🇸🇬 Singapura": "SG",
+    "🇲🇾 Malaysia": "MY",
+    "🇹🇭 Thailand": "TH",
+    "🇧🇷 Brasil": "BR",
+    "🇿🇦 Afrika Selatan": "ZA",
+    "🇸🇦 Arab Saudi": "SA",
 }
-for k, v in defaults.items():
-    if k not in st.session_state:
-        st.session_state[k] = v
 
-def add_log(tp, msg):
-    st.session_state.journal.insert(0, {'time': datetime.now().strftime('%H:%M:%S'), 'type': tp, 'msg': msg})
-    if len(st.session_state.journal) > 200:
-        st.session_state.journal = st.session_state.journal[:200]
+RISK_THRESHOLDS = {
+    "Inflasi":        {"low": 3, "medium": 6},
+    "Pengangguran":   {"low": 5, "medium": 10},
+    "Utang/PDB":      {"low": 60, "medium": 90},
+}
 
-# ================================================================
-# META API BRIDGE (REST API — tanpa SDK async, murni requests)
-# ================================================================
-class MetaApiBridge:
-    """Komunikasi dengan MetaApi.cloud via REST API — 100% synchronous, aman untuk Streamlit"""
-    BASE = 'https://metaapi.cloud/api/v2'
+# ─── STYLES ───────────────────────────────────────────────────────────────────
 
-    def __init__(self, token):
-        self.token = token
-        self.h = {'auth-token': token, 'Accept': 'application/json', 'Content-Type': 'application/json'}
+def inject_css():
+    st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap');
 
-    def get_accounts(self):
-        try:
-            r = requests.get(f'{self.BASE}/users/current/accounts', headers=self.h, timeout=10)
-            return r.json()
-        except Exception as e:
-            return {'error': str(e)}
+/* ── Base ── */
+.stApp { background: #0A0D14 !important; }
+section[data-testid="stSidebar"] { background: #0D1018 !important; }
+* { font-family: 'Exo 2', sans-serif; }
 
-    def ensure_rpc(self, account_id):
-        """Pastikan RPC connection aktif (terminal MT5 berjalan di cloud MetaApi)"""
-        try:
-            # Cek state
-            r = requests.get(f'{self.BASE}/users/current/accounts/{account_id}', headers=self.h, timeout=10)
-            acc = r.json()
-            if acc.get('state') != 'DEPLOYED':
-                requests.post(f'{self.BASE}/users/current/accounts/{account_id}/deploy', headers=self.h, timeout=30)
-                return False  # Perlu tunggu deploy
-            # Connect RPC
-            requests.post(f'{self.BASE}/users/current/accounts/{account_id}/rpc/connect', headers=self.h, timeout=15)
-            return True
-        except Exception as e:
-            add_log('error', f'MetaApi connect error: {e}')
-            return False
+/* ── Section header ── */
+.aero-section-title {
+    font-family: 'Share Tech Mono', monospace;
+    color: #00FFC8;
+    font-size: 1.05rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    border-left: 3px solid #00FFC8;
+    padding-left: 0.75rem;
+    margin: 1.5rem 0 0.4rem 0;
+}
+.aero-section-sub {
+    font-family: 'Share Tech Mono', monospace;
+    color: #4A5568;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    margin-bottom: 1rem;
+}
 
-    def get_candles(self, account_id, symbol, timeframe, limit=100):
-        """Ambil data candle dari MT5 via MetaApi"""
-        try:
-            tf = TF_API.get(timeframe, '1h')
-            r = requests.get(
-                f'{self.BASE}/users/current/accounts/{account_id}/history/candles',
-                headers=self.h, timeout=15,
-                params={'symbol': symbol, 'timeframe': tf, 'limit': limit}
-            )
-            data = r.json()
-            if 'history' in data:
-                return data['history']
+/* ── KPI Card ── */
+.kpi-card {
+    background: linear-gradient(145deg, #0F1520 0%, #111827 100%);
+    border: 1px solid #1E2A3A;
+    border-radius: 4px;
+    padding: 1.1rem 1rem 0.9rem 1rem;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+}
+.kpi-card:hover { border-color: #00FFC8; }
+.kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent, #00FFC8);
+    opacity: 0.7;
+}
+.kpi-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.15em;
+    color: #4A9EBF;
+    margin-bottom: 0.35rem;
+    text-transform: uppercase;
+}
+.kpi-value {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--accent, #00FFC8);
+    line-height: 1;
+    margin-bottom: 0.3rem;
+}
+.kpi-desc {
+    font-size: 0.65rem;
+    color: #374151;
+    line-height: 1.4;
+}
+.kpi-risk {
+    display: inline-block;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.58rem;
+    letter-spacing: 0.1em;
+    padding: 2px 8px;
+    border-radius: 2px;
+    margin-top: 0.4rem;
+    font-weight: 600;
+}
+.risk-low    { background: rgba(0,255,200,0.12); color: #00FFC8; border: 1px solid #00FFC840; }
+.risk-medium { background: rgba(255,217,61,0.12); color: #FFD93D; border: 1px solid #FFD93D40; }
+.risk-high   { background: rgba(255,107,107,0.12); color: #FF6B6B; border: 1px solid #FF6B6B40; }
+.risk-neutral { background: rgba(74,158,191,0.12); color: #4A9EBF; border: 1px solid #4A9EBF40; }
+
+/* ── Divider ── */
+.aero-divider {
+    border: none;
+    border-top: 1px solid #1A2332;
+    margin: 1.2rem 0;
+}
+
+/* ── Radar label ── */
+.radar-note {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.65rem;
+    color: #374151;
+    text-align: center;
+    margin-top: -0.5rem;
+    margin-bottom: 1rem;
+    letter-spacing: 0.08em;
+}
+
+/* ── Compare table ── */
+.compare-header {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.65rem;
+    color: #4A9EBF;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+.trend-up   { color: #FF6B6B; font-weight: 700; }
+.trend-down { color: #00FFC8; font-weight: 700; }
+
+/* ── Interpretation box ── */
+.interp-box {
+    background: #0F1520;
+    border: 1px solid #1E2A3A;
+    border-left: 3px solid #C77DFF;
+    border-radius: 0 4px 4px 0;
+    padding: 0.85rem 1rem;
+    margin-top: 0.5rem;
+}
+.interp-title {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.65rem;
+    color: #C77DFF;
+    letter-spacing: 0.12em;
+    margin-bottom: 0.5rem;
+}
+.interp-text {
+    font-size: 0.8rem;
+    color: #9CA3AF;
+    line-height: 1.65;
+}
+
+/* ── Calendar item ── */
+.cal-item {
+    background: #0F1520;
+    border: 1px solid #1E2A3A;
+    border-radius: 4px;
+    padding: 0.7rem 0.9rem;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+.cal-date {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.65rem;
+    color: #4A9EBF;
+    min-width: 60px;
+}
+.cal-impact-high   { color: #FF6B6B; font-size: 0.7rem; font-weight: 700; }
+.cal-impact-medium { color: #FFD93D; font-size: 0.7rem; font-weight: 700; }
+.cal-impact-low    { color: #4A9EBF; font-size: 0.7rem; }
+.cal-event { font-size: 0.78rem; color: #D1D5DB; }
+
+/* ── Build tag ── */
+.build-tag {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.6rem;
+    color: #1E3A2F;
+    text-align: right;
+    letter-spacing: 0.1em;
+    padding-top: 0.3rem;
+}
+
+/* ── Selectbox cleanup ── */
+div[data-baseweb="select"] { background: #0F1520 !important; }
+.stSelectbox label { color: #4A9EBF !important; font-family: 'Share Tech Mono', monospace !important; font-size: 0.72rem !important; letter-spacing: 0.1em !important; }
+</style>
+""", unsafe_allow_html=True)
+
+# ─── DATA FETCH ───────────────────────────────────────────────────────────────
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_wb(iso: str, indicator_code: str) -> list[dict]:
+    """Ambil data World Bank, kembalikan list dicts {year, value}."""
+    try:
+        url = WORLD_BANK_BASE.format(iso=iso, ind=indicator_code)
+        r = requests.get(url, timeout=8)
+        r.raise_for_status()
+        raw = r.json()
+        if len(raw) < 2 or not raw[1]:
             return []
-        except Exception as e:
-            add_log('error', f'Get candles error: {e}')
-            return []
-
-    def get_price(self, account_id, symbol):
-        """Ambil harga terkini"""
-        try:
-            r = requests.get(
-                f'{self.BASE}/users/current/accounts/{account_id}/symbols/{symbol}/price',
-                headers=self.h, timeout=10
-            )
-            return r.json()
-        except Exception as e:
-            return {}
-
-    def open_trade(self, account_id, symbol, trade_type, volume, sl=None, tp=None, magic=123456):
-        """Buka order BUY atau SELL"""
-        try:
-            body = {'symbol': symbol, 'volume': volume, 'type': trade_type, 'magic': magic}
-            if sl: body['stopLoss'] = sl
-            if tp: body['takeProfit'] = tp
-            r = requests.post(
-                f'{self.BASE}/users/current/accounts/{account_id}/trade',
-                headers=self.h, timeout=15, json=body
-            )
-            return r.json()
-        except Exception as e:
-            return {'error': str(e)}
-
-    def get_positions(self, account_id):
-        """Ambil posisi terbuka"""
-        try:
-            r = requests.get(
-                f'{self.BASE}/users/current/accounts/{account_id}/positions',
-                headers=self.h, timeout=10
-            )
-            return r.json()
-        except Exception as e:
-            return []
-
-    def close_position(self, account_id, position_id):
-        """Tutup posisi"""
-        try:
-            r = requests.post(
-                f'{self.BASE}/users/current/accounts/{account_id}/trade',
-                headers=self.h, timeout=15,
-                json={'positionId': position_id}
-            )
-            return r.json()
-        except Exception as e:
-            return {'error': str(e)}
+        entries = []
+        for item in raw[1]:
+            if item.get("value") is not None:
+                entries.append({"year": int(item["date"]), "value": item["value"]})
+        return sorted(entries, key=lambda x: x["year"])
+    except Exception:
+        return []
 
 
-@st.cache_resource
-def get_metaapi():
-    """Inisialisasi MetaApi bridge — di-cache supaya tidak buat ulang setiap rerun"""
-    token = st.secrets.get('META_API_TOKEN', '')
-    acc_id = st.secrets.get('META_API_ACCOUNT_ID', '')
-    if not token or not acc_id:
-        return None
-    api = MetaApiBridge(token)
-    # Test koneksi
-    accs = api.get_accounts()
-    if 'error' in accs:
-        return None
-    return {'api': api, 'account_id': acc_id}
+def latest_value(data: list[dict]) -> tuple[float | None, int | None]:
+    if not data:
+        return None, None
+    for item in reversed(data):
+        if item["value"] is not None:
+            return item["value"], item["year"]
+    return None, None
 
-# ================================================================
-# INDIKATOR (sama persis logika dengan MQL5 EA)
-# ================================================================
-def calc_ema(close_series, period):
-    """EMA calculation — identik dengan iMA() di MQL5"""
-    if len(close_series) < period:
-        return close_series
-    k = 2.0 / (period + 1)
-    ema = [close_series[0]]
-    for i in range(1, len(close_series)):
-        ema.append(close_series[i] * k + ema[-1] * (1 - k))
-    return ema
 
-def calc_rsi(close_series, period=14):
-    """RSI calculation — identik dengan iRSI() di MQL5"""
-    if len(close_series) < period + 1:
-        return [50.0] * len(close_series)
-    rsi = [50.0] * (period)
-    gains, losses = [], []
-    for i in range(1, period + 1):
-        d = close_series[i] - close_series[i-1]
-        gains.append(max(d, 0))
-        losses.append(max(-d, 0))
-    avg_gain = sum(gains) / period
-    avg_loss = sum(losses) / period
-    rsi.append(100 if avg_loss == 0 else 100 - 100 / (1 + avg_gain / avg_loss))
-    for i in range(period + 1, len(close_series)):
-        d = close_series[i] - close_series[i-1]
-        avg_gain = (avg_gain * (period - 1) + max(d, 0)) / period
-        avg_loss = (avg_loss * (period - 1) + max(-d, 0)) / period
-        rsi.append(100 if avg_loss == 0 else 100 - 100 / (1 + avg_gain / avg_loss))
-    return rsi
+def format_value(val: float, fmt: str, unit: str) -> str:
+    if val is None:
+        return "N/A"
+    if fmt == "triliun":
+        return f"{val / 1e12:.2f}T {unit}"
+    if fmt == "miliar":
+        return f"{val / 1e9:.1f}B {unit}"
+    return f"{val:.2f} {unit}"
 
-def calc_atr(high, low, close, period=14):
-    """ATR calculation — identik dengan iATR() di MQL5"""
-    if len(high) < period + 1:
-        return [0.0] * len(high)
-    tr_list = []
-    for i in range(1, len(high)):
-        tr = max(high[i]-low[i], abs(high[i]-close[i-1]), abs(low[i]-close[i-1]))
-        tr_list.append(tr)
-    atr = [0.0] * period
-    atr.append(sum(tr_list[:period]) / period)
-    for i in range(period, len(tr_list)):
-        atr.append((atr[-1] * (period - 1) + tr_list[i]) / period)
-    return atr
 
-# ================================================================
-# SCORING SYSTEM — porting 1:1 dari MQL5 EA
-# ================================================================
-def calc_score(ema_fast, ema_slow, rsi_vals, ema_fast_period=9, rsi_ob=70, rsi_os=30):
-    """
-    Scoring identik dengan EA MQL5:
-    - EMA crossover/trend: ±1
-    - RSI zone/momentum: ±1
-    - Total skor -2 s/d +2
-    """
-    n = len(ema_fast)
-    if n < 3:
-        return 0
-    score = 0
+def risk_level(indicator_name: str, val: float | None) -> str:
+    if val is None or indicator_name not in RISK_THRESHOLDS:
+        return "neutral"
+    t = RISK_THRESHOLDS[indicator_name]
+    if val <= t["low"]:
+        return "low"
+    if val <= t["medium"]:
+        return "medium"
+    return "high"
 
-    # 1. EMA Trend (sama persis MQL5)
-    if ema_fast[n-1] > ema_slow[n-1] and ema_fast[n-2] <= ema_slow[n-2]:
-        score += 1   # Bullish crossover
-    elif ema_fast[n-1] < ema_slow[n-1] and ema_fast[n-2] >= ema_slow[n-2]:
-        score -= 1   # Bearish crossover
-    elif ema_fast[n-1] > ema_slow[n-1]:
-        score += 1   # Masih tren naik
-    elif ema_fast[n-1] < ema_slow[n-1]:
-        score -= 1   # Masih tren turun
 
-    # 2. RSI Momentum (sama persis MQL5)
-    r = rsi_vals[n-1] if n-1 < len(rsi_vals) else 50
-    if r < rsi_os:
-        score += 1   # Oversold → buy
-    elif r > rsi_ob:
-        score -= 1   # Overbought → sell
-    elif r > 50:
-        score += 1   # Momentum naik
-    elif r < 50:
-        score -= 1   # Momentum turun
+RISK_LABELS = {
+    "low": ("RENDAH", "risk-low"),
+    "medium": ("SEDANG", "risk-medium"),
+    "high": ("TINGGI", "risk-high"),
+    "neutral": ("DATA", "risk-neutral"),
+}
 
-    return score
+# ─── CHART HELPERS ────────────────────────────────────────────────────────────
 
-# ================================================================
-# TRADINGVIEW WIDGET — chart real-time 100%
-# ================================================================
-def render_tv_chart(symbol_tv, interval_tv, height=480):
-    """Embed TradingView Advanced Chart — harga REAL dari market"""
-    widget_id = f"tv_{symbol_tv.replace(':','_')}_{interval_tv}"
-    html = f"""
-    <div style="width:100%;height:{height}px;border-radius:8px;overflow:hidden;border:1px solid #1c1c40">
-        <div id="{widget_id}" style="height:100%;width:100%"></div>
-        <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-        <script type="text/javascript">
-        new TradingView.widget({{
-            "autosize": true,
-            "symbol": "{symbol_tv}",
-            "interval": "{interval_tv}",
-            "timezone": "Asia/Jakarta",
-            "theme": "dark",
-            "style": "1",
-            "locale": "id_ID",
-            "backgroundColor": "#080812",
-            "gridColor": "#1c1c40",
-            "hide_side_toolbar": false,
-            "allow_symbol_change": true,
-            "save_image": false,
-            "container_id": "{widget_id}",
-            "hide_volume": false,
-            "studies": [
-                "MAExp@tv-basicstudies",
-                "RSI@tv-basicstudies",
-                "ATR@tv-basicstudies"
-            ],
-            "study_overrides": {{
-                "MAExp.length": 9,
-                "RSI.length": 14
-            }}
-        }});
-        </script>
-    </div>"""
-    components.html(html, height=height + 4)
+PLOTLY_LAYOUT = dict(
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    font=dict(family="Share Tech Mono, monospace", color="#4A9EBF", size=10),
+    margin=dict(l=10, r=10, t=30, b=10),
+    xaxis=dict(gridcolor="#1A2332", tickcolor="#1A2332", linecolor="#1A2332"),
+    yaxis=dict(gridcolor="#1A2332", tickcolor="#1A2332", linecolor="#1A2332"),
+    legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor="#1A2332"),
+)
 
-# ================================================================
-# MAIN APP
-# ================================================================
-def main():
-    # --- MetaApi init ---
-    ma = get_metaapi()
-    if ma and not st.session_state.metaapi_ready:
-        ma['api'].ensure_rpc(ma['account_id'])
-        st.session_state.metaapi_ready = True
-        add_log('system', 'MetaApi.cloud terhubung — auto-entry siap')
 
-    metaapi_connected = ma is not None and st.session_state.metaapi_ready
+def sparkline_chart(data: list[dict], color: str, title: str, unit: str, fmt: str) -> go.Figure:
+    years = [d["year"] for d in data]
+    vals  = [d["value"] for d in data]
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=years, y=vals,
+        mode="lines+markers",
+        line=dict(color=color, width=2),
+        marker=dict(color=color, size=4),
+        fill="tozeroy",
+        fillcolor=f"{color}15",
+        hovertemplate=f"<b>%{{x}}</b><br>{format_value(None, fmt, unit).replace('N/A', '')}%{{y:.2f}}<extra></extra>",
+    ))
+    fig.update_layout(**PLOTLY_LAYOUT, title=dict(text=title, font=dict(size=10, color=color), x=0))
+    fig.update_xaxes(tickformat="d")
+    return fig
 
-    # ============================================================
-    # HEADER
-    # ============================================================
-    col_logo, col_spacer, col_metrics = st.columns([0.15, 0.55, 0.3])
-    with col_logo:
-        st.markdown("""
-        <div style="display:flex;align-items:center;gap:8px">
-            <div style="width:30px;height:30px;border-radius:7px;background:linear-gradient(135deg,#00d4aa,#006b55);
-                        display:flex;align-items:center;justify-content:center;box-shadow:0 0 16px rgba(0,212,170,.12)">
-                <span style="font-size:13px">✈</span>
-            </div>
-            <div style="font-weight:700;font-size:14px;letter-spacing:1.5px"><span style="color:#00d4aa">AERO</span> AI TRADE</div>
-        </div>""", unsafe_allow_html=True)
-    with col_metrics:
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Balance", "$10,000.00")
-        m2.metric("Equity", "$10,000.00")
-        m3.metric("Margin", "$0.00")
-        m4.metric("Free Margin", "$10,000.00")
 
-    st.divider()
+def radar_chart(labels: list[str], values: list[float], country: str) -> go.Figure:
+    fig = go.Figure()
+    fig.add_trace(go.Scatterpolar(
+        r=values,
+        theta=labels,
+        fill="toself",
+        fillcolor="rgba(0,255,200,0.08)",
+        line=dict(color="#00FFC8", width=2),
+        marker=dict(color="#00FFC8", size=5),
+        name=country,
+    ))
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Share Tech Mono, monospace", color="#4A9EBF", size=9),
+        margin=dict(l=30, r=30, t=30, b=30),
+        polar=dict(
+            bgcolor="rgba(0,0,0,0)",
+            radialaxis=dict(visible=True, gridcolor="#1A2332", linecolor="#1A2332", color="#374151"),
+            angularaxis=dict(gridcolor="#1A2332", linecolor="#1A2332"),
+        ),
+        showlegend=False,
+    )
+    return fig
 
-    # ============================================================
-    # KONTROL BAR (horizontal, bukan sidebar)
-    # ============================================================
-    c1, c2, c3, c4, c5, c6, c7 = st.columns([1.5, 0.8, 0.6, 0.8, 1.2, 0.4, 0.7])
-    with c1:
-        pair = st.selectbox('Pair', list(PAIRS.keys()), format_func=lambda x: PAIRS[x]['name'])
-    with c2:
-        tf = st.selectbox('TF', ['M1','M5','M15','M30','H1','H4','D1','W1'])
-    with c3:
-        mode = st.selectbox('Mode', ['scoring', 'limit'])
-    with c4:
-        if mode == 'limit':
-            limit_entry = st.text_input('Limit Entry', placeholder='0.00000')
+
+def bar_compare_chart(country_labels: list[str], values: list[float], color: str, indicator: str) -> go.Figure:
+    fig = go.Figure(go.Bar(
+        x=country_labels,
+        y=values,
+        marker=dict(color=color, opacity=0.75, line=dict(color=color, width=1)),
+        hovertemplate="%{x}<br><b>%{y:.2f}</b><extra></extra>",
+    ))
+    fig.update_layout(**PLOTLY_LAYOUT, title=dict(text=indicator, font=dict(size=10, color=color), x=0))
+    fig.update_xaxes(tickangle=-30)
+    return fig
+
+# ─── INTERPRETATION ENGINE ────────────────────────────────────────────────────
+
+def interpret_macro(country: str, data_map: dict) -> str:
+    """Buat interpretasi singkat kondisi makro berdasarkan data live."""
+    lines = []
+
+    gdp = data_map.get("GDP (PDB)", {})
+    inf = data_map.get("Inflasi", {})
+    unemp = data_map.get("Pengangguran", {})
+    debt = data_map.get("Utang/PDB", {})
+    trade = data_map.get("Neraca Perdagangan", {})
+
+    # GDP
+    if gdp.get("val") is not None:
+        gdp_t = gdp["val"] / 1e12
+        lines.append(f"PDB {country.split()[-1]} berada di {gdp_t:.2f}T USD — "
+                     f"{'skala ekonomi signifikan di kawasan' if gdp_t > 0.5 else 'ekonomi berkembang dengan ruang ekspansi luas'}.")
+
+    # Inflasi
+    if inf.get("val") is not None:
+        iv = inf["val"]
+        if iv < 2:
+            lines.append(f"Inflasi {iv:.1f}% berada di bawah target ideal — risiko deflasi perlu dipantau.")
+        elif iv <= 4:
+            lines.append(f"Inflasi {iv:.1f}% terkendali dalam kisaran sehat — sinyal positif untuk daya beli.")
+        elif iv <= 7:
+            lines.append(f"Inflasi {iv:.1f}% dalam zona kuning — bank sentral kemungkinan mempertahankan stance hawkish.")
         else:
-            limit_entry = ''
-    with c5:
-        col_btn1, col_btn2 = st.columns(2)
-        with col_btn1:
-            btn_bot = st.button(
-                '⏹ Deactivate' if st.session_state.bot_active else '▶ Activate Bot',
-                use_container_width=True,
-                type='primary' if not st.session_state.bot_active else 'secondary'
-            )
-        with col_btn2:
-            score_color = '🟢' if st.session_state.score > 0 else ('🔴' if st.session_state.score < 0 else '⚪')
+            lines.append(f"⚠️ Inflasi {iv:.1f}% di zona kritis — tekanan kenaikan suku bunga tinggi, waspada dampak ke pasar obligasi dan ekuitas.")
+
+    # Pengangguran
+    if unemp.get("val") is not None:
+        uv = unemp["val"]
+        if uv < 4:
+            lines.append(f"Tingkat pengangguran {uv:.1f}% menunjukkan pasar tenaga kerja sangat ketat — potensi tekanan upah inflasioner.")
+        elif uv <= 7:
+            lines.append(f"Pengangguran {uv:.1f}% dalam batas wajar — pasar kerja relatif stabil.")
+        else:
+            lines.append(f"Pengangguran {uv:.1f}% di atas rata-rata — konsumsi domestik berpotensi tertekan.")
+
+    # Utang
+    if debt.get("val") is not None:
+        dv = debt["val"]
+        if dv < 60:
+            lines.append(f"Rasio utang/PDB {dv:.1f}% dalam batas aman IMF — ruang fiskal cukup lebar.")
+        elif dv <= 90:
+            lines.append(f"Rasio utang/PDB {dv:.1f}% mendekati zona waspada — keberlanjutan fiskal patut dicermati.")
+        else:
+            lines.append(f"⚠️ Rasio utang/PDB {dv:.1f}% melewati 90% — risiko fiskal tinggi, yield obligasi berpotensi tertekan ke atas.")
+
+    # Neraca dagang
+    if trade.get("val") is not None:
+        tv = trade["val"] / 1e9
+        if tv >= 0:
+            lines.append(f"Neraca perdagangan surplus {tv:.1f}B USD — tekanan depresiasi mata uang relatif terbatas.")
+        else:
+            lines.append(f"Neraca perdagangan defisit {abs(tv):.1f}B USD — potensi tekanan pada nilai tukar domestik.")
+
+    if not lines:
+        return "Data belum tersedia untuk interpretasi otomatis."
+
+    return " ".join(lines)
+
+# ─── KALENDER EKONOMI (STATIC PLACEHOLDER) ───────────────────────────────────
+
+CALENDAR_EVENTS = [
+    {"date": "01 Sep", "event": "ISM Manufacturing PMI (AS)", "impact": "HIGH",   "forecast": "49.8", "prev": "49.0"},
+    {"date": "04 Sep", "event": "RBA Rate Decision (Australia)", "impact": "HIGH",  "forecast": "4.35%","prev": "4.35%"},
+    {"date": "05 Sep", "event": "GDP Kuartal Q2 (Indonesia)",    "impact": "HIGH",  "forecast": "4.9%", "prev": "5.1%"},
+    {"date": "06 Sep", "event": "Nonfarm Payrolls (AS)",          "impact": "HIGH",  "forecast": "180K", "prev": "206K"},
+    {"date": "09 Sep", "event": "Inflasi CPI (China)",            "impact": "MEDIUM","forecast": "0.5%", "prev": "0.2%"},
+    {"date": "11 Sep", "event": "Inflasi CPI (AS)",               "impact": "HIGH",  "forecast": "3.1%", "prev": "2.9%"},
+    {"date": "12 Sep", "event": "ECB Rate Decision (Eropa)",      "impact": "HIGH",  "forecast": "3.65%","prev": "3.75%"},
+    {"date": "18 Sep", "event": "FOMC Rate Decision (AS)",        "impact": "HIGH",  "forecast": "5.25%","prev": "5.50%"},
+    {"date": "19 Sep", "event": "BI Rate Decision (Indonesia)",   "impact": "HIGH",  "forecast": "6.25%","prev": "6.25%"},
+    {"date": "25 Sep", "event": "Core PCE Price Index (AS)",      "impact": "HIGH",  "forecast": "2.7%", "prev": "2.6%"},
+]
+
+IMPACT_CLASS = {"HIGH": "cal-impact-high", "MEDIUM": "cal-impact-medium", "LOW": "cal-impact-low"}
+IMPACT_LABEL = {"HIGH": "🔴 TINGGI", "MEDIUM": "🟡 SEDANG", "LOW": "🔵 RENDAH"}
+
+# ─── MAIN PAGE ────────────────────────────────────────────────────────────────
+
+def show():
+    inject_css()
+
+    # ── Header ──────────────────────────────────────────────────────────────
+    st.markdown("""
+<div style="padding:0.5rem 0 0.2rem 0;">
+<div style="font-family:'Share Tech Mono',monospace;font-size:0.62rem;letter-spacing:0.2em;color:#1E3A4A;margin-bottom:0.3rem;">
+AEROVULPIS V4.1 ULTIMATE · ECONOMIC RADAR
+</div>
+<div style="font-family:'Share Tech Mono',monospace;font-size:1.4rem;color:#00FFC8;letter-spacing:0.08em;line-height:1.1;">
+► ECONOMIC RADAR
+</div>
+<div style="font-family:'Exo 2',sans-serif;font-size:0.78rem;color:#4A5568;margin-top:0.3rem;margin-bottom:0.2rem;">
+Pantau kondisi makroekonomi global. Baca sinyal pasar sebelum pasar bergerak.
+</div>
+</div>
+<hr style="border:none;border-top:1px solid #1A2332;margin:0.8rem 0 1rem 0;">
+""", unsafe_allow_html=True)
+
+    # ── Sidebar controls ─────────────────────────────────────────────────────
+    with st.sidebar:
+        st.markdown("""
+<div style="font-family:'Share Tech Mono',monospace;font-size:0.65rem;color:#00FFC8;letter-spacing:0.15em;margin-bottom:0.8rem;">
+◈ ECONOMIC RADAR CONFIG
+</div>
+""", unsafe_allow_html=True)
+
+        selected_country_label = st.selectbox(
+            "Negara Utama",
+            list(COUNTRIES.keys()),
+            index=0,
+        )
+        iso = COUNTRIES[selected_country_label]
+        country_name = selected_country_label.split(" ", 1)[1]
+
+        st.markdown("<hr style='border:none;border-top:1px solid #1A2332;margin:0.6rem 0;'>", unsafe_allow_html=True)
+
+        compare_labels = st.multiselect(
+            "Bandingkan Negara (maks. 5)",
+            [k for k in COUNTRIES if k != selected_country_label],
+            default=["🇺🇸 Amerika Serikat", "🇨🇳 China"],
+            max_selections=5,
+        )
+        compare_isos = {k: COUNTRIES[k] for k in compare_labels}
+
+        st.markdown("<hr style='border:none;border-top:1px solid #1A2332;margin:0.6rem 0;'>", unsafe_allow_html=True)
+        show_calendar = st.toggle("Tampilkan Kalender Ekonomi", value=True)
+        show_interpret = st.toggle("Interpretasi Otomatis", value=True)
+
+        st.markdown(f"""
+<div class="build-tag" style="margin-top:2rem;">
+BUILD STABLE · 13 JUL 2026<br>
+DATA: WORLD BANK OPEN DATA
+</div>
+""", unsafe_allow_html=True)
+
+    # ── Fetch data utama ─────────────────────────────────────────────────────
+    data_map: dict[str, dict] = {}
+    with st.spinner("Mengambil data makro…"):
+        for ind_name, ind_meta in INDICATORS.items():
+            series = fetch_wb(iso, ind_meta["code"])
+            val, year = latest_value(series)
+            data_map[ind_name] = {
+                "val": val, "year": year,
+                "series": series,
+                **ind_meta
+            }
+
+    # ── KPI Cards ────────────────────────────────────────────────────────────
+    st.markdown(f'<div class="aero-section-title">▸ INDIKATOR UTAMA — {country_name.upper()}</div>', unsafe_allow_html=True)
+    st.markdown('<div class="aero-section-sub">Sumber: World Bank Open Data · Data terbaru tersedia</div>', unsafe_allow_html=True)
+
+    cols = st.columns(len(INDICATORS))
+    for col, (ind_name, d) in zip(cols, data_map.items()):
+        val = d["val"]
+        year = d["year"]
+        formatted = format_value(val, d["format"], d["unit"])
+        rl = risk_level(ind_name, val)
+        rl_label, rl_class = RISK_LABELS[rl]
+        year_str = f"({year})" if year else ""
+
+        with col:
             st.markdown(f"""
-            <div style="text-align:center;margin-top:4px">
-                <div style="font-size:9px;color:#3e3e60;text-transform:uppercase;letter-spacing:.5px">Score</div>
-                <div style="font-size:20px;font-weight:700;font-family:monospace;color:{'#10b981' if st.session_state.score > 0 else '#f43f5e' if st.session_state.score < 0 else '#3e3e60'}">
-                    {score_color} {st.session_state.score:+d}
-                </div>
-            </div>""", unsafe_allow_html=True)
-    with c6:
-        st.markdown(f"""<div style="margin-top:8px;font-size:11px;font-weight:600;color:{'#10b981' if st.session_state.bot_active else '#3e3e60'}">
-            {'● ACTIVE' if st.session_state.bot_active else '○ IDLE'}
-        </div>""", unsafe_allow_html=True)
-    with c7:
-        if metaapi_connected:
-            st.markdown("""<div style="margin-top:8px;font-size:10px;color:#10b981"><i>● MetaApi Live</i></div>""", unsafe_allow_html=True)
-        else:
-            st.markdown("""<div style="margin-top:8px;font-size:10px;color:#eab308"><i>○ Demo Mode</i></div>""", unsafe_allow_html=True)
+<div class="kpi-card" style="--accent:{d['color']};">
+<div class="kpi-label">{d['icon']} {ind_name}</div>
+<div class="kpi-value" style="color:{d['color']};">{formatted}</div>
+<div class="kpi-desc">{year_str} {d['desc']}</div>
+<span class="kpi-risk {rl_class}">{rl_label}</span>
+</div>
+""", unsafe_allow_html=True)
 
-    # Handle bot toggle
-    if btn_bot:
-        st.session_state.bot_active = not st.session_state.bot_active
-        if st.session_state.bot_active:
-            add_log('bot', f'Bot AKTIF — {mode} | {PAIRS[pair]["name"]} {tf}')
-        else:
-            add_log('bot', 'Bot DIMATIKAN')
-        st.rerun()
+    st.markdown('<hr class="aero-divider">', unsafe_allow_html=True)
 
-    # ============================================================
-    # TRADINGVIEW CHART — REAL-TIME 100%
-    # ============================================================
-    tv_symbol = PAIRS[pair]['tv']
-    tv_interval = TF_TV.get(tf, '60')
-    render_tv_chart(tv_symbol, tv_interval, height=440)
+    # ── Trend Charts ────────────────────────────────────────────────────────
+    st.markdown('<div class="aero-section-title">▸ TREN HISTORIS (10 TAHUN)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="aero-section-sub">Data dekade terakhir — identifikasi siklus makro</div>', unsafe_allow_html=True)
 
-    # ============================================================
-    # SIGNAL CARDS
-    # ============================================================
-    sc1, sc2, sc3, sc4 = st.columns(4)
-    with sc1:
-        ema_color = '#10b981' if 'BULL' in st.session_state.ema_status else '#f43f5e'
-        st.markdown(f"""<div class="sig-card">
-            <div class="sig-label">EMA Trend</div>
-            <div class="sig-val" style="color:{ema_color}">{st.session_state.ema_status}</div>
-            <div class="sig-sub">Fast({st.secrets.get('EMA_FAST',9)}/Slow({st.secrets.get('EMA_SLOW',21)}))</div>
-        </div>""", unsafe_allow_html=True)
-    with sc2:
-        rsi_color = '#f43f5e' if st.session_state.rsi_val > 70 else ('#10b981' if st.session_state.rsi_val < 30 else '#e2e2f0')
-        st.markdown(f"""<div class="sig-card">
-            <div class="sig-label">RSI Momentum</div>
-            <div class="sig-val" style="color:{rsi_color}">{st.session_state.rsi_val:.1f}</div>
-            <div class="sig-sub">{'Overbought' if st.session_state.rsi_val>70 else 'Oversold' if st.session_state.rsi_val<30 else 'Neutral zone'}</div>
-        </div>""", unsafe_allow_html=True)
-    with sc3:
-        st.markdown(f"""<div class="sig-card">
-            <div class="sig-label">ATR Volatility</div>
-            <div class="sig-val">{st.session_state.atr_val:.5f}</div>
-            <div class="sig-sub">SL: {st.session_state.sl_calc:.5f} | TP: {st.session_state.tp_calc:.5f}</div>
-        </div>""", unsafe_allow_html=True)
-    with sc4:
-        dec_color = '#10b981' if st.session_state.last_signal == 'BUY' else ('#f43f5e' if st.session_state.last_signal == 'SELL' else '#3e3e60')
-        min_s = int(st.secrets.get('MIN_SCORE', 2))
-        st.markdown(f"""<div class="sig-card">
-            <div class="sig-label">Decision (min ±{min_s})</div>
-            <div class="sig-val" style="color:{dec_color}">{st.session_state.last_signal}</div>
-            <div class="sig-sub">{'Auto-execute via MetaApi' if metaapi_connected else 'Demo — butuh MetaApi'}</div>
-        </div>""", unsafe_allow_html=True)
-
-    # ============================================================
-    # BOTTOM TABS
-    # ============================================================
-    tab_sig, tab_pos, tab_log, tab_set = st.tabs(['Signals', 'Positions', 'Journal', 'Settings'])
-
-    with tab_pos:
-        if metaapi_connected and ma:
-            positions = ma['api'].get_positions(ma['account_id'])
-            if isinstance(positions, list) and positions:
-                rows = []
-                for p in positions:
-                    rows.append({
-                        'Ticket': p.get('id', '—'),
-                        'Pair': p.get('symbol', '—'),
-                        'Type': p.get('type', '—'),
-                        'Lot': p.get('volume', 0),
-                        'Open': p.get('openPrice', 0),
-                        'S/L': p.get('stopLoss', '—'),
-                        'T/P': p.get('takeProfit', '—'),
-                        'Profit': p.get('profit', 0),
-                    })
-                st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    chart_cols = st.columns(len(INDICATORS))
+    for col, (ind_name, d) in zip(chart_cols, data_map.items()):
+        with col:
+            if d["series"]:
+                fig = sparkline_chart(d["series"], d["color"], ind_name, d["unit"], d["format"])
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
             else:
-                st.info('Tidak ada posisi terbuka')
-        else:
-            st.info('Tidak ada posisi terbuka (Demo Mode)')
+                st.markdown(f"""
+<div style="background:#0F1520;border:1px solid #1E2A3A;border-radius:4px;padding:1rem;text-align:center;">
+<span style="font-family:'Share Tech Mono',monospace;font-size:0.65rem;color:#374151;">DATA TIDAK TERSEDIA</span>
+</div>""", unsafe_allow_html=True)
 
-    with tab_log:
-        if st.session_state.journal:
-            log_rows = []
-            for j in st.session_state.journal[:50]:
-                tp_color = {'system':'🟢','trade':'🟡','error':'🔴','bot':'🔵','signal':'🟣'}.get(j['type'], '⚪')
-                log_rows.append({'⏰': j['time'], '': tp_color, 'Type': j['type'], 'Message': j['msg']})
-            st.dataframe(pd.DataFrame(log_rows), use_container_width=True, hide_index=True)
-        else:
-            st.info('Journal kosong')
+    st.markdown('<hr class="aero-divider">', unsafe_allow_html=True)
 
-    with tab_set:
-        st.markdown('### MetaApi.cloud Configuration')
+    # ── Radar + Interpretasi ────────────────────────────────────────────────
+    left, right = st.columns([1, 1])
+
+    with left:
+        st.markdown('<div class="aero-section-title">▸ RADAR MAKRO</div>', unsafe_allow_html=True)
+        st.markdown('<div class="aero-section-sub">Profil risiko multi-dimensi — normalisasi 0–100</div>', unsafe_allow_html=True)
+
+        def normalize(ind_name: str, val: float | None) -> float:
+            if val is None:
+                return 0
+            NORMS = {
+                "GDP (PDB)":         (0, 5e12),
+                "Inflasi":           (0, 15),
+                "Pengangguran":      (0, 20),
+                "Utang/PDB":         (0, 150),
+                "Neraca Perdagangan":(-5e11, 5e11),
+            }
+            lo, hi = NORMS.get(ind_name, (0, 100))
+            return round(min(max((val - lo) / (hi - lo) * 100, 0), 100), 1)
+
+        radar_labels = list(INDICATORS.keys())
+        radar_vals   = [normalize(k, data_map[k]["val"]) for k in radar_labels]
+        fig_radar    = radar_chart(radar_labels, radar_vals, country_name)
+        st.plotly_chart(fig_radar, use_container_width=True, config={"displayModeBar": False})
+        st.markdown(f'<div class="radar-note">NORMALISASI RELATIF · SKALA 0–100 · {country_name.upper()}</div>', unsafe_allow_html=True)
+
+    with right:
+        st.markdown('<div class="aero-section-title">▸ INTERPRETASI KONDISI MAKRO</div>', unsafe_allow_html=True)
+        st.markdown('<div class="aero-section-sub">Analisis otomatis berbasis data live</div>', unsafe_allow_html=True)
+
+        if show_interpret:
+            interp_text = interpret_macro(country_name, data_map)
+            st.markdown(f"""
+<div class="interp-box">
+<div class="interp-title">◈ ANALISIS MAKROEKONOMI — {country_name.upper()}</div>
+<div class="interp-text">{interp_text}</div>
+</div>
+""", unsafe_allow_html=True)
+
+        # Implikasi trading
         st.markdown("""
-        Untuk mengaktifkan **auto-entry real** (bot mengeksekusi order ke MT5 secara otomatis):
+<div class="interp-box" style="border-left-color:#00FFC8;margin-top:0.8rem;">
+<div class="interp-title" style="color:#00FFC8;">◈ IMPLIKASI UNTUK TRADER</div>
+<div class="interp-text">
+<b style="color:#00FFC8;">Forex:</b> Divergensi inflasi & suku bunga antar negara menciptakan peluang carry trade.<br>
+<b style="color:#FFD93D;">Saham:</b> Inflasi rendah + pengangguran rendah = kondisi ideal untuk rally ekuitas.<br>
+<b style="color:#C77DFF;">Obligasi:</b> Rasio utang tinggi berpotensi menekan yield jangka pendek naik.<br>
+<b style="color:#FF6B6B;">Komoditas:</b> Neraca dagang surplus mendukung penguatan mata uang komoditas.
+</div>
+</div>
+""", unsafe_allow_html=True)
 
-        1. Daftar gratis di [metaapi.cloud](https://metaapi.cloud)
-        2. Tambahkan akun MT5 Anda di dashboard MetaApi
-        3. Copy **API Token** dan **Account ID**
-        4. Isi di file `.streamlit/secrets.toml`:
+    st.markdown('<hr class="aero-divider">', unsafe_allow_html=True)
 
-        ```
-        META_API_TOKEN = "token_anda_di_sini"
-        META_API_ACCOUNT_ID = "account_id_anda_di_sini"
-        ```
-        """)
-        st.markdown('### EA Parameters')
-        st.markdown('Edit di `.streamlit/secrets.toml`:')
-        st.code("""
-EMA_FAST = 9
-EMA_SLOW = 21
-RSI_PERIOD = 14
-RSI_OVERBOUGHT = 70
-RSI_OVERSOLD = 30
-ATR_PERIOD = 14
-ATR_SL_MULT = 1.5
-ATR_TP_MULT = 2.5
-MIN_SCORE = 2
-LOT_SIZE = 0.01
-MAGIC_NUMBER = 123456
-        """, language='toml')
+    # ── Perbandingan Multi-Negara ────────────────────────────────────────────
+    if compare_labels:
+        st.markdown('<div class="aero-section-title">▸ PERBANDINGAN MULTI-NEGARA</div>', unsafe_allow_html=True)
+        st.markdown('<div class="aero-section-sub">Bandingkan indikator kunci lintas negara yang dipilih</div>', unsafe_allow_html=True)
 
-    # ============================================================
-    # BOT TICK — dijalankan setiap rerun
-    # ============================================================
-    if st.session_state.bot_active:
-        if metaapi_connected and ma:
-            # === MODE LIVE: Data dari MetaApi, eksekusi real ===
-            candles = ma['api'].get_candles(ma['account_id'], pair, tf, limit=100)
-            if candles and len(candles) >= 25:
-                closes = [c['close'] for c in candles]
-                highs = [c['high'] for c in candles]
-                lows = [c['low'] for c in candles]
-                ema_f = int(st.secrets.get('EMA_FAST', 9))
-                ema_s = int(st.secrets.get('EMA_SLOW', 21))
-                rsi_p = int(st.secrets.get('RSI_PERIOD', 14))
-                atr_p = int(st.secrets.get('ATR_PERIOD', 14))
-                sl_m = float(st.secrets.get('ATR_SL_MULT', 1.5))
-                tp_m = float(st.secrets.get('ATR_TP_MULT', 2.5))
-                min_s = int(st.secrets.get('MIN_SCORE', 2))
+        compare_indicator = st.selectbox(
+            "Indikator untuk Perbandingan",
+            list(INDICATORS.keys()),
+            index=1,  # Default: Inflasi
+            key="compare_ind_select",
+        )
+        ci = INDICATORS[compare_indicator]
 
-                ef = calc_ema(closes, ema_f)
-                es = calc_ema(closes, ema_s)
-                rsi = calc_rsi(closes, rsi_p)
-                atr = calc_atr(highs, lows, closes, atr_p)
+        all_compare = {selected_country_label: iso, **compare_isos}
+        comp_labels, comp_vals = [], []
 
-                score = calc_score(ef, es, rsi)
-                st.session_state.score = score
-                st.session_state.rsi_val = rsi[-1]
-                st.session_state.atr_val = atr[-1]
-                st.session_state.sl_calc = closes[-1] - atr[-1] * sl_m
-                st.session_state.tp_calc = closes[-1] + atr[-1] * tp_m
-                st.session_state.ema_status = 'BULLISH' if ef[-1] > es[-1] else 'BEARISH'
+        with st.spinner("Memuat data perbandingan…"):
+            for lbl, c_iso in all_compare.items():
+                s = fetch_wb(c_iso, ci["code"])
+                v, _ = latest_value(s)
+                short_lbl = lbl.split(" ", 1)[1]
+                comp_labels.append(short_lbl)
+                comp_vals.append(v if v is not None else 0)
 
-                # Cek posisi terbuka
-                positions = ma['api'].get_positions(ma['account_id'])
-                has_pos = isinstance(positions, list) and len(positions) > 0
+        if comp_vals:
+            fig_bar = bar_compare_chart(comp_labels, comp_vals, ci["color"], compare_indicator)
+            st.plotly_chart(fig_bar, use_container_width=True, config={"displayModeBar": False})
 
-                if mode == 'scoring' and not has_pos:
-                    if score >= min_s:
-                        st.session_state.last_signal = 'BUY'
-                        result = ma['api'].open_trade(
-                            ma['account_id'], pair, 'BUY',
-                            float(st.secrets.get('LOT_SIZE', 0.01)),
-                            sl=round(st.session_state.sl_calc, PAIRS[pair]['digits']),
-                            tp=round(st.session_state.tp_calc, PAIRS[pair]['digits']),
-                            magic=int(st.secrets.get('MAGIC_NUMBER', 123456))
-                        )
-                        add_log('signal', f'SCORE {score:+d} → AUTO BUY {PAIRS[pair]["name"]} @ {closes[-1]:.5f} via MetaApi')
-                        if 'error' in result:
-                            add_log('error', f'Order error: {result["error"]}')
-                    elif score <= -min_s:
-                        st.session_state.last_signal = 'SELL'
-                        result = ma['api'].open_trade(
-                            ma['account_id'], pair, 'SELL',
-                            float(st.secrets.get('LOT_SIZE', 0.01)),
-                            sl=round(closes[-1] + atr[-1] * sl_m, PAIRS[pair]['digits']),
-                            tp=round(closes[-1] - atr[-1] * tp_m, PAIRS[pair]['digits']),
-                            magic=int(st.secrets.get('MAGIC_NUMBER', 123456))
-                        )
-                        add_log('signal', f'SCORE {score:+d} → AUTO SELL {PAIRS[pair]["name"]} @ {closes[-1]:.5f} via MetaApi')
-                        if 'error' in result:
-                            add_log('error', f'Order error: {result["error"]}')
+        # Tabel perbandingan
+        table_data = []
+        with st.spinner("Memuat tabel lengkap…"):
+            for lbl, c_iso in all_compare.items():
+                row = {"Negara": lbl.split(" ", 1)[1]}
+                for ind_name, ind_meta in INDICATORS.items():
+                    if ind_name == "GDP (PDB)":
+                        s = fetch_wb(c_iso, ind_meta["code"])
+                        v, yr = latest_value(s)
+                        row[ind_name] = f"{v/1e12:.2f}T" if v else "N/A"
+                    elif ind_name == "Neraca Perdagangan":
+                        s = fetch_wb(c_iso, ind_meta["code"])
+                        v, yr = latest_value(s)
+                        row[ind_name] = f"{v/1e9:.1f}B" if v else "N/A"
                     else:
-                        st.session_state.last_signal = 'WAIT'
+                        s = fetch_wb(c_iso, ind_meta["code"])
+                        v, yr = latest_value(s)
+                        row[ind_name] = f"{v:.2f}%" if v else "N/A"
+                table_data.append(row)
 
-                elif mode == 'limit' and not has_pos and limit_entry:
-                    try:
-                        le = float(limit_entry)
-                        price = ma['api'].get_price(ma['account_id'], pair)
-                        bid = price.get('bid', 0)
-                        cfg = PAIRS[pair]
-                        if abs(bid - le) < cfg['pip'] * 2:  # Toleransi 2 pip
-                            result = ma['api'].open_trade(
-                                ma['account_id'], pair, 'BUY',
-                                float(st.secrets.get('LOT_SIZE', 0.01)),
-                                magic=int(st.secrets.get('MAGIC_NUMBER', 123456))
-                            )
-                            add_log('signal', f'Limit {le} tersentuh @ {bid} → AUTO BUY via MetaApi')
-                            st.session_state.bot_active = False
-                            st.rerun()
-                        else:
-                            add_log('bot', f'Limit {le} — bid {bid:.5f}, menunggu...')
-                    except ValueError:
-                        pass
+        if table_data:
+            df = pd.DataFrame(table_data).set_index("Negara")
+            st.dataframe(
+                df,
+                use_container_width=True,
+            )
 
-        else:
-            # === MODE DEMO: Tampilkan info tanpa eksekusi ===
-            st.session_state.last_signal = 'DEMO'
-            st.session_state.ema_status = 'DEMO'
-            st.session_state.rsi_val = 50.0
-            st.session_state.atr_val = 0.0
-            add_log('bot', f'[DEMO] Monitoring {PAIRS[pair]["name"]} {tf} — isi MetaApi Token di Settings untuk eksekusi real')
+        st.markdown('<hr class="aero-divider">', unsafe_allow_html=True)
 
-    # ============================================================
-    # AUTO-REFRESH — trigger rerun setiap 5 detik saat bot aktif
-    # ============================================================
-    if st.session_state.bot_active:
-        import time
-        time.sleep(5)
-        st.rerun()
+    # ── Kalender Ekonomi ─────────────────────────────────────────────────────
+    if show_calendar:
+        st.markdown('<div class="aero-section-title">▸ KALENDER EKONOMI</div>', unsafe_allow_html=True)
+        st.markdown('<div class="aero-section-sub">Event makro berdampak tinggi — September 2026</div>', unsafe_allow_html=True)
 
-# ================================================================
-# RUN
-# ================================================================
-if __name__ == '__main__':
-    main()
+        filter_impact = st.radio(
+            "Filter Dampak",
+            ["SEMUA", "🔴 TINGGI", "🟡 SEDANG"],
+            horizontal=True,
+            key="cal_filter",
+        )
+
+        for ev in CALENDAR_EVENTS:
+            if filter_impact == "🔴 TINGGI" and ev["impact"] != "HIGH":
+                continue
+            if filter_impact == "🟡 SEDANG" and ev["impact"] not in ("HIGH", "MEDIUM"):
+                continue
+            ic = IMPACT_CLASS.get(ev["impact"], "cal-impact-low")
+            il = IMPACT_LABEL.get(ev["impact"], "🔵 RENDAH")
+            st.markdown(f"""
+<div class="cal-item">
+<div class="cal-date">{ev['date']}</div>
+<span class="{ic}">{il}</span>
+<div class="cal-event">
+<b style="color:#D1D5DB;">{ev['event']}</b>
+<span style="color:#374151;font-size:0.68rem;margin-left:0.5rem;">
+Est: {ev['forecast']} | Prev: {ev['prev']}
+</span>
+</div>
+</div>
+""", unsafe_allow_html=True)
+
+    # ── Footer ──────────────────────────────────────────────────────────────
+    st.markdown("""
+<div style="margin-top:2rem;padding-top:0.8rem;border-top:1px solid #1A2332;display:flex;justify-content:space-between;align-items:center;">
+<span style="font-family:'Share Tech Mono',monospace;font-size:0.6rem;color:#1E3A4A;letter-spacing:0.1em;">
+AEROVULPIS V4.1 ULTIMATE · ECONOMIC RADAR MODULE · BUILD STABLE
+</span>
+<span style="font-family:'Share Tech Mono',monospace;font-size:0.6rem;color:#1E3A4A;">
+SUMBER DATA: WORLD BANK OPEN DATA · IMF
+</span>
+</div>
+""", unsafe_allow_html=True)
+
+
+if __name__ == "__main__":
+    st.set_page_config(
+        page_title="Economic Radar · Aerovulpis",
+        page_icon="📡",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+    show()
