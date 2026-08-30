@@ -132,6 +132,116 @@ CALENDAR = [
     {"date":"30 Sep","event":"CPI Indonesia",           "iso":"ID","impact":"HIGH",  "est":"2.2%","prev":"2.13%"},
 ]
 
+# ── Calendar market sentiment ─────────────────────────────────────────────────
+# Logika: kombinasi aktual vs forecast (surprise) + CB stance + inflasi context
+
+def cal_sentiment(ev: dict, all_data: dict) -> tuple[str, str, str]:
+    """
+    Hitung prediksi market sentiment untuk satu event kalender.
+    Returns: (label, css_class, reasoning)
+    label    : "BULLISH" / "BEARISH" / "NEUTRAL"
+    css_class: "sent-bull" / "sent-bear" / "sent-neu"
+    reasoning: 1 kalimat singkat alasan
+    """
+    iso    = ev["iso"]
+    event  = ev["event"].upper()
+    est    = ev["est"].replace("%","").replace("K","000").replace("M","000000")
+    prev   = ev["prev"].replace("%","").replace("K","000").replace("M","000000")
+    impact = ev["impact"]
+    cb     = CB.get(iso, {})
+    stance = cb.get("stance", "NEUTRAL")
+    trend  = cb.get("trend", "HOLD")
+    dm     = all_data.get(iso, {})
+    inf_v  = dm.get("INF", {}).get("val")
+
+    # Parse numeric est dan prev jika memungkinkan
+    try:
+        est_n  = float(est)
+        prev_n = float(prev)
+        has_num = True
+    except Exception:
+        est_n = prev_n = 0
+        has_num = False
+
+    # Helper: apakah angka lebih tinggi = bagus untuk mata uang?
+    # Rate decision: hawkish (rate naik) = bullish mata uang
+    # GDP, PMI, Payrolls: lebih tinggi = bullish
+    # CPI/Inflasi: lebih tinggi = tergantung konteks CB
+    # Pengangguran: lebih rendah = bullish
+
+    is_rate   = any(x in event for x in ["RATE DECISION", "BI RATE", "FOMC", "RBA", "BOJ", "ECB", "BOE", "BCB", "BOK", "MAS", "SARB", "SAMA", "BANK NEGARA", "BANK INDONESIA", "BANK OF"])
+    is_cpi    = any(x in event for x in ["CPI", "INFLASI", "PCE"])
+    is_gdp    = "GDP" in event
+    is_pmi    = "PMI" in event
+    is_jobs   = any(x in event for x in ["PAYROLL", "PENGANGGURAN", "EMPLOYMENT"])
+    is_trade  = any(x in event for x in ["TRADE", "EKSPOR", "NERACA"])
+
+    if is_rate and has_num:
+        if est_n > prev_n:
+            return "BULLISH", "sent-bull", f"Rate naik {prev_n:.2f}% → {est_n:.2f}% — hawkish, mendukung penguatan {iso}."
+        elif est_n < prev_n:
+            return "BEARISH", "sent-bear", f"Rate turun {prev_n:.2f}% → {est_n:.2f}% — dovish, tekanan pada {iso}."
+        else:
+            return "NEUTRAL", "sent-neu", f"Rate hold {est_n:.2f}% — status quo, pasar fokus ke forward guidance."
+
+    if is_cpi and has_num:
+        if est_n > prev_n:
+            # Inflasi naik
+            if stance == "HAWKISH":
+                return "BULLISH", "sent-bull", f"CPI est {est_n:.1f}% > prev {prev_n:.1f}% — konfirmasi hawkish {cb.get('name',iso)}, bullish {iso}."
+            elif stance == "DOVISH":
+                return "BEARISH", "sent-bear", f"CPI est {est_n:.1f}% naik tapi CB dovish — mismatch, tekanan pada {iso}."
+            return "NEUTRAL", "sent-neu", f"CPI naik ke {est_n:.1f}% — tunggu respons {cb.get('name',iso)}."
+        elif est_n < prev_n:
+            if stance == "DOVISH":
+                return "BULLISH", "sent-bull", f"CPI turun ke {est_n:.1f}% — ruang pelonggaran terbuka, risk-on untuk aset {iso}."
+            elif stance == "HAWKISH":
+                return "BEARISH", "sent-bear", f"CPI turun ke {est_n:.1f}% — narratif hawkish melemah, tekanan pada {iso}."
+            return "NEUTRAL", "sent-neu", f"CPI turun ke {est_n:.1f}% — disinflasi berlanjut."
+        return "NEUTRAL", "sent-neu", "CPI sesuai ekspektasi — minimal dampak."
+
+    if is_gdp and has_num:
+        if est_n > prev_n:
+            return "BULLISH", "sent-bull", f"GDP est {est_n:.1f}% > prev {prev_n:.1f}% — akselerasi pertumbuhan, bullish ekuitas dan {iso}."
+        elif est_n < prev_n:
+            return "BEARISH", "sent-bear", f"GDP est {est_n:.1f}% < prev {prev_n:.1f}% — perlambatan, bearish risiko aset {iso}."
+        return "NEUTRAL", "sent-neu", "GDP sesuai ekspektasi — minimal market impact."
+
+    if is_pmi and has_num:
+        bullish_zone = est_n > 50
+        improving    = est_n > prev_n
+        if bullish_zone and improving:
+            return "BULLISH", "sent-bull", f"PMI {est_n:.1f} > 50 dan naik dari {prev_n:.1f} — ekspansi manufaktur, bullish."
+        elif bullish_zone and not improving:
+            return "NEUTRAL", "sent-neu", f"PMI {est_n:.1f} masih ekspansi tapi melambat dari {prev_n:.1f}."
+        elif not bullish_zone and est_n > prev_n:
+            return "NEUTRAL", "sent-neu", f"PMI {est_n:.1f} kontraksi tapi membaik dari {prev_n:.1f} — potensi pemulihan."
+        return "BEARISH", "sent-bear", f"PMI {est_n:.1f} kontraksi dan turun dari {prev_n:.1f} — bearish."
+
+    if is_jobs and has_num:
+        # Payrolls: lebih tinggi = bullish. Pengangguran: lebih rendah = bullish
+        is_unemp = "PENGANGGURAN" in event or "UNEMPLOY" in event
+        if is_unemp:
+            if est_n < prev_n:
+                return "BULLISH", "sent-bull", f"Pengangguran turun ke {est_n:.1f}% dari {prev_n:.1f}% — pasar kerja menguat."
+            elif est_n > prev_n:
+                return "BEARISH", "sent-bear", f"Pengangguran naik ke {est_n:.1f}% — pelemahan lapangan kerja."
+            return "NEUTRAL", "sent-neu", "Pengangguran stagnan."
+        else:
+            if est_n > prev_n:
+                return "BULLISH", "sent-bull", f"Payrolls {est} > prev {prev} — pasar kerja solid, bullish USD."
+            elif est_n < prev_n:
+                return "BEARISH", "sent-bear", f"Payrolls {est} < prev {prev} — perlambatan tenaga kerja."
+            return "NEUTRAL", "sent-neu", "Payrolls sesuai ekspektasi."
+
+    # Fallback: pakai CB stance
+    if stance == "HAWKISH" and trend in ("HIKE","HOLD"):
+        return "BULLISH", "sent-bull", f"CB {cb.get('name',iso)} hawkish — supportive untuk {iso}."
+    if stance == "DOVISH" or trend == "CUT":
+        return "BEARISH", "sent-bear", f"CB {cb.get('name',iso)} dovish/cut — tekanan pada {iso}."
+    return "NEUTRAL", "sent-neu", "Dampak tergantung data aktual saat rilis."
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  CSS
 # ══════════════════════════════════════════════════════════════════════════════
@@ -278,6 +388,18 @@ body{font-family:'Exo 2',sans-serif;}
 .carry-pair{font-family:'Share Tech Mono',monospace;font-size:.65rem;color:#4A9EBF;min-width:100px;}
 .carry-diff{font-family:'Share Tech Mono',monospace;font-size:.85rem;font-weight:700;color:#00FFC8;min-width:55px;}
 .carry-desc{font-size:.65rem;color:#2D4050;flex:1;}
+
+
+/* SENTIMENT BADGES */
+.sent-bull{font-family:'Share Tech Mono',monospace;font-size:.52rem;padding:1px 6px;
+    border-radius:1px;font-weight:700;background:rgba(0,255,200,.08);
+    color:#00FFC8;border:1px solid #00FFC830;}
+.sent-bear{font-family:'Share Tech Mono',monospace;font-size:.52rem;padding:1px 6px;
+    border-radius:1px;font-weight:700;background:rgba(255,107,107,.08);
+    color:#FF6B6B;border:1px solid #FF6B6B30;}
+.sent-neu{font-family:'Share Tech Mono',monospace;font-size:.52rem;padding:1px 6px;
+    border-radius:1px;font-weight:700;background:rgba(255,217,61,.08);
+    color:#FFD93D;border:1px solid #FFD93D30;}
 
 /* FOOTER */
 .footer{margin-top:2.5rem;padding:.6rem 0;border-top:1px solid #0E1826;
@@ -541,15 +663,11 @@ BASE = dict(
     xaxis=dict(gridcolor="#0E1826",linecolor="#0E1826",tickcolor="#0E1826",tickfont=dict(size=8)),
     yaxis=dict(gridcolor="#0E1826",linecolor="#0E1826",tickcolor="#0E1826",tickfont=dict(size=8)),
     legend=dict(bgcolor="rgba(0,0,0,0)",font=dict(size=8)),
-    dragmode="pan",
 )
 
 # Charts are pan-only — no zoom, no modebar
 CHART_CFG = {
-    "displayModeBar": False,
-    "scrollZoom": False,
-    "doubleClick": "reset",
-    "dragmode": "pan",
+    "staticPlot": True,
 }
 
 # Radar keeps interactivity (no CHART_CFG override)
@@ -593,7 +711,6 @@ def radar_chart(labels, values, name):
                 color="#1A2D3A",range=[0,100],tickfont=dict(size=7)),
             angularaxis=dict(gridcolor="#0E1826",linecolor="#0E1826"),
         ),
-        dragmode="pan",
         showlegend=False,
     )
     return fig
@@ -942,22 +1059,58 @@ def s_cb(selected_isos):
 <div class="carry-desc">Long {cbh['name']} ({cbh['rate']:.2f}%) · Short {cbl['name']} ({cbl['rate']:.2f}%)</div>
 </div>""", unsafe_allow_html=True)
 
-def s_calendar():
+def s_calendar(all_data: dict):
     st.markdown('<div class="sec-title">KALENDER EKONOMI</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sec-sub">EVENT MAKRO BERDAMPAK TINGGI · SEPTEMBER 2026</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-sub">EVENT MAKRO BERDAMPAK TINGGI · PREDIKSI SENTIMENT · SEPTEMBER 2026</div>', unsafe_allow_html=True)
 
-    c1, c2 = st.columns([1,2])
+    c1, c2, c3 = st.columns([1,1.5,1.5])
     with c1:
-        imp_f = st.radio("Filter Dampak", ["SEMUA","HIGH","MEDIUM"], key="cal_imp_v3", horizontal=False)
+        imp_f  = st.radio("Filter Dampak", ["SEMUA","HIGH","MEDIUM"], key="cal_imp_v3", horizontal=False)
     with c2:
-        iso_f = st.multiselect("Filter Negara (ISO)", list(set(e["iso"] for e in CALENDAR)), key="cal_iso_v3")
+        iso_f  = st.multiselect("Filter Negara", list(set(e["iso"] for e in CALENDAR)), key="cal_iso_v3")
+    with c3:
+        sent_f = st.radio("Filter Sentiment", ["SEMUA","BULLISH","BEARISH","NEUTRAL"], key="cal_sent_v3", horizontal=False)
 
     imp_cls = {"HIGH":"imp-h","MEDIUM":"imp-m","LOW":"imp-l"}
     imp_lbl = {"HIGH":"HIGH","MEDIUM":"MED","LOW":"LOW"}
 
+    # Summary counts
+    bull_n = bear_n = neu_n = 0
+    rows = []
     for ev in CALENDAR:
+        slbl, scls, sreason = cal_sentiment(ev, all_data)
+        if slbl == "BULLISH": bull_n += 1
+        elif slbl == "BEARISH": bear_n += 1
+        else: neu_n += 1
+        rows.append((ev, slbl, scls, sreason))
+
+    # Sentiment summary bar
+    total_ev = len(rows)
+    bp = round(bull_n/total_ev*100)
+    rp = round(bear_n/total_ev*100)
+    np_ = 100 - bp - rp
+    st.markdown(f"""
+<div class="ibox" style="--lc:#4FC3F7;margin-bottom:.8rem;">
+<div class="ibox-t">AGGREGATE MARKET SENTIMENT — SEPTEMBER 2026 ({total_ev} EVENT)</div>
+<div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.4rem;">
+<span class="sent-bull">{bull_n} BULLISH</span>
+<span class="sent-bear">{bear_n} BEARISH</span>
+<span class="sent-neu">{neu_n} NEUTRAL</span>
+</div>
+<div style="height:5px;background:#0E1826;border-radius:2px;display:flex;overflow:hidden;">
+<div style="height:5px;width:{bp}%;background:#00FFC8;"></div>
+<div style="height:5px;width:{np_}%;background:#FFD93D;"></div>
+<div style="height:5px;width:{rp}%;background:#FF6B6B;"></div>
+</div>
+<div style="font-family:'Share Tech Mono',monospace;font-size:.52rem;color:#1A2D3A;margin-top:.3rem;">
+BULLISH {bp}% · NEUTRAL {np_}% · BEARISH {rp}%
+</div>
+</div>""", unsafe_allow_html=True)
+
+    for (ev, slbl, scls, sreason) in rows:
         if imp_f != "SEMUA" and ev["impact"] != imp_f: continue
         if iso_f and ev["iso"] not in iso_f: continue
+        if sent_f != "SEMUA" and slbl != sent_f: continue
         ic = imp_cls.get(ev["impact"],"imp-l")
         il = imp_lbl.get(ev["impact"],"LOW")
         n  = [k for k,v in COUNTRIES.items() if v==ev["iso"]]
@@ -965,12 +1118,16 @@ def s_calendar():
         st.markdown(f"""
 <div class="cal-row">
 <div class="cal-date">{ev['date']}</div>
-<div class="cal-iso">{ev['iso']}</div>
-<div style="flex:1;">
-<div class="cal-evt">{ev['event']} <span style="color:#1A2D3A;font-size:.6rem;">· {country_name}</span></div>
+<div class="cal-iso" style="min-width:26px;">{ev['iso']}</div>
+<div style="flex:1;min-width:0;">
+<div class="cal-evt">{ev['event']} <span style="color:#1A2D3A;font-size:.58rem;">· {country_name}</span></div>
 <span class="cal-fcast">EST: {ev['est']} · PREV: {ev['prev']}</span>
+<div style="font-family:'Share Tech Mono',monospace;font-size:.55rem;color:#2D4050;margin-top:.15rem;">{sreason}</div>
 </div>
+<div style="display:flex;flex-direction:column;align-items:flex-end;gap:.25rem;min-width:60px;">
 <span class="{ic}">{il}</span>
+<span class="{scls}">{slbl}</span>
+</div>
 </div>""", unsafe_allow_html=True)
 
 def s_compare(all_data, compare_names, main_name):
@@ -1078,7 +1235,7 @@ def main():
     with tabs[5]:
         cb_isos = list(dict.fromkeys([main_iso]+[COUNTRIES[n] for n in cmp_names]+["US","CN","JP","DE","GB"]))
         s_cb(cb_isos)
-    with tabs[6]: s_calendar()
+    with tabs[6]: s_calendar(all_data)
     with tabs[7]:
         if cmp_names: s_compare(all_data, cmp_names, main_name)
         else: st.markdown('<div class="ibox" style="--lc:#1A2D3A;"><div class="ibox-b">Pilih minimal 1 negara pembanding di atas.</div></div>', unsafe_allow_html=True)
