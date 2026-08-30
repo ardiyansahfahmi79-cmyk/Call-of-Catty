@@ -33,6 +33,22 @@ INDICATORS = {
 
 WEIGHTS = {"GDP":0.25,"INF":0.25,"UNP":0.20,"DEBT":0.15,"TRADE":0.15}
 
+def sanitize_multiselect_values(values, options, limit=None):
+    """Return only unique, current options; never let stale widget state crash the app."""
+    if isinstance(values, str):
+        candidates = [values]
+    elif isinstance(values, (list, tuple, set)):
+        candidates = list(values)
+    else:
+        candidates = []
+    option_set = set(options)
+    valid = []
+    for value in candidates:
+        if value in option_set and value not in valid:
+            valid.append(value)
+    return valid[:limit] if limit is not None else valid
+
+
 COUNTRIES = {
     "Indonesia":       "ID",
     "Amerika Serikat": "US",
@@ -1189,13 +1205,13 @@ def main():
         # Nilai tersimpan harus selalu merupakan subset opsi saat negara utama berubah.
         # Ini mencegah StreamlitAPIException ketika negara utama dipilih sebagai pembanding.
         if "cmp_v3" not in st.session_state:
-            st.session_state["cmp_v3"] = [
-                name for name in ("Amerika Serikat", "China") if name in compare_options
-            ]
+            st.session_state["cmp_v3"] = sanitize_multiselect_values(
+                ("Amerika Serikat", "China"), compare_options, limit=5
+            )
         else:
-            st.session_state["cmp_v3"] = [
-                name for name in st.session_state["cmp_v3"] if name in compare_options
-            ]
+            st.session_state["cmp_v3"] = sanitize_multiselect_values(
+                st.session_state["cmp_v3"], compare_options, limit=5
+            )
         cmp_names = st.multiselect(
             "Bandingkan (maks 5)",
             compare_options,
