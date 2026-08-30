@@ -1185,11 +1185,22 @@ def main():
     with c1:
         main_name = st.selectbox("Negara Utama", list(COUNTRIES.keys()), key="main_v3")
     with c2:
+        compare_options = [k for k in COUNTRIES if k != main_name]
+        # Nilai tersimpan harus selalu merupakan subset opsi saat negara utama berubah.
+        # Ini mencegah StreamlitAPIException ketika negara utama dipilih sebagai pembanding.
+        if "cmp_v3" not in st.session_state:
+            st.session_state["cmp_v3"] = [
+                name for name in ("Amerika Serikat", "China") if name in compare_options
+            ]
+        else:
+            st.session_state["cmp_v3"] = [
+                name for name in st.session_state["cmp_v3"] if name in compare_options
+            ]
         cmp_names = st.multiselect(
             "Bandingkan (maks 5)",
-            [k for k in COUNTRIES if k != main_name],
-            default=["Amerika Serikat","China"],
-            max_selections=5, key="cmp_v3"
+            compare_options,
+            max_selections=5,
+            key="cmp_v3"
         )
     with c3:
         st.markdown('<div style="height:1.7rem;"></div>', unsafe_allow_html=True)
