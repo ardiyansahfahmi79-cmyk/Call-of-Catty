@@ -473,6 +473,33 @@ def latest(series):
             return d["value"], d["year"]
     return None, None
 
+
+def economic_data_status(dm):
+    """Return a small, user-facing status for the selected country's indicators."""
+    keys = list(INDICATORS)
+    available = sum(bool(dm.get(key, {}).get("series")) for key in keys)
+    if available == 0:
+        return "empty", 0, len(keys)
+    if available < len(keys):
+        return "partial", available, len(keys)
+    return "complete", available, len(keys)
+
+
+def render_economic_data_status(country_name, dm):
+    """Show a friendly empty/partial state without exposing provider errors."""
+    status, available, total = economic_data_status(dm)
+    if status == "empty":
+        st.info(
+            f"Data ekonomi untuk {country_name} belum tersedia pada indikator yang dipilih. "
+            "Silakan coba negara lain, indikator lain, atau rentang waktu berbeda."
+        )
+    elif status == "partial":
+        st.info(
+            f"Sebagian data {country_name} tersedia ({available} dari {total} indikator). "
+            "Indikator yang belum tersedia tidak ditampilkan."
+        )
+
+
 def fmt(v, f):
     if v is None: return "N/A"
     if f == "T":  return f"{v/1e12:.2f} T USD"
@@ -760,6 +787,7 @@ def dual_line(ser_a, ser_b, color_a, color_b, label_a, label_b, title):
 def s_overview(country_name, dm):
     st.markdown(f'<div class="sec-title">INDIKATOR UTAMA — {country_name.upper()}</div>', unsafe_allow_html=True)
     st.markdown('<div class="sec-sub">WORLD BANK OPEN DATA · CACHE 1 JAM · DATA TERBARU TERSEDIA</div>', unsafe_allow_html=True)
+    render_economic_data_status(country_name, dm)
 
     cols = st.columns(5)
     keys = ["GDP","INF","UNP","DEBT","TRADE"]
