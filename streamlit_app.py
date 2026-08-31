@@ -1,5 +1,5 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 import os
 import yfinance as yf
 import pandas as pd
@@ -127,14 +127,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Konfigurasi Gemini dengan transport='rest' untuk mengatasi error 404
-# Menggunakan penanganan rahasia yang fleksibel (Secrets atau .env)
+# Konfigurasi Gemini menggunakan SDK modern dan rahasia Streamlit atau .env.
 api_key = st.secrets.get("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY")
-if api_key:
-    # Konfigurasi API dengan jalur REST agar lebih stabil sesuai instruksi Anda
-    genai.configure(api_key=api_key, transport='rest')
-else:
-    st.sidebar.error("⚠️ GOOGLE_API_KEY tidak ditemukan di file .env atau Secrets")
+if not api_key:
+    st.sidebar.error("⚠️ Layanan AI belum aktif. Konfigurasi akses belum tersedia.")
 
 # ====================== FUNGSI DATA & INDIKATOR ======================
 def get_market_data(ticker_symbol):
@@ -260,18 +256,16 @@ Jawab dalam bahasa Indonesia yang jelas dan profesional.
 """
 
     try:
-        # Gunakan nama model lengkap sesuai instruksi Anda
-        model = genai.GenerativeModel(model_name=MODEL_NAME)
-        response = model.generate_content(full_prompt)
-        if response and response.text:
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=full_prompt,
+        )
+        if response and getattr(response, "text", None):
             return response.text
-        else:
-            return "⚠️ Gemini tidak memberikan respons teks. Silakan coba lagi."
-    except Exception as e:
-        error_msg = str(e)
-        if "404" in error_msg or "not found" in error_msg.lower():
-            return f"⚠️ Chatbot error (404): Model '{MODEL_NAME}' tidak ditemukan. Pastikan API Key Anda memiliki akses ke Gemini API di Google AI Studio."
-        return f"⚠️ Chatbot error: {error_msg}. Pastikan API Key valid dan koneksi internet stabil."
+        return "⚠️ Gemini tidak memberikan respons teks. Silakan coba lagi."
+    except Exception:
+        return "⚠️ Layanan AI sedang tidak dapat merespons. Silakan coba lagi nanti."
 
 # ====================== INSTRUMEN ======================
 instruments = {
