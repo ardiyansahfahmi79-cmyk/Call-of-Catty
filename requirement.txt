@@ -1,4 +1,0 @@
-requests
-pandas
-plotly
-yfinance>=0.2.36
