@@ -1,1211 +1,1321 @@
-# ==============================================================================
-# aerovulpis_terminal.py — AEROVULPIS TERMINAL v4.1
-# Quantitative Market Intelligence System · Streamlit Edition
-# ==============================================================================
+"""
+economic_radar_v3.py — Aerovulpis · Economic Radar (Standalone Prototype)
+Run : streamlit run economic_radar_v3.py
+Deps: streamlit requests pandas plotly
+"""
 
 import streamlit as st
-import numpy as np
-import pandas as pd
-import pandas_ta as ta
 import requests
+import pandas as pd
 import plotly.graph_objects as go
-from scipy.signal import savgol_filter
-import streamlit.components.v1 as components
-import json
+import re as _re
 
 st.set_page_config(
-    page_title="AEROVULPIS TERMINAL",
-    page_icon="◈",
+    page_title="Economic Radar · Aerovulpis",
+    page_icon="📡",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
-# ==============================================================================
-# GLOBAL CSS
-# ==============================================================================
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+# ══════════════════════════════════════════════════════════════════════════════
+#  CONSTANTS
+# ══════════════════════════════════════════════════════════════════════════════
 
-html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
-    background:#070A12 !important;
-    font-family:'Share Tech Mono','Courier New',monospace !important;
-    color:#C8D8F0 !important;
-}
+WB = "https://api.worldbank.org/v2/country/{iso}/indicator/{ind}?format=json&mrnev=10&per_page=10"
 
-[data-testid="stSidebar"] {
-    display:none !important;
-}
-[data-testid="collapsedControl"] {
-    display:none !important;
-}
-[data-testid="stDecoration"] {
-    display:none !important;
-}
-[data-testid="stHeader"] {
-    background:transparent !important;
-    height:0 !important;
-}
-footer {
-    display:none !important;
-}
-#MainMenu {
-    display:none !important;
+INDICATORS = {
+    "GDP":   {"code":"NY.GDP.MKTP.CD",    "unit":"USD","fmt":"T",  "label":"GDP (PDB)",          "color":"#00FFC8","sym":"[G]"},
+    "INF":   {"code":"FP.CPI.TOTL.ZG",    "unit":"%",  "fmt":"%",  "label":"Inflasi",             "color":"#FF6B6B","sym":"[I]"},
+    "UNP":   {"code":"SL.UEM.TOTL.ZS",    "unit":"%",  "fmt":"%",  "label":"Pengangguran",        "color":"#FFD93D","sym":"[U]"},
+    "DEBT":  {"code":"GC.DOD.TOTL.GD.ZS", "unit":"%",  "fmt":"%",  "label":"Utang/PDB",           "color":"#C77DFF","sym":"[D]"},
+    "TRADE": {"code":"BN.CAB.XOKA.CD",    "unit":"USD","fmt":"B",  "label":"Neraca Perdagangan",  "color":"#4FC3F7","sym":"[T]"},
 }
 
-[data-testid="stMain"] {
-    background:#070A12 !important;
-    background-image: 
-        radial-gradient(ellipse 60% 35% at 10% 0%,rgba(0,225,255,0.05),transparent),
-        radial-gradient(ellipse 50% 30% at 90% 5%,rgba(168,85,247,0.05),transparent) !important;
+WEIGHTS = {"GDP":0.25,"INF":0.25,"UNP":0.20,"DEBT":0.15,"TRADE":0.15}
+
+def sanitize_multiselect_values(values, options, limit=None):
+    """Return only unique, current options; never let stale widget state crash the app."""
+    if isinstance(values, str):
+        candidates = [values]
+    elif isinstance(values, (list, tuple, set)):
+        candidates = list(values)
+    else:
+        candidates = []
+    option_set = set(options)
+    valid = []
+    for value in candidates:
+        if value in option_set and value not in valid:
+            valid.append(value)
+    return valid[:limit] if limit is not None else valid
+
+
+COUNTRIES = {
+    "Indonesia":       "ID",
+    "Amerika Serikat": "US",
+    "China":           "CN",
+    "Jepang":          "JP",
+    "Jerman":          "DE",
+    "Inggris":         "GB",
+    "Australia":       "AU",
+    "India":           "IN",
+    "Korea Selatan":   "KR",
+    "Singapura":       "SG",
+    "Malaysia":        "MY",
+    "Thailand":        "TH",
+    "Brasil":          "BR",
+    "Afrika Selatan":  "ZA",
+    "Arab Saudi":      "SA",
 }
 
-div.block-container {
-    padding:0 1rem 1.5rem !important;
-    max-width:100% !important;
+FLAGS = {
+    "ID":"ID","US":"US","CN":"CN","JP":"JP","DE":"DE",
+    "GB":"GB","AU":"AU","IN":"IN","KR":"KR","SG":"SG",
+    "MY":"MY","TH":"TH","BR":"BR","ZA":"ZA","SA":"SA",
 }
 
-[data-testid="stVerticalBlock"] > div {
-    gap:0 !important;
-}
-[data-testid="column"] {
-    padding:0 4px !important;
-}
-div[data-testid="stVerticalBlockBorderWrapper"] {
-    padding:0 !important;
-}
-.stMarkdown {
-    margin:0 !important;
-    padding:0 !important;
-}
-div[data-testid="stHorizontalBlock"] {
-    gap:0px !important; 
+RISK = {
+    "INF":  {"low":3,  "med":6},
+    "UNP":  {"low":5,  "med":10},
+    "DEBT": {"low":60, "med":90},
 }
 
-/* ── BRAND compact — rapat ke ticker ── */
-.av-brand-wrap {
-    padding:4px 0 0;
-    margin-bottom:0;
-}
-.av-brand-line {
-    display:flex;
-    align-items:baseline;
-    gap:8px;
-}
-.av-prefix {
-    font-size:7px;
-    letter-spacing:3px;
-    color:#1A3A5A;
-    border:1px solid #1A3A5A;
-    padding:1px 5px;
-    border-radius:2px;
-}
-.av-title {
-    font-size:16px;
-    letter-spacing:3px;
-    color:#E8F1FF;
-    font-weight:700;
-    font-family:'Share Tech Mono',monospace;
-    line-height:1.2;
-}
-.av-title .acc {
-    color:#00E1FF;
-}
-.av-ver {
-    font-size:7px;
-    letter-spacing:2px;
-    color:#2A4060;
-}
-.av-tagline {
-    font-size:6px;
-    letter-spacing:2px;
-    color:#1A3A5A;
-    margin-top:1px;
-    margin-bottom:0;
+CB = {
+    "ID":{"name":"Bank Indonesia",    "rate":6.25,"stance":"NEUTRAL", "next":"18 Sep 2026","trend":"HOLD"},
+    "US":{"name":"Federal Reserve",   "rate":5.25,"stance":"HAWKISH", "next":"18 Sep 2026","trend":"CUT"},
+    "CN":{"name":"PBoC",              "rate":3.10,"stance":"DOVISH",  "next":"20 Sep 2026","trend":"CUT"},
+    "JP":{"name":"Bank of Japan",     "rate":0.25,"stance":"HAWKISH", "next":"20 Sep 2026","trend":"HIKE"},
+    "DE":{"name":"ECB",               "rate":3.65,"stance":"DOVISH",  "next":"12 Sep 2026","trend":"CUT"},
+    "GB":{"name":"Bank of England",   "rate":5.00,"stance":"NEUTRAL", "next":"19 Sep 2026","trend":"CUT"},
+    "AU":{"name":"RBA",               "rate":4.35,"stance":"NEUTRAL", "next":"04 Sep 2026","trend":"HOLD"},
+    "IN":{"name":"Reserve Bank India","rate":6.50,"stance":"NEUTRAL", "next":"06 Sep 2026","trend":"CUT"},
+    "KR":{"name":"Bank of Korea",     "rate":3.25,"stance":"DOVISH",  "next":"22 Sep 2026","trend":"CUT"},
+    "SG":{"name":"MAS",               "rate":3.68,"stance":"NEUTRAL", "next":"Oct 2026",   "trend":"HOLD"},
+    "MY":{"name":"Bank Negara",       "rate":3.00,"stance":"NEUTRAL", "next":"05 Sep 2026","trend":"HOLD"},
+    "TH":{"name":"Bank of Thailand",  "rate":2.50,"stance":"DOVISH",  "next":"17 Sep 2026","trend":"CUT"},
+    "BR":{"name":"BCB",               "rate":10.50,"stance":"HAWKISH","next":"17 Sep 2026","trend":"HIKE"},
+    "ZA":{"name":"SARB",              "rate":8.25,"stance":"NEUTRAL", "next":"19 Sep 2026","trend":"CUT"},
+    "SA":{"name":"SAMA",              "rate":6.00,"stance":"HAWKISH", "next":"Nov 2026",   "trend":"HOLD"},
 }
 
-/* Zero gap antara semua elemen atas */
-div.block-container > div > div > div {
-    margin-bottom:0 !important;
-}
-iframe {
-    display:block;
-    margin:0 !important;
-}
-
-/* ── SECTION LABEL (CSS dipertahankan tapi penggunaannya dihapus di Python) ── */
-.av-sec {
-    font-size:7px;
-    letter-spacing:2px;
-    color:#1A3060;
-    padding:4px 0 2px;
-    font-family:'Share Tech Mono',monospace;
-    margin:0;
-}
-
-/* ── PANEL (Global) ── */
-.av-panel {
-    background:#09111E;
-    border:1px solid #111827;
-    border-radius:8px;
-    padding:12px;
-    position:relative;
-    overflow:hidden;
-    margin-bottom:8px;
-}
-.av-panel::before {
-    content:"";
-    position:absolute;
-    top:0; left:0; right:0;
-    height:1px;
-    background:linear-gradient(90deg,transparent,rgba(0,225,255,0.18),transparent);
+SURPRISE = {
+    "ID":[("GDP Q2",4.90,5.10,"2 Agu"),("Inflasi CPI",2.13,2.00,"1 Agu"),("PMI Manufaktur",51.2,50.8,"1 Agu")],
+    "US":[("Nonfarm Payrolls",175,206,"2 Agu"),("CPI",2.90,3.10,"13 Jul"),("GDP",2.80,2.40,"26 Jul")],
+    "CN":[("CPI",0.20,0.50,"9 Agu"),("GDP",4.70,5.10,"15 Jul"),("PMI",49.40,49.50,"31 Jul")],
+    "JP":[("CPI",2.80,2.60,"19 Jul"),("GDP",0.40,0.50,"15 Agu"),("PMI",49.90,50.10,"1 Agu")],
+    "DE":[("CPI",2.30,2.50,"14 Agu"),("GDP",-0.10,0.10,"30 Agu"),("PMI",42.40,43.00,"1 Agu")],
+    "GB":[("CPI",2.00,2.20,"16 Jul"),("GDP",0.60,0.50,"10 Agu"),("PMI",52.10,51.50,"1 Agu")],
+    "AU":[("CPI",3.80,3.60,"31 Jul"),("GDP",1.10,1.30,"5 Jun"),("Pengangguran",4.10,4.00,"15 Agu")],
+    "IN":[("GDP",6.70,6.50,"30 Mei"),("CPI",3.54,3.70,"12 Jul"),("PMI",57.50,57.00,"1 Agu")],
+    "KR":[("GDP",0.60,0.50,"25 Jul"),("CPI",2.60,2.40,"2 Agu"),("Ekspor",-9.9,-5.0,"1 Agu")],
+    "SG":[("GDP",2.90,2.50,"12 Jul"),("CPI",2.40,2.60,"23 Jul"),("Ekspor",7.30,5.00,"17 Jul")],
+    "MY":[("GDP",4.40,4.20,"16 Agu"),("CPI",1.90,2.00,"23 Jul"),("Ekspor",4.10,3.50,"30 Jul")],
+    "TH":[("GDP",2.30,2.50,"19 Agu"),("CPI",0.50,0.60,"5 Agu"),("Ekspor",8.10,6.00,"22 Jul")],
+    "BR":[("CPI",4.50,4.20,"9 Agu"),("GDP",2.50,2.20,"30 Agu"),("Pengangguran",6.90,7.20,"30 Agu")],
+    "ZA":[("CPI",4.60,4.90,"24 Jul"),("GDP",0.40,0.30,"4 Jun"),("Pengangguran",32.90,33.50,"30 Jun")],
+    "SA":[("GDP",2.60,2.30,"30 Jul"),("CPI",2.30,2.50,"11 Jul"),("PMI",56.40,55.00,"5 Agu")],
 }
 
-/* ── SELECTBOX → neon cyan dropdown ── */
-[data-testid="stSelectbox"] label {
-    display:none !important;
-}
-[data-testid="stSelectbox"] {
-    margin-bottom:0 !important;
-}
-[data-testid="stSelectbox"] > div > div {
-    background:#09111E !important;
-    border:1px solid rgba(0,225,255,0.3) !important;
-    border-radius:5px !important;
-    color:#00E1FF !important;
-    font-family:'Share Tech Mono',monospace !important;
-    font-size:11px !important;
-    letter-spacing:1px !important;
-    min-height:36px !important;
-    box-shadow:0 0 8px rgba(0,225,255,0.12) !important;
-    cursor:pointer !important;
-}
-[data-testid="stSelectbox"] > div > div:hover {
-    border-color:#00E1FF !important;
-    box-shadow:0 0 14px rgba(0,225,255,0.28) !important;
-}
-/* Arrow */
-[data-testid="stSelectbox"] svg {
-    fill:#00E1FF !important;
-}
-/* Input field di dalam selectbox */
-[data-baseweb="select"] input {
-    pointer-events:none !important;
-    caret-color:transparent !important;
-    cursor:pointer !important;
-    user-select:none !important;
-}
-/* Value text */
-[data-baseweb="select"] [data-testid="stMarkdownContainer"] p, 
-[data-baseweb="select"] span {
-    color:#00E1FF !important;
-    font-family:'Share Tech Mono',monospace !important;
-    letter-spacing:1px !important;
-}
-/* Dropdown menu */
-[data-baseweb="popover"] [data-baseweb="menu"] {
-    background:#09111E !important;
-    border:1px solid rgba(0,225,255,0.25) !important;
-    border-radius:6px !important;
-}
-[data-baseweb="option"] {
-    background:#09111E !important;
-    color:#8BA0C0 !important;
-    font-family:'Share Tech Mono',monospace !important;
-    font-size:11px !important;
-    border-bottom:1px solid #0E1422 !important;
-    cursor:pointer !important;
-}
-[data-baseweb="option"]:hover,
-[data-baseweb="option"][aria-selected="true"] {
-    background:rgba(0,225,255,0.10) !important;
-    color:#00E1FF !important;
+PAIRS = {
+    "EUR/USD": {"iso":["DE","US"],"drivers":["INF","DEBT"],  "logic":"eur_usd"},
+    "USD/JPY": {"iso":["US","JP"],"drivers":["INF","UNP"],   "logic":"usd_jpy"},
+    "GBP/USD": {"iso":["GB","US"],"drivers":["INF","GDP"],   "logic":"gbp_usd"},
+    "AUD/USD": {"iso":["AU","US"],"drivers":["TRADE","INF"], "logic":"aud_usd"},
+    "USD/CNH": {"iso":["US","CN"],"drivers":["TRADE","GDP"], "logic":"usd_cnh"},
+    "USD/IDR": {"iso":["US","ID"],"drivers":["INF","DEBT"],  "logic":"usd_idr"},
+    "XAU/USD": {"iso":["US"],     "drivers":["INF","DEBT"],  "logic":"gold"},
+    "US500":   {"iso":["US"],     "drivers":["GDP","UNP","INF"],"logic":"equity"},
+    "BTC/USD": {"iso":["US"],     "drivers":["INF","DEBT"],  "logic":"crypto"},
 }
 
-/* ── SELECTOR LABEL ── */
-.av-sel-label {
-    font-size:8px;
-    letter-spacing:1.5px;
-    color:#2A4060;
-    margin-bottom:3px;
-    font-family:'Share Tech Mono',monospace;
-}
-
-/* ── BUTTONS (AI, trade, dll) ── */
-[data-testid="stButton"] > button {
-    background:linear-gradient(135deg,rgba(0,225,255,0.15),rgba(168,85,247,0.15)) !important;
-    color:#00E1FF !important;
-    font-weight:700 !important;
-    font-family:'Share Tech Mono',monospace !important;
-    font-size:10px !important;
-    letter-spacing:1px !important;
-    border:1px solid rgba(0,225,255,0.4) !important;
-    border-radius:4px !important;
-    padding:6px 10px !important;
-    transition:all 0.15s ease !important;
-}
-[data-testid="stButton"] > button:hover {
-    background:rgba(0,225,255,0.22) !important;
-    border-color:#00E1FF !important;
-    box-shadow:0 0 10px rgba(0,225,255,0.3) !important;
-}
-
-/* ── TEXT INPUT ── */
-[data-testid="stTextInput"] label {
-    display:none !important;
-}
-[data-testid="stTextInput"] input {
-    background:#07101C !important;
-    border:1px solid #1A2540 !important;
-    border-radius:5px !important;
-    color:#C8D8F0 !important;
-    font-family:'Share Tech Mono',monospace !important;
-    font-size:11px !important;
-}
-[data-testid="stTextInput"] input::placeholder {
-    color:#2A3A54 !important;
-}
-
-/* ── AI RESULT ── */
-.av-ai-result {
-    background:#07101C;
-    border:1px solid #1A2540;
-    border-left:2px solid #00E1FF;
-    padding:12px 14px;
-    border-radius:5px;
-    font-size:11px;
-    line-height:1.7;
-    color:#8BA0C0;
-    letter-spacing:0.3px;
-    font-family:'Share Tech Mono',monospace;
-    margin-top:8px;
-}
-
-/* ── TRADE CARD ── */
-.av-trade-card {
-    background:#09111E;
-    border:1px solid #111827;
-    border-radius:8px;
-    padding:12px;
-    position:relative;
-    overflow:hidden;
-    margin-bottom:8px;
-}
-.av-trade-card::before {
-    content:"";
-    position:absolute;
-    top:0; left:0; right:0;
-    height:1px;
-    background:linear-gradient(90deg,transparent,rgba(0,225,255,0.2),transparent);
-}
-.av-trade-symbol {
-    font-size:13px;
-    font-weight:700;
-    color:#E8F1FF;
-    letter-spacing:1px;
-}
-.av-dir-buy {
-    font-size:9px;
-    padding:3px 8px;
-    border-radius:3px;
-    font-weight:700;
-    letter-spacing:1.5px;
-    background:rgba(0,225,255,0.12);
-    color:#00E1FF;
-    border:1px solid rgba(0,225,255,0.35);
-}
-.av-dir-sell {
-    font-size:9px;
-    padding:3px 8px;
-    border-radius:3px;
-    font-weight:700;
-    letter-spacing:1.5px;
-    background:rgba(255,61,113,0.12);
-    color:#FF3D71;
-    border:1px solid rgba(255,61,113,0.35);
-}
-.av-trade-row {
-    display:flex;
-    justify-content:space-between;
-    padding:3px 0;
-    border-bottom:1px solid #0E1422;
-    font-size:11px;
-}
-.av-trade-k {
-    color:#3A4A6A;
-    letter-spacing:1px;
-    font-size:9px;
-}
-
-/* ── MCT FACTOR BARS ── */
-.av-factor-wrap {
-    display:flex;
-    gap:4px;
-    margin-top:6px;
-}
-.av-factor-item {
-    flex:1;
-    background:#0A0E18;
-    border:1px solid #1A2238;
-    border-radius:4px;
-    padding:4px 6px;
-}
-.av-factor-k {
-    font-size:7.5px;
-    color:#4A6080;
-    letter-spacing:1px;
-    margin-bottom:2px;
-}
-.av-factor-bar-wrap {
-    height:2px;
-    background:#0E1422;
-    border-radius:1px;
-}
-.av-factor-v {
-    font-size:8px;
-    margin-top:2px;
-    text-align:right;
-}
-
-/* ── PLOTLY modebar hide ── */
-.js-plotly-plot .plotly .modebar {
-    display:none !important;
-}
-
-/* ── LAYOUT FIX FOR GAPS (MCT & MAIN CHART) ── */
-div[data-testid="column"]:has(.mct-shift) {
-    padding-top: 30px !important;
-}
-div[data-testid="column"]:has(.main-chart-shift) {
-    margin-top: -60px !important;
-    position: relative;
-    z-index: 10;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# ==============================================================================
-# CONSTANTS
-# ==============================================================================
-
-INSTRUMENTS = {
-    "FOREX": [
-        ("EURUSD","EUR/USD","OANDA:EURUSD"),
-        ("GBPUSD","GBP/USD","OANDA:GBPUSD"),
-        ("USDJPY","USD/JPY","OANDA:USDJPY"),
-        ("AUDUSD","AUD/USD","OANDA:AUDUSD"),
-        ("USDCHF","USD/CHF","OANDA:USDCHF"),
-    ],
-    "COMMODITIES": [
-        ("XAUUSD","XAU/USD","OANDA:XAUUSD"),
-        ("XAGUSD","XAG/USD","OANDA:XAGUSD"),
-        ("WTIUSD","WTI/USD","TVC:USOIL"),
-        ("BRENT", "BRENT", "TVC:UKOIL"),
-        ("NATGAS","NATGAS", "TVC:NATURALGAS"),
-    ],
-    "US STOCKS": [
-        ("AAPL","AAPL","NASDAQ:AAPL"),
-        ("NVDA","NVDA","NASDAQ:NVDA"),
-        ("TSLA","TSLA","NASDAQ:TSLA"),
-        ("MSFT","MSFT","NASDAQ:MSFT"),
-        ("AMZN","AMZN","NASDAQ:AMZN"),
-    ],
-    "CRYPTO": [
-        ("BTCUSD","BTC/USD","COINBASE:BTCUSD"),
-        ("ETHUSD","ETH/USD","COINBASE:ETHUSD"),
-        ("SOLUSD","SOL/USD","COINBASE:SOLUSD"),
-        ("BNBUSD","BNB/USDT","BINANCE:BNBUSDT"),
-        ("XRPUSD","XRP/USD","COINBASE:XRPUSD"),
-    ],
-}
-
-TIMEFRAMES = ["15m","30m","1h","4h","1D"]
-TV_INTERVAL = {"15m":"15","30m":"30","1h":"60","4h":"240","1D":"D"}
-TV_TA_INT = {"15m":"15m","30m":"30m","1h":"1h","4h":"4h","1D":"1D"}
-TD_INTERVAL = {"15m":"15min","30m":"30min","1h":"1h","4h":"4h","1D":"1day"}
-CHART_STYLES = [("LINE","3"),("CANDLES","1"),("HEIKIN","8"),("AREA","9"),("BARS","0")]
-
-MINI_OPTIONS = {
-    "FOREX": [
-        ("EURUSD","OANDA:EURUSD"),
-        ("GBPUSD","OANDA:GBPUSD"),
-        ("USDJPY","OANDA:USDJPY"),
-        ("AUDUSD","OANDA:AUDUSD"),
-        ("USDCHF","OANDA:USDCHF"),
-        ("NZDUSD","OANDA:NZDUSD"),
-        ("USDCAD","OANDA:USDCAD"),
-        ("EURGBP","OANDA:EURGBP"),
-    ],
-    "COMMODITIES": [
-        ("XAUUSD","OANDA:XAUUSD"),
-        ("XAGUSD","OANDA:XAGUSD"),
-        ("OIL", "CAPITALCOM:OIL_CRUDE"),
-        ("DXY", "CAPITALCOM:DXY"),
-        ("US10Y", "TVC:US10Y"),
-        ("NATGAS","TVC:NATURALGAS"),
-    ],
-    "US STOCKS": [
-        ("AAPL", "NASDAQ:AAPL"),
-        ("NVDA", "NASDAQ:NVDA"),
-        ("TSLA", "NASDAQ:TSLA"),
-        ("MSFT", "NASDAQ:MSFT"),
-        ("AMZN", "NASDAQ:AMZN"),
-        ("GOOGL", "NASDAQ:GOOGL"),
-        ("META", "NASDAQ:META"),
-        ("SPX", "FOREXCOM:SPXUSD"),
-    ],
-    "CRYPTO": [
-        ("BTCUSD","COINBASE:BTCUSD"),
-        ("ETHUSD","COINBASE:ETHUSD"),
-        ("SOLUSD","COINBASE:SOLUSD"),
-        ("BNBUSD","BINANCE:BNBUSDT"),
-        ("XRPUSD","COINBASE:XRPUSD"),
-        ("ADAUSD","COINBASE:ADAUSD"),
-        ("DOTUSD","COINBASE:DOTUSD"),
-        ("AVAXUSD","COINBASE:AVAXUSD"),
-    ],
-}
-
-DUMMY_TRADES = [
-    {"symbol":"EURUSD","dir":"BUY", "entry":"1.14620","sl":"1.14280","tp1":"1.14950","tp2":"1.15300","tp3":"1.15700"},
-    {"symbol":"GBPUSD","dir":"SELL","entry":"1.32310","sl":"1.32650","tp1":"1.31980","tp2":"1.31600","tp3":"1.31150"},
-    {"symbol":"XAUUSD","dir":"BUY", "entry":"2382.40","sl":"2371.00","tp1":"2394.00","tp2":"2406.50","tp3":"2420.00"},
-    {"symbol":"BTCUSD","dir":"BUY", "entry":"67420.0","sl":"65800.0","tp1":"69000.0","tp2":"71500.0","tp3":"74200.0"},
+CALENDAR = [
+    {"date":"01 Sep 2026","event":"ISM Manufacturing PMI",  "iso":"US","impact":"HIGH",  "forecast":"49.8","time_wib":"Belum tersedia", "prev":"49.0"},
+    {"date":"04 Sep 2026","event":"RBA Rate Decision",       "iso":"AU","impact":"HIGH",  "forecast":"4.35%","time_wib":"Belum tersedia", "prev":"4.35%"},
+    {"date":"05 Sep 2026","event":"GDP Q2 Indonesia",        "iso":"ID","impact":"HIGH",  "forecast":"4.9%","time_wib":"Belum tersedia", "prev":"5.1%"},
+    {"date":"05 Sep 2026","event":"Bank Negara Decision",    "iso":"MY","impact":"HIGH",  "forecast":"3.00%","time_wib":"Belum tersedia", "prev":"3.00%"},
+    {"date":"06 Sep 2026","event":"Nonfarm Payrolls",        "iso":"US","impact":"HIGH",  "forecast":"180K","time_wib":"Belum tersedia", "prev":"206K"},
+    {"date":"09 Sep 2026","event":"CPI China",               "iso":"CN","impact":"MEDIUM","forecast":"0.5%","time_wib":"Belum tersedia", "prev":"0.2%"},
+    {"date":"11 Sep 2026","event":"CPI Amerika Serikat",     "iso":"US","impact":"HIGH",  "forecast":"3.1%","time_wib":"Belum tersedia", "prev":"2.9%"},
+    {"date":"12 Sep 2026","event":"ECB Rate Decision",       "iso":"DE","impact":"HIGH",  "forecast":"3.65%","time_wib":"Belum tersedia", "prev":"3.75%"},
+    {"date":"17 Sep 2026","event":"BoT Rate Decision",       "iso":"TH","impact":"MEDIUM","forecast":"2.25%","time_wib":"Belum tersedia", "prev":"2.50%"},
+    {"date":"17 Sep 2026","event":"BCB Rate Decision",       "iso":"BR","impact":"HIGH",  "forecast":"10.75%","time_wib":"Belum tersedia", "prev":"10.50%"},
+    {"date":"18 Sep 2026","event":"FOMC Rate Decision",      "iso":"US","impact":"HIGH",  "forecast":"5.00%","time_wib":"Belum tersedia", "prev":"5.25%"},
+    {"date":"18 Sep 2026","event":"BI Rate Decision",        "iso":"ID","impact":"HIGH",  "forecast":"6.25%","time_wib":"Belum tersedia", "prev":"6.25%"},
+    {"date":"19 Sep 2026","event":"Bank of England Rate",    "iso":"GB","impact":"HIGH",  "forecast":"4.75%","time_wib":"Belum tersedia", "prev":"5.00%"},
+    {"date":"19 Sep 2026","event":"SARB Rate Decision",      "iso":"ZA","impact":"MEDIUM","forecast":"8.00%","time_wib":"Belum tersedia", "prev":"8.25%"},
+    {"date":"20 Sep 2026","event":"BoJ Rate Decision",       "iso":"JP","impact":"HIGH",  "forecast":"0.25%","time_wib":"Belum tersedia", "prev":"0.25%"},
+    {"date":"22 Sep 2026","event":"BoK Rate Decision",       "iso":"KR","impact":"HIGH",  "forecast":"3.00%","time_wib":"Belum tersedia", "prev":"3.25%"},
+    {"date":"25 Sep 2026","event":"Core PCE Index",          "iso":"US","impact":"HIGH",  "forecast":"2.7%","time_wib":"Belum tersedia", "prev":"2.6%"},
+    {"date":"30 Sep 2026","event":"CPI Indonesia",           "iso":"ID","impact":"HIGH",  "forecast":"2.2%","time_wib":"Belum tersedia", "prev":"2.13%"},
 ]
 
-# ==============================================================================
-# SESSION STATE INIT
-# ==============================================================================
-_DEFAULTS = {
-    "instr_class": "FOREX",
-    "pair_label": "EURUSD",
-    "timeframe": "15m",
-    "chart_style": "3",
-    "indicator_mode": "NO MODE",
-    "mini_a": "GBPUSD",
-    "mini_b": "USDJPY",
-    "mini_c": "AUDUSD",
-    "ai_mode": "pair",
-    "ai_result": None,
+# ── Calendar market sentiment ─────────────────────────────────────────────────
+# Logika: kombinasi aktual vs forecast (surprise) + CB stance + inflasi context
+
+def cal_sentiment(ev: dict, all_data: dict) -> tuple[str, str, str]:
+    """
+    Hitung prediksi market sentiment untuk satu event kalender.
+    Returns: (label, css_class, reasoning)
+    label    : "BULLISH" / "BEARISH" / "NEUTRAL"
+    css_class: "sent-bull" / "sent-bear" / "sent-neu"
+    reasoning: 1 kalimat singkat alasan
+    """
+    iso    = ev["iso"]
+    event  = ev["event"].upper()
+    est    = ev["forecast"].replace("%","").replace("K","000").replace("M","000000")
+    prev   = ev["prev"].replace("%","").replace("K","000").replace("M","000000")
+    impact = ev["impact"]
+    cb     = CB.get(iso, {})
+    stance = cb.get("stance", "NEUTRAL")
+    trend  = cb.get("trend", "HOLD")
+    dm     = all_data.get(iso, {})
+    inf_v  = dm.get("INF", {}).get("val")
+
+    # Parse numeric est dan prev jika memungkinkan
+    try:
+        est_n  = float(est)
+        prev_n = float(prev)
+        has_num = True
+    except Exception:
+        est_n = prev_n = 0
+        has_num = False
+
+    # Helper: apakah angka lebih tinggi = bagus untuk mata uang?
+    # Rate decision: hawkish (rate naik) = bullish mata uang
+    # GDP, PMI, Payrolls: lebih tinggi = bullish
+    # CPI/Inflasi: lebih tinggi = tergantung konteks CB
+    # Pengangguran: lebih rendah = bullish
+
+    is_rate   = any(x in event for x in ["RATE DECISION", "BI RATE", "FOMC", "RBA", "BOJ", "ECB", "BOE", "BCB", "BOK", "MAS", "SARB", "SAMA", "BANK NEGARA", "BANK INDONESIA", "BANK OF"])
+    is_cpi    = any(x in event for x in ["CPI", "INFLASI", "PCE"])
+    is_gdp    = "GDP" in event
+    is_pmi    = "PMI" in event
+    is_jobs   = any(x in event for x in ["PAYROLL", "PENGANGGURAN", "EMPLOYMENT"])
+    is_trade  = any(x in event for x in ["TRADE", "EKSPOR", "NERACA"])
+
+    if is_rate and has_num:
+        if est_n > prev_n:
+            return "BULLISH", "sent-bull", f"Rate naik {prev_n:.2f}% → {est_n:.2f}% — hawkish, mendukung penguatan {iso}."
+        elif est_n < prev_n:
+            return "BEARISH", "sent-bear", f"Rate turun {prev_n:.2f}% → {est_n:.2f}% — dovish, tekanan pada {iso}."
+        else:
+            return "NEUTRAL", "sent-neu", f"Rate hold {est_n:.2f}% — status quo, pasar fokus ke forward guidance."
+
+    if is_cpi and has_num:
+        if est_n > prev_n:
+            # Inflasi naik
+            if stance == "HAWKISH":
+                return "BULLISH", "sent-bull", f"CPI forecast {est_n:.1f}% > previous {prev_n:.1f}% — konfirmasi hawkish {cb.get('name',iso)}, bullish {iso}."
+            elif stance == "DOVISH":
+                return "BEARISH", "sent-bear", f"CPI forecast {est_n:.1f}% naik tapi CB dovish — mismatch, tekanan pada {iso}."
+            return "NEUTRAL", "sent-neu", f"CPI naik ke {est_n:.1f}% — tunggu respons {cb.get('name',iso)}."
+        elif est_n < prev_n:
+            if stance == "DOVISH":
+                return "BULLISH", "sent-bull", f"CPI turun ke {est_n:.1f}% — ruang pelonggaran terbuka, risk-on untuk aset {iso}."
+            elif stance == "HAWKISH":
+                return "BEARISH", "sent-bear", f"CPI turun ke {est_n:.1f}% — narratif hawkish melemah, tekanan pada {iso}."
+            return "NEUTRAL", "sent-neu", f"CPI turun ke {est_n:.1f}% — disinflasi berlanjut."
+        return "NEUTRAL", "sent-neu", "CPI sesuai forecast — minimal dampak."
+
+    if is_gdp and has_num:
+        if est_n > prev_n:
+            return "BULLISH", "sent-bull", f"GDP forecast {est_n:.1f}% > previous {prev_n:.1f}% — akselerasi pertumbuhan, bullish ekuitas dan {iso}."
+        elif est_n < prev_n:
+            return "BEARISH", "sent-bear", f"GDP forecast {est_n:.1f}% < previous {prev_n:.1f}% — perlambatan, bearish risiko aset {iso}."
+        return "NEUTRAL", "sent-neu", "GDP sesuai forecast — minimal market impact."
+
+    if is_pmi and has_num:
+        bullish_zone = est_n > 50
+        improving    = est_n > prev_n
+        if bullish_zone and improving:
+            return "BULLISH", "sent-bull", f"PMI {est_n:.1f} > 50 dan naik dari {prev_n:.1f} — ekspansi manufaktur, bullish."
+        elif bullish_zone and not improving:
+            return "NEUTRAL", "sent-neu", f"PMI {est_n:.1f} masih ekspansi tapi melambat dari {prev_n:.1f}."
+        elif not bullish_zone and est_n > prev_n:
+            return "NEUTRAL", "sent-neu", f"PMI {est_n:.1f} kontraksi tapi membaik dari {prev_n:.1f} — potensi pemulihan."
+        return "BEARISH", "sent-bear", f"PMI {est_n:.1f} kontraksi dan turun dari {prev_n:.1f} — bearish."
+
+    if is_jobs and has_num:
+        # Payrolls: lebih tinggi = bullish. Pengangguran: lebih rendah = bullish
+        is_unemp = "PENGANGGURAN" in event or "UNEMPLOY" in event
+        if is_unemp:
+            if est_n < prev_n:
+                return "BULLISH", "sent-bull", f"Pengangguran turun ke {est_n:.1f}% dari {prev_n:.1f}% — pasar kerja menguat."
+            elif est_n > prev_n:
+                return "BEARISH", "sent-bear", f"Pengangguran naik ke {est_n:.1f}% — pelemahan lapangan kerja."
+            return "NEUTRAL", "sent-neu", "Pengangguran stagnan."
+        else:
+            if est_n > prev_n:
+                return "BULLISH", "sent-bull", f"Payrolls forecast {est} > previous {prev} — pasar kerja solid, bullish USD."
+            elif est_n < prev_n:
+                return "BEARISH", "sent-bear", f"Payrolls forecast {est} < previous {prev} — perlambatan tenaga kerja."
+            return "NEUTRAL", "sent-neu", "Payrolls sesuai ekspektasi."
+
+    # Fallback: pakai CB stance
+    if stance == "HAWKISH" and trend in ("HIKE","HOLD"):
+        return "BULLISH", "sent-bull", f"CB {cb.get('name',iso)} hawkish — supportive untuk {iso}."
+    if stance == "DOVISH" or trend == "CUT":
+        return "BEARISH", "sent-bear", f"CB {cb.get('name',iso)} dovish/cut — tekanan pada {iso}."
+    return "NEUTRAL", "sent-neu", "Dampak tergantung data aktual saat rilis."
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  CSS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def css():
+    st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap');
+
+html,body,.stApp{background:#080B12!important;}
+.block-container{padding:1rem 1.5rem 3rem!important;max-width:100%!important;}
+section[data-testid="stSidebar"]{background:#0A0D14!important;}
+*{box-sizing:border-box;}
+body{font-family:'Exo 2',sans-serif;}
+
+/* HEADER */
+.aero-header{padding:.5rem 0 1rem;}
+.aero-build{font-family:'Share Tech Mono',monospace;font-size:.55rem;letter-spacing:.25em;color:#0F3028;margin-bottom:.4rem;}
+.aero-title{font-family:'Share Tech Mono',monospace;font-size:1.6rem;color:#00FFC8;letter-spacing:.06em;line-height:1;}
+.aero-sub{font-size:.75rem;color:#2D3E30;margin-top:.3rem;font-family:'Share Tech Mono',monospace;letter-spacing:.08em;}
+
+/* SECTION */
+.sec-title{font-family:'Share Tech Mono',monospace;color:#00FFC8;font-size:.8rem;
+    letter-spacing:.22em;border-left:2px solid #00FFC8;padding-left:.7rem;
+    margin:1.6rem 0 .2rem;text-transform:uppercase;}
+.sec-sub{font-family:'Share Tech Mono',monospace;color:#1E3A2F;font-size:.58rem;
+    letter-spacing:.12em;margin-bottom:.9rem;padding-left:.9rem;}
+
+/* KPI */
+.kpi{background:linear-gradient(160deg,#0B1119 0%,#0E1520 100%);
+    border:1px solid #141E2D;border-top:1px solid #00FFC820;
+    border-radius:2px;padding:.95rem .9rem;position:relative;overflow:hidden;height:100%;}
+.kpi-accent{position:absolute;top:0;left:0;right:0;height:1px;background:var(--c,#00FFC8);}
+.kpi-sym{font-family:'Share Tech Mono',monospace;font-size:.55rem;color:#1A3D30;
+    letter-spacing:.15em;margin-bottom:.25rem;}
+.kpi-val{font-family:'Share Tech Mono',monospace;font-size:1.2rem;font-weight:700;
+    color:var(--c,#00FFC8);line-height:1;margin-bottom:.2rem;}
+.kpi-yr{font-family:'Share Tech Mono',monospace;font-size:.55rem;color:#1E3040;}
+.kpi-desc{font-size:.62rem;color:#2D4040;margin-top:.15rem;line-height:1.4;}
+.badge{display:inline-block;font-family:'Share Tech Mono',monospace;font-size:.52rem;
+    letter-spacing:.1em;padding:1px 6px;border-radius:1px;margin-top:.35rem;font-weight:700;}
+.b-ok {background:rgba(0,255,200,.08);color:#00FFC8;border:1px solid #00FFC830;}
+.b-mid{background:rgba(255,217,61,.08);color:#FFD93D;border:1px solid #FFD93D30;}
+.b-bad{background:rgba(255,107,107,.08);color:#FF6B6B;border:1px solid #FF6B6B30;}
+.b-na {background:rgba(30,42,58,.5);color:#2D4050;border:1px solid #141E2D;}
+
+/* DIVIDER */
+.hr{border:none;border-top:1px solid #0E1826;margin:.8rem 0;}
+
+/* INFO BOX */
+.ibox{background:#0A1018;border:1px solid #141E2D;border-left:2px solid var(--lc,#C77DFF);
+    border-radius:0 2px 2px 0;padding:.75rem .9rem;margin:.4rem 0;}
+.ibox-t{font-family:'Share Tech Mono',monospace;font-size:.58rem;color:var(--lc,#C77DFF);
+    letter-spacing:.14em;margin-bottom:.4rem;text-transform:uppercase;}
+.ibox-b{font-size:.75rem;color:#5A6E7A;line-height:1.7;}
+
+/* HEATMAP */
+.hm-wrap{overflow-x:auto;padding-bottom:.3rem;}
+.hm-table{min-width:600px;width:100%;border-collapse:separate;border-spacing:2px;}
+.hm-th{font-family:'Share Tech Mono',monospace;font-size:.52rem;color:#1A3040;
+    letter-spacing:.1em;text-align:center;padding:.3rem .2rem;text-transform:uppercase;}
+.hm-country{font-family:'Share Tech Mono',monospace;font-size:.6rem;color:#4A6070;
+    padding:.35rem .4rem;white-space:nowrap;}
+.hm-cell{border-radius:1px;padding:.3rem .2rem;font-family:'Share Tech Mono',monospace;
+    font-size:.62rem;text-align:center;line-height:1.2;font-weight:600;cursor:default;}
+.hm-g{background:rgba(0,255,200,.1);color:#00FFC8;border:1px solid #00FFC820;}
+.hm-y{background:rgba(255,217,61,.1);color:#FFD93D;border:1px solid #FFD93D20;}
+.hm-r{background:rgba(255,107,107,.1);color:#FF6B6B;border:1px solid #FF6B6B20;}
+.hm-n{background:rgba(14,24,38,.6);color:#1A2D3A;border:1px solid #0E1826;}
+
+/* CENTRAL BANKS */
+.cb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:.4rem;}
+.cb-card{background:#0A1018;border:1px solid #141E2D;border-radius:2px;
+    padding:.65rem .8rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;}
+.cb-name{font-family:'Share Tech Mono',monospace;font-size:.62rem;color:#5A7080;flex:1;min-width:120px;}
+.cb-rate{font-family:'Share Tech Mono',monospace;font-size:.95rem;font-weight:700;color:#00FFC8;min-width:50px;}
+.stance-h{font-family:'Share Tech Mono',monospace;font-size:.52rem;padding:1px 7px;
+    border-radius:1px;font-weight:700;background:rgba(255,107,107,.08);color:#FF6B6B;border:1px solid #FF6B6B30;}
+.stance-d{font-family:'Share Tech Mono',monospace;font-size:.52rem;padding:1px 7px;
+    border-radius:1px;font-weight:700;background:rgba(0,255,200,.08);color:#00FFC8;border:1px solid #00FFC830;}
+.stance-n{font-family:'Share Tech Mono',monospace;font-size:.52rem;padding:1px 7px;
+    border-radius:1px;font-weight:700;background:rgba(255,217,61,.08);color:#FFD93D;border:1px solid #FFD93D30;}
+.trend-hike{font-family:'Share Tech Mono',monospace;font-size:.52rem;color:#FF6B6B;}
+.trend-cut {font-family:'Share Tech Mono',monospace;font-size:.52rem;color:#00FFC8;}
+.trend-hold{font-family:'Share Tech Mono',monospace;font-size:.52rem;color:#FFD93D;}
+.cb-next{font-family:'Share Tech Mono',monospace;font-size:.52rem;color:#1A2D3A;margin-left:auto;}
+
+/* SURPRISE */
+.surp-card{background:#0A1018;border:1px solid #141E2D;border-radius:2px;padding:.7rem .85rem;}
+.surp-name{font-family:'Share Tech Mono',monospace;font-size:.62rem;color:#4A6070;}
+.surp-date{font-family:'Share Tech Mono',monospace;font-size:.52rem;color:#1A2D3A;margin-bottom:.35rem;}
+.surp-track{height:3px;background:#0E1826;border-radius:2px;margin:.3rem 0;}
+.surp-fill{height:3px;border-radius:2px;}
+.surp-nums{display:flex;justify-content:space-between;
+    font-family:'Share Tech Mono',monospace;font-size:.58rem;margin-top:.15rem;}
+
+/* CYCLE */
+.cyc-card{background:#0A1018;border:1px solid #141E2D;border-radius:2px;
+    padding:.9rem;text-align:center;}
+.cyc-phase{font-family:'Share Tech Mono',monospace;font-size:.85rem;font-weight:700;
+    letter-spacing:.12em;margin:.3rem 0;}
+.cyc-country{font-family:'Share Tech Mono',monospace;font-size:.58rem;color:#2D4050;
+    letter-spacing:.12em;margin-bottom:.2rem;}
+.cyc-desc{font-size:.68rem;color:#3A5060;line-height:1.55;margin-top:.4rem;}
+
+/* SCORE */
+.score-num{font-family:'Share Tech Mono',monospace;font-size:2.8rem;font-weight:700;line-height:1;}
+.score-lbl{font-family:'Share Tech Mono',monospace;font-size:.58rem;color:#1E3040;letter-spacing:.18em;}
+.score-bar{height:5px;background:#0E1826;border-radius:2px;margin:.45rem 0;}
+.score-fill{height:5px;border-radius:2px;}
+
+/* BIAS */
+.bias-wrap{background:#0A1018;border:1px solid #141E2D;border-radius:2px;padding:.9rem;}
+.bias-pair{font-family:'Share Tech Mono',monospace;font-size:1.1rem;color:#4A9EBF;
+    letter-spacing:.06em;margin-bottom:.25rem;}
+.bias-val{display:inline-block;font-family:'Share Tech Mono',monospace;font-size:.65rem;
+    font-weight:700;padding:2px 10px;border-radius:1px;margin-bottom:.45rem;letter-spacing:.1em;}
+.bias-bull{background:rgba(0,255,200,.08);color:#00FFC8;border:1px solid #00FFC830;}
+.bias-bear{background:rgba(255,107,107,.08);color:#FF6B6B;border:1px solid #FF6B6B30;}
+.bias-neut{background:rgba(255,217,61,.08);color:#FFD93D;border:1px solid #FFD93D30;}
+.bias-txt{font-size:.73rem;color:#4A6070;line-height:1.65;}
+
+/* CALENDAR */
+.cal-row{display:flex;align-items:flex-start;gap:.6rem;background:#0A1018;
+    border:1px solid #141E2D;border-radius:2px;padding:.55rem .75rem;
+    margin-bottom:.3rem;flex-wrap:wrap;}
+.cal-date{font-family:'Share Tech Mono',monospace;font-size:.58rem;color:#2D4050;min-width:46px;}
+.cal-iso{font-family:'Share Tech Mono',monospace;font-size:.6rem;color:#1A3040;min-width:22px;}
+.cal-evt{font-size:.73rem;color:#5A7080;flex:1;line-height:1.3;}
+.cal-fcast{font-family:'Share Tech Mono',monospace;font-size:.55rem;color:#1A2D3A;
+    margin-top:.15rem;display:block;}
+.imp-h{font-family:'Share Tech Mono',monospace;font-size:.52rem;color:#FF6B6B;
+    font-weight:700;background:rgba(255,107,107,.08);border:1px solid #FF6B6B30;
+    padding:1px 5px;border-radius:1px;}
+.imp-m{font-family:'Share Tech Mono',monospace;font-size:.52rem;color:#FFD93D;
+    font-weight:700;background:rgba(255,217,61,.08);border:1px solid #FFD93D30;
+    padding:1px 5px;border-radius:1px;}
+.imp-l{font-family:'Share Tech Mono',monospace;font-size:.52rem;color:#1E3D50;
+    background:rgba(14,24,38,.6);border:1px solid #0E1826;padding:1px 5px;border-radius:1px;}
+
+/* CARRY TABLE */
+.carry-row{display:flex;align-items:center;gap:.5rem;background:#0A1018;
+    border:1px solid #141E2D;border-radius:2px;padding:.5rem .75rem;margin-bottom:.3rem;}
+.carry-pair{font-family:'Share Tech Mono',monospace;font-size:.65rem;color:#4A9EBF;min-width:100px;}
+.carry-diff{font-family:'Share Tech Mono',monospace;font-size:.85rem;font-weight:700;color:#00FFC8;min-width:55px;}
+.carry-desc{font-size:.65rem;color:#2D4050;flex:1;}
+
+
+/* SENTIMENT BADGES */
+.sent-bull{font-family:'Share Tech Mono',monospace;font-size:.52rem;padding:1px 6px;
+    border-radius:1px;font-weight:700;background:rgba(0,255,200,.08);
+    color:#00FFC8;border:1px solid #00FFC830;}
+.sent-bear{font-family:'Share Tech Mono',monospace;font-size:.52rem;padding:1px 6px;
+    border-radius:1px;font-weight:700;background:rgba(255,107,107,.08);
+    color:#FF6B6B;border:1px solid #FF6B6B30;}
+.sent-neu{font-family:'Share Tech Mono',monospace;font-size:.52rem;padding:1px 6px;
+    border-radius:1px;font-weight:700;background:rgba(255,217,61,.08);
+    color:#FFD93D;border:1px solid #FFD93D30;}
+
+/* FOOTER */
+.footer{margin-top:2.5rem;padding:.6rem 0;border-top:1px solid #0E1826;
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:.3rem;}
+.footer span{font-family:'Share Tech Mono',monospace;font-size:.52rem;color:#0F2A1E;letter-spacing:.1em;}
+
+/* STREAMLIT OVERRIDES */
+.stSelectbox label,.stMultiSelect label,.stRadio label,.stCheckbox label{
+    font-family:'Share Tech Mono',monospace!important;font-size:.65rem!important;
+    color:#2D5040!important;letter-spacing:.1em!important;}
+div[data-baseweb="tab-list"]{background:transparent!important;border-bottom:1px solid #0E1826!important;}
+div[data-baseweb="tab"]{font-family:'Share Tech Mono',monospace!important;font-size:.62rem!important;
+    letter-spacing:.1em!important;color:#1E3040!important;background:transparent!important;}
+div[data-baseweb="tab"][aria-selected="true"]{color:#00FFC8!important;border-bottom:2px solid #00FFC8!important;}
+button[kind="secondary"],button[data-testid="baseButton-secondary"]{
+    background:#0A1018!important;border:1px solid #141E2D!important;
+    color:#2D5040!important;font-family:'Share Tech Mono',monospace!important;
+    border-radius:2px!important;font-size:.62rem!important;letter-spacing:.08em!important;}
+button[kind="secondary"]:hover{border-color:#00FFC850!important;color:#00FFC8!important;}
+.stDataFrame{border:1px solid #141E2D!important;}
+
+@media(max-width:768px){
+    .block-container{padding:.5rem .6rem 3rem!important;}
+    .aero-title{font-size:1.2rem;}
+    .kpi-val{font-size:1rem;}
+    .cb-card{gap:.3rem;}
+    .cb-next{margin-left:0;width:100%;}
+    .footer{flex-direction:column;}
+    .carry-row{flex-wrap:wrap;}
+}
+</style>""", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  DATA
+# ══════════════════════════════════════════════════════════════════════════════
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch(iso: str, code: str) -> list[dict]:
+    try:
+        r = requests.get(WB.format(iso=iso, ind=code), timeout=9)
+        raw = r.json()
+        if len(raw) < 2 or not raw[1]:
+            return []
+        return sorted(
+            [{"year":int(x["date"]),"value":x["value"]}
+             for x in raw[1] if x.get("value") is not None],
+            key=lambda x: x["year"]
+        )
+    except Exception:
+        return []
+
+def latest(series):
+    for d in reversed(series):
+        if d["value"] is not None:
+            return d["value"], d["year"]
+    return None, None
+
+
+def economic_data_status(dm):
+    """Return a small, user-facing status for the selected country's indicators."""
+    keys = list(INDICATORS)
+    available = sum(bool(dm.get(key, {}).get("series")) for key in keys)
+    if available == 0:
+        return "empty", 0, len(keys)
+    if available < len(keys):
+        return "partial", available, len(keys)
+    return "complete", available, len(keys)
+
+
+def render_economic_data_status(country_name, dm):
+    """Show a friendly empty/partial state without exposing provider errors."""
+    status, available, total = economic_data_status(dm)
+    if status == "empty":
+        st.info(
+            f"Data ekonomi untuk {country_name} belum tersedia pada indikator yang dipilih. "
+            "Silakan coba negara lain, indikator lain, atau rentang waktu berbeda."
+        )
+    elif status == "partial":
+        st.info(
+            f"Sebagian data {country_name} tersedia ({available} dari {total} indikator). "
+            "Indikator yang belum tersedia tidak ditampilkan."
+        )
+
+
+def fmt(v, f):
+    if v is None: return "N/A"
+    if f == "T":  return f"{v/1e12:.2f} T USD"
+    if f == "B":  return f"{v/1e9:.1f} B USD"
+    return f"{v:.2f}%"
+
+
+def fmt_indicator_value(key, value, fmt_code):
+    """Format an indicator while making negative trade balance unambiguous."""
+    if key == "TRADE" and value is not None:
+        direction = "Surplus" if value >= 0 else "Defisit"
+        return f"{direction} {abs(value) / 1e9:.1f} B USD"
+    return fmt(value, fmt_code)
+
+# ── Risk classification ────────────────────────────────────────────────────
+
+def risk(key, v):
+    """Return (label, css_class). key must be in RISK dict or None/missing."""
+    if v is None:
+        return "N/A", "b-na"
+    th = RISK.get(key)
+    if th is None:
+        # Trade balance: positive=ok, negative=bad
+        tv = v / 1e9
+        if tv >= 5:  return "SURPLUS", "b-ok"
+        if tv >= 0:  return "BALANCE", "b-mid"
+        return "DEFISIT", "b-bad"
+    if v <= th["low"]:  return "RENDAH",  "b-ok"
+    if v <= th["med"]:  return "SEDANG",  "b-mid"
+    return "TINGGI", "b-bad"
+
+# ── Heatmap cell class (standalone — no nesting) ──────────────────────────
+
+def hm_cls(key, v):
+    """Return hm-g / hm-y / hm-r / hm-n for any key/value pair."""
+    if v is None:
+        return "hm-n"
+    if key == "SCORE":
+        if v >= 65: return "hm-g"
+        if v >= 45: return "hm-y"
+        return "hm-r"
+    if key == "GDP":
+        if v >= 1e12: return "hm-g"
+        if v >= 3e11: return "hm-y"
+        return "hm-r"
+    if key == "TRADE":
+        tv = v / 1e9
+        if tv >= 5:  return "hm-g"
+        if tv >= 0:  return "hm-y"
+        return "hm-r"
+    th = RISK.get(key)
+    if th is None:
+        return "hm-n"
+    if v <= th["low"]: return "hm-g"
+    if v <= th["med"]: return "hm-y"
+    return "hm-r"
+
+def hm_txt(key, v):
+    if v is None: return "—"
+    if key == "SCORE": return f"{v:.0f}"
+    if key == "GDP":   return f"{v/1e12:.1f}T"
+    if key == "TRADE": return f"{v/1e9:.0f}B"
+    return f"{v:.1f}%"
+
+# ── Normalize for radar ────────────────────────────────────────────────────
+
+def norm(key, v):
+    if v is None: return 0
+    NORMS = {
+        "GDP":(0,5e12),"INF":(0,15),"UNP":(0,20),
+        "DEBT":(0,150),"TRADE":(-5e11,5e11),
+    }
+    lo, hi = NORMS.get(key,(0,100))
+    return round(min(max((v-lo)/(hi-lo)*100,0),100),1)
+
+# ── Macro score ───────────────────────────────────────────────────────────
+
+def macro_score(dm):
+    def s_gdp(v):   return min(v/1e12*10,100) if v else 50
+    def s_inf(v):   return max(0,100-(v-2)**2*3) if v else 50
+    def s_unp(v):   return max(0,100-v*7) if v else 50
+    def s_debt(v):  return max(0,100-v*0.6) if v else 50
+    def s_trade(v): return 65 if v is None else (70 if v>=0 else 38)
+
+    s = {
+        "GDP":  s_gdp(dm.get("GDP",{}).get("val")),
+        "INF":  s_inf(dm.get("INF",{}).get("val")),
+        "UNP":  s_unp(dm.get("UNP",{}).get("val")),
+        "DEBT": s_debt(dm.get("DEBT",{}).get("val")),
+        "TRADE":s_trade(dm.get("TRADE",{}).get("val")),
+    }
+    total = round(sum(s[k]*WEIGHTS[k] for k in s),1)
+    if total >= 72: grade,gc = "STRONG", "#00FFC8"
+    elif total >= 55: grade,gc = "STABLE", "#4FC3F7"
+    elif total >= 38: grade,gc = "FRAGILE","#FFD93D"
+    else: grade,gc = "WEAK","#FF6B6B"
+    return total, grade, gc
+
+# ── Cycle detection ───────────────────────────────────────────────────────
+
+def detect_cycle(dm):
+    inf   = dm.get("INF",{}).get("val")
+    unp   = dm.get("UNP",{}).get("val")
+    gdp_s = dm.get("GDP",{}).get("series",[])
+    growing = len(gdp_s)>=2 and gdp_s[-1]["value"]>gdp_s[-2]["value"]
+    i = inf or 0
+    u = unp or 100
+    if growing and i<4 and u<6:
+        return "EKSPANSI","#00FFC8","Pertumbuhan tinggi, inflasi terkendali, lapangan kerja kuat. Favorable untuk ekuitas dan aset risiko."
+    if growing and i>=4:
+        return "PUNCAK","#FFD93D","Pertumbuhan tinggi namun inflasi memanas. Bank sentral cenderung hawkish. Monitor potensi koreksi."
+    if not growing and i>=4:
+        return "STAGFLASI","#FF6B6B","Kondisi paling sulit — pertumbuhan melambat namun inflasi persisten. Safe-haven outperform."
+    if not growing and u>7:
+        return "KONTRAKSI","#FF6B6B","Ekonomi menyusut, pengangguran naik. Aset safe-haven dan obligasi jangka pendek menguat."
+    return "PEMULIHAN","#4FC3F7","Kontraksi mereda, pertumbuhan mulai kembali. Sinyal akumulasi awal siklus."
+
+# ── Interpretasi ─────────────────────────────────────────────────────────
+
+def interpret(name, dm):
+    out = []
+    g = dm.get("GDP",{}).get("val")
+    i = dm.get("INF",{}).get("val")
+    u = dm.get("UNP",{}).get("val")
+    d = dm.get("DEBT",{}).get("val")
+    t = dm.get("TRADE",{}).get("val")
+    if g: out.append(f"PDB {name} senilai {g/1e12:.2f}T USD — {'ekonomi signifikan di kawasan' if g>5e11 else 'ekonomi berkembang dengan ruang ekspansi luas'}.")
+    if i is not None:
+        if i<2:    out.append(f"Inflasi {i:.1f}% di bawah target — risiko deflasi perlu dicermati.")
+        elif i<=4: out.append(f"Inflasi {i:.1f}% terkendali — kondusif untuk pertumbuhan ekonomi.")
+        elif i<=7: out.append(f"Inflasi {i:.1f}% di zona waspada — stance hawkish bank sentral kemungkinan berlanjut.")
+        else:      out.append(f"Inflasi {i:.1f}% kritis — tekanan signifikan pada obligasi dan daya beli masyarakat.")
+    if u is not None:
+        if u<4:    out.append(f"Pengangguran {u:.1f}% sangat rendah — pasar kerja ketat, potensi tekanan upah inflasioner.")
+        elif u<=7: out.append(f"Pengangguran {u:.1f}% dalam batas normal.")
+        else:      out.append(f"Pengangguran {u:.1f}% tinggi — konsumsi domestik berpotensi tertekan.")
+    if d is not None:
+        if d<60:   out.append(f"Rasio utang/PDB {d:.0f}% aman — ruang fiskal cukup luas.")
+        elif d<=90:out.append(f"Rasio utang/PDB {d:.0f}% mendekati batas waspada IMF.")
+        else:      out.append(f"Utang/PDB {d:.0f}% melewati 90% — risiko fiskal tinggi, yield obligasi tertekan.")
+    if t is not None:
+        tv=t/1e9
+        out.append(f"Neraca perdagangan {'surplus' if tv>=0 else 'defisit'} {abs(tv):.1f}B USD — {'tekanan depresiasi terbatas' if tv>=0 else 'potensi tekanan pada nilai tukar'}.")
+    return " ".join(out) if out else "Data tidak lengkap."
+
+# ── Macro bias ────────────────────────────────────────────────────────────
+
+def macro_bias(pair, all_data):
+    cfg = PAIRS.get(pair)
+    if not cfg: return "NEUTRAL","#FFD93D","Data tidak tersedia."
+    logic = cfg["logic"]
+    isos  = cfg["iso"]
+
+    cb_a = CB.get(isos[0],{})
+    cb_b = CB.get(isos[1],{}) if len(isos)>1 else {}
+    r_a  = cb_a.get("rate",0)
+    r_b  = cb_b.get("rate",0)
+
+    if logic in ("eur_usd","gbp_usd","aud_usd"):
+        if r_b>r_a and cb_b.get("stance")=="HAWKISH":
+            return "BEARISH","#FF6B6B",f"Rate diferensial menguntungkan USD ({CB.get(isos[1],{}).get('name','')} hawkish, {r_b:.2f}%). Tekanan pada base currency."
+        if r_a>r_b or cb_a.get("stance")=="HAWKISH":
+            return "BULLISH","#00FFC8",f"Rate base currency lebih kompetitif ({cb_a.get('name','')} {cb_a.get('stance','')} {r_a:.2f}%). Bias beli {pair}."
+        return "NEUTRAL","#FFD93D",f"Rate diferensial sempit ({r_a:.2f}% vs {r_b:.2f}%). Tunggu katalis."
+
+    if logic == "usd_jpy":
+        if r_b>0.5 and cb_b.get("stance")=="HAWKISH":
+            return "BEARISH","#FF6B6B",f"BoJ normalisasi ({r_b:.2f}%) — JPY menguat. Bias jual USD/JPY."
+        return "BULLISH","#00FFC8",f"Spread Fed-BoJ masih lebar ({r_a:.2f}% vs {r_b:.2f}%). Carry trade USD/JPY menarik."
+
+    if logic in ("usd_cnh","usd_idr"):
+        diff = r_a - r_b
+        if diff>2: return "BULLISH","#00FFC8",f"Fed rate ({r_a:.2f}%) signifikan di atas {cb_b.get('name','')} ({r_b:.2f}%). Tekanan depresiasi pada {pair.split('/')[1]}."
+        return "NEUTRAL","#FFD93D",f"Rate gap mengecil. Monitor stance {cb_b.get('name','')}."
+
+    if logic == "gold":
+        dm_us = all_data.get("US",{})
+        iv = dm_us.get("INF",{}).get("val") or 0
+        dv = dm_us.get("DEBT",{}).get("val") or 0
+        if iv>3.5 or dv>100:
+            return "BULLISH","#00FFC8",f"Inflasi AS {iv:.1f}% + utang/PDB {dv:.0f}% mendukung permintaan safe-haven emas."
+        return "NEUTRAL","#FFD93D",f"Inflasi AS {iv:.1f}% terkendali. Emas ranging. Tunggu katalis geopolitik atau inflasi."
+
+    if logic == "equity":
+        dm_us = all_data.get("US",{})
+        iv = dm_us.get("INF",{}).get("val") or 0
+        uv = dm_us.get("UNP",{}).get("val") or 0
+        if iv<4 and uv<5:
+            return "BULLISH","#00FFC8",f"Makro AS goldilocks — inflasi {iv:.1f}%, pengangguran {uv:.1f}%. Kondisi ideal untuk ekuitas."
+        if iv>5:
+            return "BEARISH","#FF6B6B",f"Inflasi AS {iv:.1f}% — risiko hawkish Fed, headwind untuk valuasi ekuitas."
+        return "NEUTRAL","#FFD93D","Makro campuran. Selektif pada sektor defensif berkualitas."
+
+    if logic == "crypto":
+        dm_us = all_data.get("US",{})
+        iv = dm_us.get("INF",{}).get("val") or 0
+        if iv<3.5:
+            return "BULLISH","#00FFC8","Likuiditas membaik, inflasi terkendali — favorable untuk aset risiko termasuk kripto."
+        return "BEARISH","#FF6B6B",f"Inflasi {iv:.1f}% menekan ekspektasi likuiditas. Risk-off environment."
+
+    return "NEUTRAL","#FFD93D","Analisis tidak tersedia."
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  PLOTLY THEME
+# ══════════════════════════════════════════════════════════════════════════════
+
+BASE = dict(
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    font=dict(family="Share Tech Mono, monospace",color="#1E3D50",size=9),
+    margin=dict(l=6,r=6,t=26,b=6),
+    xaxis=dict(gridcolor="#0E1826",linecolor="#0E1826",tickcolor="#0E1826",tickfont=dict(size=8)),
+    yaxis=dict(gridcolor="#0E1826",linecolor="#0E1826",tickcolor="#0E1826",tickfont=dict(size=8)),
+    legend=dict(bgcolor="rgba(0,0,0,0)",font=dict(size=8)),
+)
+
+# Charts are pan-only — no zoom, no modebar
+CHART_CFG = {
+    "staticPlot": True,
 }
 
-for _k, _v in _DEFAULTS.items():
-    if _k not in st.session_state:
-        st.session_state[_k] = _v
+# Radar keeps interactivity (no CHART_CFG override)
+RADAR_CFG = {
+    "displayModeBar": False,
+    "scrollZoom": False,
+}
 
-# ==============================================================================
-# MCT ENGINE
-# ==============================================================================
-@st.cache_data(ttl=60, show_spinner=False)
-def fetch_twelvedata(symbol: str, interval: str, outputsize: int = 300) -> pd.DataFrame:
-    try:
-        api_key = st.secrets["TWELVE_DATA_API_KEY"]
-    except Exception:
-        return pd.DataFrame()
-
-    url = (
-        f"https://api.twelvedata.com/time_series"
-        f"?symbol={symbol}&interval={interval}&outputsize={outputsize}&apikey={api_key}"
-    )
-    try:
-        r = requests.get(url, timeout=10).json()
-        if r.get("status") == "error" or "values" not in r:
-            return pd.DataFrame()
-
-        df = pd.DataFrame(r["values"])
-        df["datetime"] = pd.to_datetime(df["datetime"])
-        for c in ["open","high","low","close"]:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
-        df["volume"] = pd.to_numeric(df.get("volume", 0), errors="coerce").fillna(0)
-
-        df = df.sort_values("datetime").reset_index(drop=True)
-        df.set_index("datetime", inplace=True)
-        return df
-    except Exception:
-        return pd.DataFrame()
-
-def _make_dummy_df(seed_str: str, n: int = 300) -> pd.DataFrame:
-    rng = np.random.default_rng(abs(hash(seed_str)) % 2**32)
-    price = np.cumprod(1 + rng.normal(0.0002, 0.004, n))
-    price = price / price[0] * 1.15
-    vol = rng.uniform(300, 2500, n)
-    freq_map = {"15m":"15min","30m":"30min","1h":"1h","4h":"4h","1D":"1D"}
-    freq = freq_map.get(seed_str.split("-")[-1], "15min")
-    return pd.DataFrame({
-        "close": price,
-        "high": price * (1 + np.abs(rng.normal(0, 0.0015, n))),
-        "low": price * (1 - np.abs(rng.normal(0, 0.0015, n))),
-        "volume": vol,
-    }, index=pd.date_range("2024-01-01", periods=n, freq=freq))
-
-def calculate_mct(df: pd.DataFrame) -> dict:
-    lookback = 63
-
-    def z_norm(s: pd.Series) -> pd.Series:
-        rm = s.rolling(lookback, min_periods=10).mean()
-        rs = s.rolling(lookback, min_periods=10).std().replace(0, np.nan)
-        return ((s - rm) / rs).clip(-3, 3) / 3.0
-
-    close = df["close"]
-    volume = df.get("volume", pd.Series(np.ones(len(df)), index=df.index))
-
-    rsi_raw = ta.rsi(close, length=14).fillna(50) - 50.0
-    z_rsi = z_norm(rsi_raw)
-    rsi_score = float(np.clip(z_rsi.iloc[-1] * 100, -100, 100))
-
-    macd_df = ta.macd(close, fast=12, slow=26, signal=9)
-    macd_hist = macd_df["MACDh_12_26_9"].fillna(0)
-    z_macd = z_norm(macd_hist)
-    macd_score = float(np.clip(z_macd.iloc[-1] * 100, -100, 100))
-
-    vol_ma = volume.rolling(20, min_periods=5).mean().replace(0, np.nan)
-    vol_mom = ((volume / vol_ma) - 1.0).fillna(0).clip(-2, 2)
-    z_vol = z_norm(vol_mom)
-    vol_score = float(np.clip(z_vol.iloc[-1] * 100, -100, 100))
-
-    comp = (0.40 * z_rsi) + (0.40 * z_macd) + (0.20 * z_vol)
-    raw = np.clip((comp * 100).fillna(0).to_numpy(), -100, 100)
-
-    n = len(raw)
-    wl = min(25, n)
-    if wl % 2 == 0: wl -= 1
-    wl = max(wl, 5)
-
-    smoothed = np.clip(savgol_filter(raw, window_length=wl, polyorder=3, mode="interp"), -100, 100)
-
-    return {
-        "values": smoothed,
-        "current": float(smoothed[-1]),
-        "rsi_score": rsi_score,
-        "macd_score": macd_score,
-        "vol_score": vol_score,
-    }
-
-def render_mct(result: dict) -> go.Figure:
-    values = result["values"]
-    current = result["current"]
-    prev = float(values[max(0, len(values)-6)])
-    momentum = current - prev
-
-    isBull = current >= 0
-    dot_c = "#00E1FF" if isBull else "#FF3D71"
-
-    x = list(range(len(values)))
-    y_up = np.where(values >= 0, values, np.nan)
-    y_dn = np.where(values <= 0, values, np.nan)
-
-    if current > 60: regime = "STRONG BULL"
-    elif current > 25: regime = "BULL"
-    elif current < -60: regime = "STRONG BEAR"
-    elif current < -25: regime = "BEAR"
-    else: regime = "NEUTRAL"
-
+def sparkline(series, color, title):
+    if not series: return None
+    years = [d["year"] for d in series]
+    vals  = [d["value"] for d in series]
     fig = go.Figure()
-
-    fig.add_hrect(y0=30, y1=80, fillcolor="rgba(0,225,255,0.04)", line_width=0)
-    fig.add_hrect(y0=-80, y1=-30, fillcolor="rgba(255,61,113,0.04)", line_width=0)
-
     fig.add_trace(go.Scatter(
-        x=x, y=y_up, fill="tozeroy", fillcolor="rgba(0,225,255,0.13)",
-        line=dict(color="#00E1FF", width=2.4, shape="spline", smoothing=0.5),
-        mode="lines", showlegend=False, hovertemplate="MCT: %{y:.2f}<extra></extra>",
+        x=years,y=vals,mode="lines+markers",
+        line=dict(color=color,width=1.8),
+        marker=dict(color=color,size=3),
+        fill="tozeroy",        fillcolor=f"{color}10",
+        connectgaps=False,
+        hovertemplate="<b>%{x}</b>: %{y:.2f}<extra></extra>",
     ))
-    fig.add_trace(go.Scatter(
-        x=x, y=y_dn, fill="tozeroy", fillcolor="rgba(255,61,113,0.13)",
-        line=dict(color="#FF3D71", width=2.4, shape="spline", smoothing=0.5),
-        mode="lines", showlegend=False, hovertemplate="MCT: %{y:.2f}<extra></extra>",
+    fig.update_layout(**BASE,
+        title=dict(text=title,font=dict(size=9,color=color),x=0))
+    fig.update_xaxes(tickformat="d")
+    return fig
+
+def radar_chart(labels, values, name):
+    fig = go.Figure(go.Scatterpolar(
+        r=values,theta=labels,fill="toself",
+        fillcolor="rgba(0,255,200,0.06)",
+        line=dict(color="#00FFC8",width=1.8),
+        marker=dict(color="#00FFC8",size=4),
+        name=name,
     ))
-
-    fig.add_trace(go.Scatter(x=[x[-1]], y=[current], mode="markers", 
-                             marker=dict(color=dot_c, size=13, opacity=0.2, line=dict(width=0)), 
-                             showlegend=False, hoverinfo="skip"))
-    fig.add_trace(go.Scatter(x=[x[-1]], y=[current], mode="markers", 
-                             marker=dict(color=dot_c, size=7, line=dict(color="#070A12", width=2)), 
-                             showlegend=False, hoverinfo="skip"))
-
-    for lvl, lbl in [(80,"OB EXTREME"),(30,"OB ZONE"),(0,None),(-30,"OS ZONE"),(-80,"OS EXTREME")]:
-        lc = "rgba(255,255,255,0.45)" if lvl==0 else "rgba(42,53,80,0.8)"
-        dash = "solid" if lvl==0 else "dot"
-        fig.add_hline(y=lvl, line_color=lc, line_width=1.1 if lvl==0 else 0.65, line_dash=dash)
-
-        if lbl:
-            fc = "rgba(0,225,255,0.45)" if lvl>0 else "rgba(255,61,113,0.45)"
-            fig.add_annotation(x=0, y=lvl, xref="paper", text=f" {lbl}", showarrow=False, 
-                               font=dict(size=7, color=fc, family="Share Tech Mono,monospace"), 
-                               xanchor="left", yanchor="bottom")
-
-    sym = "▲" if momentum >= 0 else "▼"
-    fig.add_annotation(x=1, y=0.97, xref="paper", yref="paper", 
-                       text=f"{regime} {sym} {abs(momentum):.1f}", 
-                       showarrow=False, font=dict(size=9, color=dot_c, family="Share Tech Mono,monospace"), 
-                       xanchor="right", yanchor="top")
-
     fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        height=235, margin=dict(l=8,r=54,t=8,b=8),
-        dragmode=False, hovermode="x",
-        xaxis=dict(visible=False, showgrid=False, fixedrange=True),
-        yaxis=dict(range=[-100,100], showgrid=False, zeroline=False, fixedrange=True, 
-                   tickvals=[-80,-30,0,30,80], tickfont=dict(color="#3A4A6A",size=9,family="Share Tech Mono,monospace"), side="right"),
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Share Tech Mono, monospace",color="#1E3D50",size=9),
+        margin=dict(l=22,r=22,t=22,b=22),
+        polar=dict(
+            bgcolor="rgba(0,0,0,0)",
+            radialaxis=dict(visible=True,gridcolor="#0E1826",linecolor="#0E1826",
+                color="#1A2D3A",range=[0,100],tickfont=dict(size=7)),
+            angularaxis=dict(gridcolor="#0E1826",linecolor="#0E1826"),
+        ),
+        showlegend=False,
     )
     return fig
 
-def factor_bars_html(r: dict) -> str:
-    factors = [
-        ("RSI", r["rsi_score"]),
-        ("MACD", r["macd_score"]),
-        ("VOL", r["vol_score"]),
-    ]
-    items = ""
-    for k, v in factors:
-        v = float(np.clip(v, -100, 100))
-        c = "#00E1FF" if v >= 0 else "#FF3D71"
-        sgn = "+" if v >= 0 else ""
-        ml = f"margin-left:{100-abs(v):.0f}%" if v < 0 else ""
-        items += f"""
-        <div class="av-factor-item">
-            <div class="av-factor-k">{k}</div>
-            <div class="av-factor-bar-wrap">
-                <div style="width:{abs(v):.0f}%;height:100%;background:{c};{ml};border-radius:1px"></div>
-            </div>
-            <div class="av-factor-v" style="color:{c}">{sgn}{v:.0f}</div>
-        </div>"""
-    return f'<div class="av-factor-wrap">{items}</div>'
+def bar_chart(labels, values, color, title):
+    fig = go.Figure(go.Bar(
+        x=labels,y=values,
+        marker=dict(color=color,opacity=0.65,line=dict(color=color,width=.8)),
+        hovertemplate="%{x}: <b>%{y:.2f}</b><extra></extra>",
+    ))
+    fig.update_layout(**BASE,
+        title=dict(text=title,font=dict(size=9,color=color),x=0))
+    fig.update_xaxes(tickangle=-30,tickfont=dict(size=7))
+    return fig
 
-# ==============================================================================
-# TV WIDGET HELPERS (Internal Panel Style diinjeksikan agar tidak patah di Streamlit)
-# ==============================================================================
+def dual_line(ser_a, ser_b, color_a, color_b, label_a, label_b, title):
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=[d["year"] for d in ser_a],y=[d["value"] for d in ser_a],
+        mode="lines+markers",name=label_a,line=dict(color=color_a,width=2.2),marker=dict(color=color_a,size=6),connectgaps=False,
+        hovertemplate=f"{label_a} · %{{x}}: %{{y:.2f}}<extra></extra>"))
+    fig.add_trace(go.Scatter(x=[d["year"] for d in ser_b],y=[d["value"] for d in ser_b],
+        mode="lines+markers",name=label_b,line=dict(color=color_b,width=2.2),marker=dict(color=color_b,size=6),connectgaps=False,
+        hovertemplate=f"{label_b} · %{{x}}: %{{y:.2f}}<extra></extra>"))
+    fig.update_layout(**BASE,
+        title=dict(text=title,font=dict(size=9,color="#4A9EBF"),x=0))
+    fig.update_xaxes(tickformat="d")
+    return fig
 
-def _tv(src: str, cfg: dict, h: int) -> str:
-    cj = json.dumps(cfg)
-    return f"""<!DOCTYPE html><html><head>
-    <style>
-    *{{margin:0;padding:0;box-sizing:border-box}}
-    html, body{{background:transparent;overflow:hidden;height:100%;}}
-    .av-panel-iframe {{
-        background:#09111E;
-        border:1px solid #111827;
-        border-radius:8px;
-        padding:8px;
-        position:relative;
-        height:100%;
-    }}
-    .av-panel-iframe::before {{
-        content:"";
-        position:absolute;
-        top:0; left:0; right:0;
-        height:1px;
-        background:linear-gradient(90deg,transparent,rgba(0,225,255,0.18),transparent);
-    }}
-    </style>
-    </head><body>
-    <div class="av-panel-iframe">
-        <div class="tradingview-widget-container" style="width:100%;height:100%">
-          <div class="tradingview-widget-container__widget" style="width:100%;height:100%"></div>
-          <script type="text/javascript" src="{src}" async>{cj}</script>
-        </div>
-    </div></body></html>"""
+# ══════════════════════════════════════════════════════════════════════════════
+#  SECTIONS
+# ══════════════════════════════════════════════════════════════════════════════
 
-def tv_ticker_tape() -> str:
-    return _tv("https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js", {
-        "symbols":[
-            {"proName":"FX:EURUSD", "title":"EUR/USD"},
-            {"proName":"FX:GBPUSD", "title":"GBP/USD"},
-            {"proName":"FX:USDJPY", "title":"USD/JPY"},
-            {"proName":"FX:AUDUSD", "title":"AUD/USD"},
-            {"proName":"OANDA:XAUUSD", "title":"XAU/USD"},
-            {"proName":"CAPITALCOM:DXY", "title":"DXY"},
-            {"proName":"TVC:US10Y", "title":"US10Y"},
-            {"proName":"CAPITALCOM:OIL_CRUDE","title":"OIL"},
-            {"proName":"COINBASE:BTCUSD", "title":"BTC/USD"},
-            {"proName":"COINBASE:ETHUSD", "title":"ETH/USD"},
-            {"proName":"NASDAQ:NVDA", "title":"NVDA"},
-            {"proName":"FOREXCOM:SPXUSD", "title":"S&P 500"},
-        ],
-        "showSymbolLogo":True,"isTransparent":True,
-        "displayMode":"adaptive","colorTheme":"dark","locale":"en",
-    }, 54)
+def s_overview(country_name, dm):
+    st.markdown(f'<div class="sec-title">INDIKATOR UTAMA — {country_name.upper()}</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-sub">WORLD BANK OPEN DATA · OBSERVASI TERBARU YANG TERSEDIA</div>', unsafe_allow_html=True)
+    render_economic_data_status(country_name, dm)
+    st.caption("Tahun pada setiap kartu dan grafik adalah tahun observasi terakhir dari sumber. Tahun 2026 hanya muncul jika sudah diterbitkan oleh sumber resmi.")
 
-def tv_market_overview() -> str:
-    return _tv("https://s3.tradingview.com/external-embedding/embed-widget-market-overview.js", {
-        "colorTheme":"dark","dateRange":"3M","locale":"en","isTransparent":True,
-        "plotLineColorGrowing":"rgba(0,225,255,1)","plotLineColorFalling":"rgba(255,61,113,1)",
-        "gridLineColor":"rgba(42,53,80,0)","scaleFontColor":"#4A6080",
-        "belowLineFillColorGrowing":"rgba(0,225,255,0.10)",
-        "belowLineFillColorFalling":"rgba(255,61,113,0.10)",
-        "belowLineFillColorGrowingBottom":"rgba(0,225,255,0)",
-        "belowLineFillColorFallingBottom":"rgba(255,61,113,0)",
-        "symbolActiveColor":"rgba(0,225,255,0.10)","backgroundColor":"#09111E",
-        "tabs":[
-            {"title":"FOREX","originalTitle":"Forex","symbols":[
-                {"s":"FX:EURUSD","d":"EUR/USD"},{"s":"FX:GBPUSD","d":"GBP/USD"},
-                {"s":"FX:USDJPY","d":"USD/JPY"},{"s":"FX:USDCHF","d":"USD/CHF"},{"s":"FX:AUDUSD","d":"AUD/USD"},
-            ]},
-            {"title":"CRYPTO","originalTitle":"Crypto","symbols":[
-                {"s":"COINBASE:BTCUSD","d":"BTC/USD"},{"s":"COINBASE:ETHUSD","d":"ETH/USD"},
-                {"s":"COINBASE:SOLUSD","d":"SOL/USD"},{"s":"BINANCE:BNBUSDT","d":"BNB/USDT"},
-                {"s":"COINBASE:XRPUSD","d":"XRP/USD"},
-            ]},
-            {"title":"INDICES","originalTitle":"Indices","symbols":[
-                {"s":"FOREXCOM:SPXUSD","d":"S&P 500"},{"s":"FOREXCOM:NSXUSD","d":"Nasdaq"},
-                {"s":"FOREXCOM:DJI","d":"Dow Jones"},
-            ]},
-            {"title":"COMMODITIES","originalTitle":"Commodities","symbols":[
-                {"s":"CMCMARKETS:GOLD","d":"Gold"},{"s":"PYTH:WTI3!","d":"WTI Oil"},
-                {"s":"TVC:NATURALGAS","d":"Nat Gas"},
-            ]},
-        ],
-        "width":"100%","height":"390","showSymbolLogo":True,"showChart":True,
-    }, 390)
-
-INDICATOR_MODES = {
-    "NO MODE": None,
-    "VOFS": "PUB;LuxAlgo/Volumetric-Order-Flow-Structure",
-    "OBMTE": "PUB;AlphaExtract/Order-Block-Matrix-Trade-Engine",
-    "OFVB": "PUB;QuantumEdge/Volume-bubbles",
-    "BOB": "PUB;TradingIQ/Big-Order-Bubbles-IQ",
-    "OI": "PUB;LeviathanCapital/Volume-Open-Interest-Footprint",
-    "BSS": "PUB;Bjorgum/Bjorgum-SuperScript",
-}
-
-def tv_advanced_chart(symbol: str, interval: str, style: str, studies: list = None) -> str:
-    cfg = json.dumps({
-        "autosize":True,"symbol":symbol,"interval":TV_INTERVAL[interval],
-        "timezone":"Etc/UTC","theme":"dark","style":style,"locale":"en",
-        "backgroundColor":"#09111E","gridColor":"rgba(42,53,80,0.3)",
-        "hide_top_toolbar":False,"hide_legend":False,
-        "allow_symbol_change":False,"save_image":False,
-        "calendar":False,"support_host":"https://www.tradingview.com",
-        "studies": studies if studies else [],
-    })
-    return f"""<!DOCTYPE html><html><head>
-    <style>
-    *{{margin:0;padding:0;box-sizing:border-box}}
-    html,body{{height:100%;background:transparent;overflow:hidden}}
-    .av-panel-iframe {{
-        background:#09111E;
-        border:1px solid #111827;
-        border-radius:8px;
-        padding:8px;
-        position:relative;
-        height:100%;
-    }}
-    .av-panel-iframe::before {{
-        content:"";
-        position:absolute;
-        top:0; left:0; right:0;
-        height:1px;
-        background:linear-gradient(90deg,transparent,rgba(0,225,255,0.18),transparent);
-    }}
-    </style>
-    </head><body>
-    <div class="av-panel-iframe">
-        <div class="tradingview-widget-container" style="height:100%;width:100%">
-          <div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>
-          <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
-          {cfg}</script>
-        </div>
-    </div></body></html>"""
-
-def tv_tech_gauge(symbol: str, interval: str) -> str:
-    return _tv("https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js", {
-        "colorTheme":"dark","displayMode":"single","isTransparent":True,"locale":"en",
-        "interval":TV_TA_INT[interval],"width":"100%","height":"360",
-        "symbol":symbol,"showIntervalTabs":True,
-    }, 360)
-
-def tv_mini_chart(symbol: str) -> str:
-    return _tv("https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js", {
-        "symbol":symbol,"width":"100%","height":200,"locale":"en","dateRange":"1M",
-        "colorTheme":"dark","isTransparent":True,"autosize":True,
-        "largeChartUrl":"","chartOnly":False,
-    }, 200)
-
-def tv_econ_calendar() -> str:
-    return _tv("https://s3.tradingview.com/external-embedding/embed-widget-events.js", {
-        "colorTheme":"dark","isTransparent":True,"width":"100%","height":"430","locale":"en",
-        "importanceFilter":"0,1","countryFilter":"us,eu,gb,jp,au,ch,ca,cn",
-    }, 430)
-
-def tv_screener() -> str:
-    return _tv("https://s3.tradingview.com/external-embedding/embed-widget-screener.js", {
-        "market":"forex","showToolbar":True,"defaultColumn":"overview","defaultScreen":"general",
-        "isTransparent":True,"locale":"en","colorTheme":"dark","width":"100%","height":"430",
-    }, 430)
-
-def tv_top_stories() -> str:
-    return _tv("https://s3.tradingview.com/external-embedding/embed-widget-timeline.js", {
-        "feedMode":"all_symbols","colorTheme":"dark","isTransparent":True,
-        "displayMode":"regular","width":"100%","height":"460","locale":"en",
-    }, 460)
-
-# ==============================================================================
-# HELPER: selectbox neon cyan
-# ==============================================================================
-def av_select(label_text: str, key: str, options: list, current: str) -> str:
-    idx = options.index(current) if current in options else 0
-    if label_text:
-        st.markdown(f'<div class="av-sel-label">{label_text}</div>', unsafe_allow_html=True)
-    chosen = st.selectbox(" ", options, index=idx, key=key, label_visibility="collapsed")
-    return chosen
-
-# ==============================================================================
-# BRAND
-# ==============================================================================
-st.markdown("""
-<div class="av-brand-wrap">
-    <div class="av-brand-line">
-        <span class="av-prefix">SYS</span>
-        <span class="av-title">AERO<span class="acc">VULPIS</span>&nbsp;TERMINAL</span>
-        <span class="av-ver">v4.1</span>
-    </div>
-    <div class="av-tagline">QUANTITATIVE MARKET INTELLIGENCE SYSTEM · PROTOTYPE BUILD</div>
-</div>
-""", unsafe_allow_html=True)
-
-# Ticker tape 
-components.html(tv_ticker_tape(), height=46, scrolling=False)
-
-# Selector bar 
-sc1, sc2, sc3 = st.columns([1.4, 1.4, 1.1])
-with sc1:
-    instr_class = av_select("INSTRUMENT", "sel_instr", list(INSTRUMENTS.keys()), st.session_state.instr_class)
-    if instr_class != st.session_state.instr_class:
-        st.session_state.instr_class = instr_class
-        st.session_state.pair_label = INSTRUMENTS[instr_class][0][0]
-        st.rerun()
-
-pairs = INSTRUMENTS[st.session_state.instr_class]
-pair_labels = [p[0] for p in pairs]
-
-with sc2:
-    pair_label = av_select("PAIR", "sel_pair", pair_labels, st.session_state.pair_label)
-    if pair_label != st.session_state.pair_label:
-        st.session_state.pair_label = pair_label
-        st.rerun()
-
-with sc3:
-    timeframe = av_select("TIMEFRAME", "sel_tf", TIMEFRAMES, st.session_state.timeframe)
-    if timeframe != st.session_state.timeframe:
-        st.session_state.timeframe = timeframe
-        st.rerun()
-
-active_pair = next(p for p in pairs if p[0] == st.session_state.pair_label)
-active_label = active_pair[0]
-active_td = active_pair[1]   
-active_tv = active_pair[2]   
-tf = st.session_state.timeframe
-
-# ==============================================================================
-# ROW 1 — MCT + MARKET OVERVIEW
-# ==============================================================================
-mct_col, ov_col = st.columns([1.1, 1])
-
-with mct_col:
-    # --- MARKER: MCT SHIFT ---
-    st.markdown('<span class="mct-shift"></span>', unsafe_allow_html=True)
-
-    st.markdown(f"""
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
-        <div style="font-size:11px;font-weight:700;letter-spacing:2px;color:#00E1FF;
-             font-family:'Share Tech Mono',monospace;
-             text-shadow:0 0 10px rgba(0,225,255,0.5);">
-            MARKET CORE THERMOMETER
-        </div>
-        <div style="font-size:9px;color:#3A5070;letter-spacing:1px;
-             font-family:'Share Tech Mono',monospace;margin-top:2px">
-            RSI · MACD · VOLUME
-        </div>
-    </div>""", unsafe_allow_html=True)
-
-    seed_str = f"{active_label}-{tf}"
-    df = fetch_twelvedata(active_td, TD_INTERVAL[tf], outputsize=300)
-    if df.empty:
-        df = _make_dummy_df(seed_str)
-        data_src = "SIMULATION MODE"
-    else:
-        data_src = "LIVE · TWELVE DATA"
-
-    mct = calculate_mct(df)
-    cur = mct["current"]
-    clr = "#00E1FF" if cur >= 0 else "#FF3D71"
-    sgn = "+" if cur >= 0 else ""
-
-    st.markdown(f"""
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <div style="font-size:8px;color:#2A3A5A;letter-spacing:1px;font-family:'Share Tech Mono',monospace">
-            {data_src} · {active_label} · {tf}
-        </div>
-        <div style="font-size:24px;font-weight:700;color:{clr};font-family:'Share Tech Mono',monospace;line-height:1">
-            {sgn}{cur:.2f}
-        </div>
-    </div>""", unsafe_allow_html=True)
-
-    st.plotly_chart(render_mct(mct), use_container_width=True, config={"displayModeBar":False, "scrollZoom":False, "doubleClick":False, "showTips":False})
-    st.markdown(factor_bars_html(mct), unsafe_allow_html=True)
-
-with ov_col:
-    components.html(tv_market_overview(), height=405, scrolling=False)
-
-# ==============================================================================
-# ROW 2 — MAIN CHART + (BANK SENTRAL atas, TECH GAUGE bawah)
-# ==============================================================================
-if "chart_indic" not in st.session_state:
-    st.session_state.chart_indic = []  
-if "show_indic_modal" not in st.session_state:
-    st.session_state.show_indic_modal = False
-
-INDIC_LIST = ["RSI","MACD","STOCHASTIC","VOLUME"]
-INDIC_STUDY = {
-    "RSI": "RSI@tv-basicstudies",
-    "MACD": "MACD@tv-basicstudies",
-    "STOCHASTIC": "Stochastic@tv-basicstudies",
-    "VOLUME": "Volume@tv-basicstudies",
-}
-
-ch_col, ga_col = st.columns([1.75, 1])
-
-with ch_col:
-    # --- MARKER: MAIN CHART SHIFT ---
-    st.markdown('<span class="main-chart-shift"></span>', unsafe_allow_html=True)
-
-    # ── Row kontrol: CHART TYPE + INDIKATOR AKTIF + TOMBOL + ──
-    ctrl_l, ctrl_mid, ctrl_r = st.columns([1.2, 2, 0.5])
-    with ctrl_l:
-        cs_labels = [s[0] for s in CHART_STYLES]
-        cs_vals = {s[0]: s[1] for s in CHART_STYLES}
-        cur_cs_lbl = next((s[0] for s in CHART_STYLES if s[1]==st.session_state.chart_style), "LINE")
-
-        chart_style_lbl = av_select("CHART TYPE", "sel_cs", cs_labels, cur_cs_lbl)
-        chosen_style = cs_vals[chart_style_lbl]
-        if chosen_style != st.session_state.chart_style:
-            st.session_state.chart_style = chosen_style
-            st.rerun()
-
-    with ctrl_mid:
-        active_indics = st.session_state.chart_indic
-        if active_indics:
-            pills_html = '<div style="display:flex;gap:5px;align-items:center;margin-top:18px;flex-wrap:wrap">'
-            for ind in active_indics:
-                pills_html += f"""
-                <span style="background:rgba(0,225,255,0.1);border:1px solid rgba(0,225,255,0.4);
-                      color:#00E1FF;font-family:\'Share Tech Mono\',monospace;
-                      font-size:9px;letter-spacing:0.5px;padding:3px 8px;
-                      border-radius:3px;white-space:nowrap">
-                    {ind}
-                </span>"""
-            pills_html += '</div>'
-            st.markdown(pills_html, unsafe_allow_html=True)
-        else:
-            st.markdown("""
-            <div style="margin-top:18px;font-size:8px;color:#2A3A5A;
-                 font-family:'Share Tech Mono',monospace;letter-spacing:1px">
-                NO INDICATOR ACTIVE
-            </div>""", unsafe_allow_html=True)
-
-    with ctrl_r:
-        st.markdown('<div style="margin-top:14px">', unsafe_allow_html=True)
-        if st.button("＋", key="btn_add_indic", help="Tambah indikator ke chart", use_container_width=True):
-            st.session_state.show_indic_modal = not st.session_state.show_indic_modal
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # ── MODAL POPUP INDIKATOR ──
-    if st.session_state.show_indic_modal:
-        st.markdown("""
-        <div style="background:#07101C;border:1px solid rgba(0,225,255,0.3);
-             border-radius:8px;padding:14px;margin:6px 0;
-             box-shadow:0 0 20px rgba(0,225,255,0.1);position:relative">
-            <div style="font-size:9px;letter-spacing:2px;color:#00E1FF;
-                 font-family:'Share Tech Mono',monospace;margin-bottom:10px;
-                 text-shadow:0 0 8px rgba(0,225,255,0.4)">
-                ◈ TAMBAH INDIKATOR KE GRAFIK
-            </div>
-            <div style="font-size:8px;color:#4A6080;font-family:'Share Tech Mono',monospace;
-                 margin-bottom:10px;line-height:1.6">
-                Pilih maks. 2 indikator · Klik nama untuk buka dokumentasi TradingView
-            </div>
-        </div>""", unsafe_allow_html=True)
-
-        ic = st.columns(len(INDIC_LIST))
-        for col_i, ind in zip(ic, INDIC_LIST):
-            with col_i:
-                is_on = ind in st.session_state.chart_indic
-                can_add = len(st.session_state.chart_indic) < 2
-                btn_lbl = f"✓ {ind}" if is_on else ind
-
-                if is_on:
-                    if st.button(btn_lbl, key=f"indic_{ind}", use_container_width=True):
-                        st.session_state.chart_indic.remove(ind)
-                        st.rerun()
-                elif can_add:
-                    if st.button(btn_lbl, key=f"indic_{ind}", use_container_width=True):
-                        st.session_state.chart_indic.append(ind)
-                        st.session_state.show_indic_modal = False
-                        st.rerun()
-                else:
-                    st.markdown(f"""
-                    <div style="background:#07101C;border:1px solid #1A2238;
-                         color:#2A3A5A;font-family:'Share Tech Mono',monospace;
-                         font-size:9px;padding:6px;border-radius:4px;
-                         text-align:center">
-                        {ind}
-                    </div>""", unsafe_allow_html=True)
-
-        cl1, cl2 = st.columns(2)
-        with cl1:
-            if st.button("✕ CLEAR", key="btn_clear_indic", use_container_width=True):
-                st.session_state.chart_indic = []
-                st.session_state.show_indic_modal = False
-                st.rerun()
-        with cl2:
-            if st.button("TUTUP", key="btn_close_modal", use_container_width=True):
-                st.session_state.show_indic_modal = False
-                st.rerun()
-
-    active_studies = [INDIC_STUDY[i] for i in st.session_state.chart_indic]
-    components.html(
-        tv_advanced_chart(active_tv, tf, st.session_state.chart_style, active_studies), 
-        height=520, scrolling=False,
-    )
-
-with ga_col:
-    # ── Panel atas: Bunga Bank Sentral (Iframe seputarforex aman di dalam st.markdown) ──
-    st.markdown("""
-    <div class="av-panel" style="padding:10px;margin-bottom:6px">
-        <div style="font-size:8px;letter-spacing:2px;color:#00E1FF;
-             font-family:'Share Tech Mono',monospace;margin-bottom:6px;
-             text-shadow:0 0 8px rgba(0,225,255,0.4)">
-            ◈ BUNGA BANK SENTRAL
-        </div>
-        <style>
-            .bank-table-wrap iframe {
-                filter: invert(1) hue-rotate(180deg) brightness(0.85) saturate(1.2);
-                border-radius:4px;
-            }
-        </style>
-        <div class="bank-table-wrap">
-            <iframe src="https://www.seputarforex.org/widget/bank_central_interest.php" width="100%" height="220" frameborder="0" scrolling="no" style="overflow:hidden;border-radius:4px;">
-            </iframe>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # ── Panel bawah: Technical Analysis Gauge ──
-    components.html(tv_tech_gauge(active_tv, tf), height=370, scrolling=False)
-
-# ==============================================================================
-# ROW 3 — MINI CHARTS × 3
-# ==============================================================================
-active_mini_opts = MINI_OPTIONS[st.session_state.instr_class]
-active_mini_labels = [m[0] for m in active_mini_opts]
-active_mini_map = {m[0]: m[1] for m in active_mini_opts}
-
-for sk, default_idx in [("mini_a", 0), ("mini_b", 1), ("mini_c", 2)]:
-    cur = st.session_state.get(sk, active_mini_labels[default_idx])
-    if cur not in active_mini_labels:
-        st.session_state[sk] = active_mini_labels[min(default_idx, len(active_mini_labels)-1)]
-
-m1, m2, m3 = st.columns(3)
-
-for col, state_key, sel_key, def_idx in [
-    (m1, "mini_a", "sel_ma", 0),
-    (m2, "mini_b", "sel_mb", 1),
-    (m3, "mini_c", "sel_mc", 2),
-]:
-    with col:
-        cur_val = st.session_state.get(state_key, active_mini_labels[def_idx])
-        if cur_val not in active_mini_labels:
-            cur_val = active_mini_labels[def_idx]
-
-        chosen = av_select("", sel_key, active_mini_labels, cur_val)
-        if chosen != st.session_state.get(state_key):
-            st.session_state[state_key] = chosen
-            st.rerun()
-
-        components.html(tv_mini_chart(active_mini_map[chosen]), height=215, scrolling=False)
-
-
-# ==============================================================================
-# ROW 4 — ECONOMIC CALENDAR + SCREENER
-# ==============================================================================
-ec_col, sc_col = st.columns(2)
-
-with ec_col:
-    components.html(tv_econ_calendar(), height=445, scrolling=False)
-
-with sc_col:
-    components.html(tv_screener(), height=445, scrolling=False)
-
-# ==============================================================================
-# ROW 5 — AI ANALYSIS
-# ==============================================================================
-btn_row_l, btn_row_r, _ = st.columns([0.8, 0.9, 4])
-with btn_row_l:
-    if st.button("◈ ANALISIS PAIR", key="btn_pair"):
-        st.session_state.ai_mode = "pair"
-        st.session_state.ai_result = None
-with btn_row_r:
-    if st.button("◈ ANALISIS NEWS", key="btn_news"):
-        st.session_state.ai_mode = "news"
-        st.session_state.ai_result = None
-
-mode_color = "#00E1FF" if st.session_state.ai_mode == "pair" else "#A855F7"
-mode_label = "PAIR MODE — TEKNIKAL & SMC" if st.session_state.ai_mode == "pair" else "NEWS MODE — FUNDAMENTAL & SENTIMEN"
-st.markdown(f"""
-<div style="font-size:8px;letter-spacing:1px;color:{mode_color};
-     font-family:'Share Tech Mono',monospace;margin:4px 0 8px;
-     border-left:2px solid {mode_color};padding-left:8px">
-    {mode_label}
+    cols = st.columns(5)
+    keys = ["GDP","INF","UNP","DEBT","TRADE"]
+    for col, key in zip(cols, keys):
+        d    = dm[key]
+        meta = INDICATORS[key]
+        v    = d["val"]
+        yr   = d["year"]
+        fv   = fmt_indicator_value(key, v, meta["fmt"])
+        rl, rc = risk(key, v)
+        with col:
+            st.markdown(f"""
+<div class="kpi" style="--c:{meta['color']};">
+<div class="kpi-accent"></div>
+<div class="kpi-sym">{meta['sym']} {meta['label'].upper()}</div>
+<div class="kpi-val">{fv}</div>
+<div class="kpi-yr">{f'({yr})' if yr else ''}</div>
+<div class="kpi-desc">{meta['label']}</div>
+<span class="badge {rc}">{rl}</span>
 </div>""", unsafe_allow_html=True)
 
-if st.session_state.ai_mode == "news":
-    ni, nr = st.columns([5, 1])
-    with ni:
-        news_text = st.text_input(" ", placeholder="PASTE HEADLINE / KONTEKS BERITA...", key="news_inp")
-    with nr:
-        if st.button("RUN", key="btn_run_n") and news_text.strip():
-            st.session_state.ai_result = (
-                f"[PROTOTYPE] Dampak berita terhadap {active_label}: Sentimen risk-off meningkat. "
-                f"Potensi volatilitas naik di sesi New York. "
-                f"Pantau reaksi harga 30 menit pertama pasca rilis. "
-                f"(Placeholder — akan diganti Claude API asli.)"
+    st.markdown('<hr class="hr">', unsafe_allow_html=True)
+    st.markdown('<div class="sec-title">TREN HISTORIS (10 TAHUN)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-sub">IDENTIFIKASI SIKLUS DAN MOMENTUM MAKRO</div>', unsafe_allow_html=True)
+
+    cols2 = st.columns(5)
+    for col, key in zip(cols2, keys):
+        d    = dm[key]
+        meta = INDICATORS[key]
+        with col:
+            fig = sparkline(d["series"], meta["color"], meta["label"])
+            if fig:
+                st.plotly_chart(fig, use_container_width=True, config=CHART_CFG)
+            else:
+                st.markdown(f'<div class="kpi" style="--c:{meta["color"]};text-align:center;min-height:120px;display:flex;align-items:center;justify-content:center;"><span style="font-family:\'Share Tech Mono\',monospace;font-size:.55rem;color:#1A2D3A;">DATA TIDAK TERSEDIA</span></div>', unsafe_allow_html=True)
+
+    st.markdown('<hr class="hr">', unsafe_allow_html=True)
+    st.markdown('<div class="sec-title">RADAR MAKRO + MACRO SCORE CARD</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-sub">PROFIL RISIKO MULTI-DIMENSI · SKOR KESEHATAN EKONOMI 0–100</div>', unsafe_allow_html=True)
+
+    c1, c2, c3 = st.columns([1.3,0.8,1.9])
+    with c1:
+        labels = [INDICATORS[k]["label"] for k in keys]
+        vals   = [norm(k, dm[k]["val"]) for k in keys]
+        fig    = radar_chart(labels, vals, country_name)
+        # Radar uses RADAR_CFG — still draggable/pannable
+        st.plotly_chart(fig, use_container_width=True, config=RADAR_CFG)
+        st.markdown(f'<div style="font-family:\'Share Tech Mono\',monospace;font-size:.52rem;color:#1A2D3A;text-align:center;margin-top:-.4rem;">NORMALISASI 0–100 · {country_name.upper()}</div>', unsafe_allow_html=True)
+
+    with c2:
+        total, grade, gc = macro_score(dm)
+        st.markdown(f"""
+<div style="text-align:center;padding:.5rem 0;">
+<div class="score-num" style="color:{gc};">{total:.0f}</div>
+<div class="score-lbl">MACRO SCORE</div>
+<div class="score-bar"><div class="score-fill" style="width:{total:.0f}%;background:{gc};"></div></div>
+<span class="badge" style="background:{gc}10;color:{gc};border:1px solid {gc}30;
+    font-size:.58rem;letter-spacing:.12em;">{grade}</span>
+<div style="font-family:'Share Tech Mono',monospace;font-size:.52rem;color:#1A2D3A;
+    margin-top:.8rem;line-height:1.8;">
+72+ STRONG<br>55+ STABLE<br>38+ FRAGILE<br>&lt;38 WEAK
+</div>
+</div>""", unsafe_allow_html=True)
+
+    with c3:
+        st.markdown(f"""
+<div class="ibox" style="--lc:#C77DFF;">
+<div class="ibox-t">ANALISIS KONDISI MAKRO — {country_name.upper()}</div>
+<div class="ibox-b">{interpret(country_name, dm)}</div>
+</div>
+<div class="ibox" style="--lc:#00FFC8;margin-top:.4rem;">
+<div class="ibox-t">IMPLIKASI UNTUK TRADER &amp; INVESTOR</div>
+<div class="ibox-b">
+<b style="color:#00FFC8;">FOREX</b> — Divergensi inflasi &amp; suku bunga antar negara menciptakan peluang carry trade.<br>
+<b style="color:#FFD93D;">SAHAM</b> — Inflasi rendah + pengangguran rendah = goldilocks environment untuk ekuitas.<br>
+<b style="color:#C77DFF;">OBLIGASI</b> — Rasio utang tinggi menekan yield jangka pendek ke atas.<br>
+<b style="color:#FF6B6B;">KOMODITAS</b> — Surplus neraca dagang mendukung penguatan mata uang komoditas.
+</div>
+</div>""", unsafe_allow_html=True)
+
+def s_heatmap(all_data):
+    st.markdown('<div class="sec-title">COUNTRY HEAT MAP RISIKO</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-sub">15 NEGARA × 5 INDIKATOR + MACRO SCORE · HIJAU=AMAN · KUNING=WASPADA · MERAH=BAHAYA</div>', unsafe_allow_html=True)
+
+    col_keys  = ["GDP","INF","UNP","DEBT","TRADE","SCORE"]
+    col_heads = ["GDP","INFLASI","PENGANGGURAN","UTANG/PDB","NERACA DAG.","MACRO SCORE"]
+
+    header_html = '<div class="hm-wrap"><table class="hm-table"><thead><tr>'
+    header_html += '<th class="hm-th" style="text-align:left;min-width:110px;">NEGARA</th>'
+    for h in col_heads:
+        header_html += f'<th class="hm-th">{h}</th>'
+    header_html += '</tr></thead><tbody>'
+
+    rows_html = ""
+    for name, iso in COUNTRIES.items():
+        dm = all_data.get(iso, {})
+        vals = {
+            "GDP":   dm.get("GDP",{}).get("val"),
+            "INF":   dm.get("INF",{}).get("val"),
+            "UNP":   dm.get("UNP",{}).get("val"),
+            "DEBT":  dm.get("DEBT",{}).get("val"),
+            "TRADE": dm.get("TRADE",{}).get("val"),
+        }
+        total, _, _ = macro_score(dm)
+        vals["SCORE"] = total
+
+        rows_html += f'<tr><td class="hm-country">{name}</td>'
+        for key in col_keys:
+            v   = vals.get(key)
+            cls = hm_cls(key, v)
+            txt = hm_txt(key, v)
+            rows_html += f'<td class="hm-cell {cls}">{txt}</td>'
+        rows_html += '</tr>'
+
+    st.markdown(header_html + rows_html + "</tbody></table></div>", unsafe_allow_html=True)
+
+def s_bias(all_data):
+    st.markdown('<div class="sec-title">MACRO BIAS SCANNER</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-sub">ANALISIS FUNDAMENTAL PER INSTRUMEN — JANGAN TRADE MELAWAN MAKRO</div>', unsafe_allow_html=True)
+
+    pair = st.selectbox("Instrumen", list(PAIRS.keys()), key="bias_pair_v3")
+    bias, bc, btxt = macro_bias(pair, all_data)
+    bclass = {"BULLISH":"bias-bull","BEARISH":"bias-bear","NEUTRAL":"bias-neut"}[bias]
+
+    cfg  = PAIRS[pair]
+    isos = cfg["iso"]
+
+    c1, c2 = st.columns([1,2])
+    with c1:
+        cb_html = ""
+        for iso in isos:
+            cb = CB.get(iso,{})
+            if cb:
+                sc = {"HAWKISH":"stance-h","DOVISH":"stance-d","NEUTRAL":"stance-n"}.get(cb["stance"],"stance-n")
+                tr = {"HIKE":"trend-hike","CUT":"trend-cut","HOLD":"trend-hold"}.get(cb["trend"],"trend-hold")
+                cb_html += f'<div style="margin:.3rem 0;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span style="font-family:\'Share Tech Mono\',monospace;font-size:.6rem;color:#3A5060;">{cb["name"]}</span><span class="cb-rate" style="font-size:.8rem;">{cb["rate"]:.2f}%</span><span class="{sc}">{cb["stance"]}</span><span class="{tr}">{cb["trend"]}</span></div>'
+
+        st.markdown(f"""
+<div class="bias-wrap">
+<div class="bias-pair">{pair}</div>
+<div class="bias-val {bclass}">{bias}</div>
+<div class="bias-txt">{btxt}</div>
+<hr class="hr" style="margin:.5rem 0;">
+{cb_html}
+</div>""", unsafe_allow_html=True)
+
+    with c2:
+        drivers = cfg["drivers"]
+        if len(isos) >= 2:
+            iso_a, iso_b = isos[0], isos[1]
+            n_a = [k for k,v in COUNTRIES.items() if v==iso_a]
+            n_b = [k for k,v in COUNTRIES.items() if v==iso_b]
+            la  = n_a[0] if n_a else iso_a
+            lb  = n_b[0] if n_b else iso_b
+            for dk in drivers[:2]:
+                sa = all_data.get(iso_a,{}).get(dk,{}).get("series",[])
+                sb = all_data.get(iso_b,{}).get(dk,{}).get("series",[])
+                if sa and sb:
+                    fig = dual_line(sa,sb,INDICATORS[dk]["color"],"#FF6B6B",la,lb,INDICATORS[dk]["label"])
+                    st.plotly_chart(fig,use_container_width=True,config=CHART_CFG)
+                elif sa or sb:
+                    available_name = la if sa else lb
+                    available_series = sa if sa else sb
+                    fig = sparkline(available_series, INDICATORS[dk]["color"], f"{INDICATORS[dk]['label']} · {available_name}")
+                    st.plotly_chart(fig,use_container_width=True,config=CHART_CFG)
+                    st.info(f"Seri {INDICATORS[dk]['label']} untuk salah satu negara belum tersedia; hanya data {available_name} yang ditampilkan.")
+                else:
+                    st.info(f"Data {INDICATORS[dk]['label']} belum tersedia untuk {la} maupun {lb}.")
+        elif isos:
+            for dk in drivers[:2]:
+                sa = all_data.get(isos[0],{}).get(dk,{}).get("series",[])
+                if sa:
+                    fig = sparkline(sa,INDICATORS[dk]["color"],INDICATORS[dk]["label"])
+                    if fig: st.plotly_chart(fig,use_container_width=True,config=CHART_CFG)
+
+def s_surprise(iso):
+    name = [k for k,v in COUNTRIES.items() if v==iso]
+    name = name[0] if name else iso
+
+    st.markdown('<div class="sec-title">ECONOMIC SURPRISE INDEX</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-sub">AKTUAL VS KONSENSUS FORECAST · DIVERGENSI = POTENSI VOLATILITAS</div>', unsafe_allow_html=True)
+
+    evts = SURPRISE.get(iso,[])
+    if not evts:
+        st.markdown('<div class="ibox" style="--lc:#1A2D3A;"><div class="ibox-b">Data surprise tidak tersedia.</div></div>', unsafe_allow_html=True)
+        return
+
+    cols = st.columns(len(evts))
+    agg  = 0
+    for col,(ename,actual,forecast,date) in zip(cols,evts):
+        diff = actual - forecast
+        pct  = diff / max(abs(forecast),0.001) * 100
+        agg += pct
+        beat = diff > 0
+        bc   = "#00FFC8" if beat else "#FF6B6B"
+        bw   = min(abs(pct)*2,100)
+        scls = "b-ok" if beat else "b-bad"
+        slbl = f"BEAT +{diff:.2f}" if beat else f"MISS {diff:.2f}"
+        with col:
+            st.markdown(f"""
+<div class="surp-card">
+<div class="surp-name">{ename}</div>
+<div class="surp-date">{date}</div>
+<div class="surp-track"><div class="surp-fill" style="width:{bw:.0f}%;background:{bc};"></div></div>
+<div class="surp-nums">
+<span style="color:{bc};font-weight:700;">{actual}</span>
+<span style="color:#1A2D3A;">FORECAST {forecast}</span>
+</div>
+<span class="badge {scls}" style="margin-top:.3rem;font-size:.5rem;">{slbl}</span>
+</div>""", unsafe_allow_html=True)
+
+    avg   = agg / len(evts)
+    ac    = "#00FFC8" if avg>0 else "#FF6B6B"
+    albl  = f"MACRO BEAT +{avg:.1f}%" if avg>0 else f"MACRO MISS {avg:.1f}%"
+    adesc = "Data ekonomi lebih baik dari ekspektasi — potensi penguatan aset domestik." if avg>0 else "Data ekonomi di bawah ekspektasi — tekanan pada mata uang dan aset risiko domestik."
+
+    st.markdown(f"""
+<div class="ibox" style="--lc:{ac};margin-top:.5rem;">
+<div class="ibox-t">AGGREGATE SURPRISE — {name.upper()}</div>
+<div class="ibox-b"><b style="color:{ac};">{albl}</b> — {adesc}</div>
+</div>""", unsafe_allow_html=True)
+
+    st.markdown('<hr class="hr">', unsafe_allow_html=True)
+    other = st.selectbox("Surprise Index Negara Lain", list(COUNTRIES.keys()), index=1, key="surp_other_v3")
+    if COUNTRIES[other] != iso:
+        s_surprise_mini(COUNTRIES[other], other)
+
+def s_surprise_mini(iso, name):
+    evts = SURPRISE.get(iso,[])
+    if not evts: return
+    cols = st.columns(len(evts))
+    for col,(ename,actual,forecast,date) in zip(cols,evts):
+        diff = actual - forecast
+        beat = diff > 0
+        bc   = "#00FFC8" if beat else "#FF6B6B"
+        bw   = min(abs(diff/max(abs(forecast),0.001))*200,100)
+        scls = "b-ok" if beat else "b-bad"
+        with col:
+            st.markdown(f"""
+<div class="surp-card">
+<div class="surp-name">{ename}</div>
+<div class="surp-date">{date}</div>
+<div class="surp-track"><div class="surp-fill" style="width:{bw:.0f}%;background:{bc};"></div></div>
+<div class="surp-nums">
+<span style="color:{bc};font-weight:700;">{actual}</span>
+<span style="color:#1A2D3A;">FORECAST {forecast}</span>
+</div>
+<span class="badge {scls}" style="font-size:.5rem;">{'BEAT' if beat else 'MISS'} {diff:+.2f}</span>
+</div>""", unsafe_allow_html=True)
+
+def s_cycle(all_data, selected_names):
+    st.markdown('<div class="sec-title">SIKLUS EKONOMI DETECTOR</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-sub">KLASIFIKASI FASE SIKLUS: EKSPANSI · PUNCAK · STAGFLASI · KONTRAKSI · PEMULIHAN</div>', unsafe_allow_html=True)
+
+    cols = st.columns(min(len(selected_names),5))
+    for col, name in zip(cols, selected_names[:5]):
+        iso   = COUNTRIES[name]
+        dm    = all_data.get(iso,{})
+        phase, pc, desc = detect_cycle(dm)
+        with col:
+            st.markdown(f"""
+<div class="cyc-card">
+<div class="cyc-country">{name.upper()[:12]}</div>
+<div class="cyc-phase" style="color:{pc};">{phase}</div>
+<div class="cyc-desc">{desc}</div>
+</div>""", unsafe_allow_html=True)
+
+    st.markdown("""
+<div class="ibox" style="--lc:#4FC3F7;margin-top:.8rem;">
+<div class="ibox-t">PANDUAN ROTASI SEKTOR PER FASE SIKLUS</div>
+<div class="ibox-b">
+<b style="color:#00FFC8;">EKSPANSI</b> — Overweight Teknologi, Diskresi Konsumen, Industri. Underweight Utilities.<br>
+<b style="color:#FFD93D;">PUNCAK</b> — Rotasi ke Energi, Material, Consumer Staples. Kurangi durasi obligasi.<br>
+<b style="color:#FF6B6B;">KONTRAKSI / STAGFLASI</b> — Utilities, Healthcare, Obligasi Pemerintah, Emas.<br>
+<b style="color:#4FC3F7;">PEMULIHAN</b> — Akumulasi Keuangan, Industri, Small-cap. Tingkatkan risk appetite.
+</div>
+</div>""", unsafe_allow_html=True)
+
+def s_cb(selected_isos):
+    st.markdown('<div class="sec-title">CENTRAL BANK POLICY TRACKER</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-sub">STANCE KEBIJAKAN MONETER · SUKU BUNGA · MEETING BERIKUTNYA · CARRY TRADE</div>', unsafe_allow_html=True)
+
+    sc_map = {"HAWKISH":"stance-h","DOVISH":"stance-d","NEUTRAL":"stance-n"}
+    tr_map = {"HIKE":"trend-hike","CUT":"trend-cut","HOLD":"trend-hold"}
+
+    sorted_isos = sorted(set(selected_isos), key=lambda x: CB.get(x,{}).get("rate",0), reverse=True)
+
+    html = '<div class="cb-grid">'
+    for iso in sorted_isos:
+        cb = CB.get(iso)
+        if not cb: continue
+        sc  = sc_map.get(cb["stance"],"stance-n")
+        tr  = tr_map.get(cb["trend"],"trend-hold")
+        html += f"""
+<div class="cb-card">
+<div class="cb-name">{iso} · {cb['name']}</div>
+<div class="cb-rate">{cb['rate']:.2f}%</div>
+<span class="{sc}">{cb['stance']}</span>
+<span class="{tr}">{cb['trend']}</span>
+<div class="cb-next">{cb['next']}</div>
+</div>"""
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
+
+    st.markdown('<div class="sec-title" style="margin-top:1.2rem;">CARRY TRADE MATRIX</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-sub">LONG HIGH-RATE / SHORT LOW-RATE · SPREAD TERBESAR</div>', unsafe_allow_html=True)
+
+    all_cb = sorted(CB.items(), key=lambda x: x[1]["rate"], reverse=True)
+    high3  = all_cb[:3]
+    low3   = all_cb[-3:]
+    for (ih, cbh) in high3:
+        for (il, cbl) in low3[:2]:
+            if ih == il: continue
+            diff = cbh["rate"] - cbl["rate"]
+            nh = [k for k,v in COUNTRIES.items() if v==ih]
+            nl = [k for k,v in COUNTRIES.items() if v==il]
+            st.markdown(f"""
+<div class="carry-row">
+<div class="carry-pair">LONG {ih} / SHORT {il}</div>
+<div class="carry-diff">+{diff:.2f}%</div>
+<div class="carry-desc">Long {cbh['name']} ({cbh['rate']:.2f}%) · Short {cbl['name']} ({cbl['rate']:.2f}%)</div>
+</div>""", unsafe_allow_html=True)
+
+def s_calendar(all_data: dict):
+    st.markdown('<div class="sec-title">KALENDER EKONOMI</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-sub">EVENT MAKRO BERDAMPAK TINGGI · FORECAST &amp; PREVIOUS · SEPTEMBER 2026 · WIB</div>', unsafe_allow_html=True)
+
+    c1, c2, c3 = st.columns([1,1.5,1.5])
+    with c1:
+        imp_f  = st.radio("Filter Dampak", ["SEMUA","HIGH","MEDIUM"], key="cal_imp_v3", horizontal=False)
+    with c2:
+        iso_f  = st.multiselect("Filter Negara", list(set(e["iso"] for e in CALENDAR)), key="cal_iso_v3")
+    with c3:
+        sent_f = st.radio("Filter Sentiment", ["SEMUA","BULLISH","BEARISH","NEUTRAL"], key="cal_sent_v3", horizontal=False)
+
+    imp_cls = {"HIGH":"imp-h","MEDIUM":"imp-m","LOW":"imp-l"}
+    imp_lbl = {"HIGH":"HIGH","MEDIUM":"MED","LOW":"LOW"}
+
+    # Summary counts
+    bull_n = bear_n = neu_n = 0
+    rows = []
+    for ev in CALENDAR:
+        slbl, scls, sreason = cal_sentiment(ev, all_data)
+        if slbl == "BULLISH": bull_n += 1
+        elif slbl == "BEARISH": bear_n += 1
+        else: neu_n += 1
+        rows.append((ev, slbl, scls, sreason))
+
+    # Sentiment summary bar
+    total_ev = len(rows)
+    bp = round(bull_n/total_ev*100)
+    rp = round(bear_n/total_ev*100)
+    np_ = 100 - bp - rp
+    st.markdown(f"""
+<div class="ibox" style="--lc:#4FC3F7;margin-bottom:.8rem;">
+<div class="ibox-t">AGGREGATE MARKET SENTIMENT — SEPTEMBER 2026 ({total_ev} EVENT)</div>
+<div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.4rem;">
+<span class="sent-bull">{bull_n} BULLISH</span>
+<span class="sent-bear">{bear_n} BEARISH</span>
+<span class="sent-neu">{neu_n} NEUTRAL</span>
+</div>
+<div style="height:5px;background:#0E1826;border-radius:2px;display:flex;overflow:hidden;">
+<div style="height:5px;width:{bp}%;background:#00FFC8;"></div>
+<div style="height:5px;width:{np_}%;background:#FFD93D;"></div>
+<div style="height:5px;width:{rp}%;background:#FF6B6B;"></div>
+</div>
+<div style="font-family:'Share Tech Mono',monospace;font-size:.52rem;color:#1A2D3A;margin-top:.3rem;">
+BULLISH {bp}% · NEUTRAL {np_}% · BEARISH {rp}%
+</div>
+</div>""", unsafe_allow_html=True)
+
+    for (ev, slbl, scls, sreason) in rows:
+        if imp_f != "SEMUA" and ev["impact"] != imp_f: continue
+        if iso_f and ev["iso"] not in iso_f: continue
+        if sent_f != "SEMUA" and slbl != sent_f: continue
+        ic = imp_cls.get(ev["impact"],"imp-l")
+        il = imp_lbl.get(ev["impact"],"LOW")
+        n  = [k for k,v in COUNTRIES.items() if v==ev["iso"]]
+        country_name = n[0] if n else ev["iso"]
+        impact_color = {"HIGH":"#FF6B6B", "MEDIUM":"#FFD93D", "LOW":"#4FC3F7"}.get(ev["impact"], "#4FC3F7")
+        st.markdown(f"""
+<div class="cal-row" style="border-left:2px solid {impact_color};">
+<div class="cal-date">{ev['date']}</div>
+<div class="cal-iso" style="min-width:26px;">{ev['iso']}</div>
+<div style="flex:1;min-width:0;">
+<div class="cal-evt" style="color:{impact_color};">{ev['event']} <span style="color:#1A2D3A;font-size:.58rem;">· {country_name}</span></div>
+<span class="cal-fcast">ACTUAL: {ev.get('actual', 'Belum tersedia')} · FORECAST: {ev['forecast']} · PREVIOUS: {ev['prev']} · RILIS WIB: {ev.get('time_wib', 'Belum tersedia')}</span>
+<div style="font-family:'Share Tech Mono',monospace;font-size:.55rem;color:#2D4050;margin-top:.15rem;">{sreason}</div>
+</div>
+<div style="display:flex;flex-direction:column;align-items:flex-end;gap:.25rem;min-width:60px;">
+<span class="{ic}">{il}</span>
+<span class="{scls}">{slbl}</span>
+</div>
+</div>""", unsafe_allow_html=True)
+
+def s_compare(all_data, compare_names, main_name):
+    st.markdown('<div class="sec-title">PERBANDINGAN MULTI-NEGARA</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-sub">BENCHMARK POSISI MAKRO ANTAR EKONOMI</div>', unsafe_allow_html=True)
+
+    all_names = [main_name] + compare_names
+    all_isos  = [COUNTRIES[n] for n in all_names]
+    short     = [n[:14] for n in all_names]
+
+    ind_sel = st.selectbox("Indikator", list(INDICATORS.keys()), index=1, key="cmp_ind_v3")
+    meta    = INDICATORS[ind_sel]
+
+    vals = []
+    for iso in all_isos:
+        v, _ = latest(all_data.get(iso,{}).get(ind_sel,{}).get("series",[]))
+        if ind_sel=="GDP": vals.append(v/1e12 if v else 0)
+        elif ind_sel=="TRADE": vals.append(v/1e9 if v else 0)
+        else: vals.append(v if v else 0)
+
+    fig = bar_chart(short, vals, meta["color"], meta["label"])
+    st.plotly_chart(fig, use_container_width=True, config=CHART_CFG)
+
+    rows = []
+    for name, iso in zip(all_names, all_isos):
+        dm = all_data.get(iso,{})
+        total, grade, _ = macro_score(dm)
+        row = {"Negara": name}
+        for key, m2 in INDICATORS.items():
+            v, _ = latest(dm.get(key,{}).get("series",[]))
+            row[m2["label"]] = fmt_indicator_value(key, v, m2["fmt"])
+        row["Macro Score"] = f"{total:.0f} ({grade})"
+        rows.append(row)
+    df = pd.DataFrame(rows).set_index("Negara")
+    st.dataframe(df, use_container_width=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  MAIN
+# ══════════════════════════════════════════════════════════════════════════════
+
+def main():
+    css()
+
+    # Header
+    st.markdown("""
+<div class="aero-header">
+<div class="aero-build">AEROVULPIS · ECONOMIC RADAR · OBSERVASI DATA PUBLIK</div>
+<div class="aero-title">ECONOMIC RADAR</div>
+<div class="aero-sub">PANTAU KONDISI MAKROEKONOMI GLOBAL · BACA SINYAL PASAR SEBELUM PASAR BERGERAK</div>
+</div>
+<hr class="hr">""", unsafe_allow_html=True)
+
+    # Controls
+    c1, c2, c3 = st.columns([1.2,2.2,0.6])
+    with c1:
+        main_name = st.selectbox("Negara Utama", list(COUNTRIES.keys()), key="main_v3")
+    with c2:
+        compare_options = [k for k in COUNTRIES if k != main_name]
+        # Nilai tersimpan harus selalu merupakan subset opsi saat negara utama berubah.
+        # Ini mencegah StreamlitAPIException ketika negara utama dipilih sebagai pembanding.
+        if "cmp_v3" not in st.session_state:
+            st.session_state["cmp_v3"] = sanitize_multiselect_values(
+                ("Amerika Serikat", "China"), compare_options, limit=5
             )
-else:
-    rc, _ = st.columns([0.7, 5])
-    with rc:
-        if st.button("RUN", key="btn_run_p"):
-            st.session_state.ai_result = (
-                f"[PROTOTYPE] Analisis teknikal {active_label} · {tf}: "
-                f"Bias bearish-netral jangka pendek. RSI ~42, MACD histogram menyempit. "
-                f"EMA-20 di bawah EMA-50. ATR naik — volatilitas meningkat. "
-                f"WAIT — konfirmasi bounce di S1 sebelum entry BUY. "
-                f"(Placeholder — akan diganti Claude API asli.)"
+        else:
+            st.session_state["cmp_v3"] = sanitize_multiselect_values(
+                st.session_state["cmp_v3"], compare_options, limit=5
             )
+        cmp_names = st.multiselect(
+            "Bandingkan (maks 5)",
+            compare_options,
+            max_selections=5,
+            key="cmp_v3"
+        )
+    with c3:
+        st.markdown('<div style="height:1.7rem;"></div>', unsafe_allow_html=True)
+        if st.button("REFRESH DATA", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
 
-if st.session_state.ai_result:
-    st.markdown(f'<div class="av-ai-result">{st.session_state.ai_result}</div>', unsafe_allow_html=True)
+    main_iso = COUNTRIES[main_name]
 
-# ==============================================================================
-# ROW 6 — ACTIVE TRADE SIGNALS
-# ==============================================================================
-tc = st.columns(len(DUMMY_TRADES))
-for col, t in zip(tc, DUMMY_TRADES):
-    with col:
-        buy = t["dir"] == "BUY"
-        dc = "av-dir-buy" if buy else "av-dir-sell"
-        rows = "".join([
-            f'<div class="av-trade-row"><span class="av-trade-k">{k}</span>'
-            f'<span style="color:{c};font-size:11px;font-weight:{700 if k!="ENTRY" else 400}">{t[vk]}</span></div>'
-            for k,vk,c in [("ENTRY","entry","#8BA0C0"),("SL","sl","#FF3D71"),
-                           ("TP1","tp1","#00E1FF"),("TP2","tp2","#00B8CC"),("TP3","tp3","#0090A0")]
-        ])
-        st.markdown(f"""<div class="av-trade-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-            <span class="av-trade-symbol">{t['symbol']}</span>
-            <span class="{dc}">{t['dir']}</span>
-        </div>{rows}</div>""", unsafe_allow_html=True)
+    # Fetch semua ISO yang diperlukan
+    all_isos = list(dict.fromkeys(
+        [main_iso] + [COUNTRIES[n] for n in cmp_names] + list(COUNTRIES.values())
+    ))
 
-# ==============================================================================
-# ROW 7 — TOP STORIES
-# ==============================================================================
-components.html(tv_top_stories(), height=475, scrolling=False)
+    with st.spinner("Mengambil data dari World Bank…"):
+        all_data = {}
+        for iso in all_isos:
+            all_data[iso] = {}
+            for key, meta in INDICATORS.items():
+                series = fetch(iso, meta["code"])
+                v, yr  = latest(series)
+                all_data[iso][key] = {"val":v,"year":yr,"series":series}
+
+    dm = all_data[main_iso]
+
+    # Tabs
+    tabs = st.tabs([
+        "OVERVIEW",
+        "HEAT MAP",
+        "BIAS SCANNER",
+        "SURPRISE INDEX",
+        "SIKLUS EKONOMI",
+        "CENTRAL BANKS",
+        "KALENDER",
+        "PERBANDINGAN",
+    ])
+
+    with tabs[0]: s_overview(main_name, dm)
+    with tabs[1]: s_heatmap(all_data)
+    with tabs[2]: s_bias(all_data)
+    with tabs[3]: s_surprise(main_iso)
+    with tabs[4]: s_cycle(all_data, [main_name]+cmp_names)
+    with tabs[5]:
+        cb_isos = list(dict.fromkeys([main_iso]+[COUNTRIES[n] for n in cmp_names]+["US","CN","JP","DE","GB"]))
+        s_cb(cb_isos)
+    with tabs[6]: s_calendar(all_data)
+    with tabs[7]:
+        if cmp_names: s_compare(all_data, cmp_names, main_name)
+        else: st.markdown('<div class="ibox" style="--lc:#1A2D3A;"><div class="ibox-b">Pilih minimal 1 negara pembanding di atas.</div></div>', unsafe_allow_html=True)
+
+
+if __name__ == "__main__":
+    main()
