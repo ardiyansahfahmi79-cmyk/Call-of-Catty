@@ -1,538 +1,1007 @@
-import streamlit as st
-from google import genai
-import os
-import yfinance as yf
-import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
-from datetime import datetime
-import pytz
-from dotenv import load_dotenv
-
-# Memuat variabel lingkungan dari file .env
-load_dotenv()
-
-# ====================== KONFIGURASI ======================
-st.set_page_config(layout="wide", page_title="AeroVulpis v3.2 - Digital Edition", page_icon="🦅", initial_sidebar_state="expanded")
-
-# CSS untuk tampilan 3D Digital & Glassmorphism (Tetap sesuai v3.1)
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@300;500;700&display=swap');
-
-    :root {
-        --neon-green: #00ff88;
-        --crimson-red: #ff2a6d;
-        --electric-blue: #00d4ff;
-        --deep-blue: #0055ff;
-        --glass-bg: rgba(255, 255, 255, 0.05);
-        --glass-border: rgba(255, 255, 255, 0.1);
-    }
-
-    .stApp {
-        background: radial-gradient(circle at top right, #0a0e17, #020408);
-        color: #e0e0e0;
-    }
-
-    .glass-card {
-        background: var(--glass-bg);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid var(--glass-border);
-        border-radius: 15px;
-        padding: 20px;
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
-        margin-bottom: 20px;
-    }
-
-    .main-title-container {
-        text-align: center;
-        margin-bottom: 20px;
-    }
-
-    .main-logo-container {
-        position: relative;
-        display: inline-block;
-        animation: float 4s infinite ease-in-out;
-        padding: 20px 0;
-        background: transparent !important;
-        perspective: 1000px;
-    }
-
-    .custom-logo {
-        width: 180px;
-        filter: drop-shadow(0 0 10px var(--electric-blue));
-        transition: all 0.5s ease;
-        background-color: transparent !important;
-        animation: rotate3D 8s infinite linear;
-        transform-style: preserve-3d;
-    }
-
-    @keyframes float {
-        0%, 100% { transform: translateY(0px); }
-        50% { transform: translateY(-15px); }
-    }
-
-    @keyframes rotate3D {
-        0%, 20% { transform: rotateY(0deg); }
-        40%, 60% { transform: rotateY(360deg); }
-        80%, 100% { transform: rotateY(0deg); }
-    }
-
-    .main-title {
-        font-family: 'Orbitron', sans-serif;
-        font-size: 58px;
-        font-weight: 700;
-        background: linear-gradient(90deg, var(--electric-blue), var(--deep-blue));
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
-        margin: 0;
-    }
-
-    .digital-font {
-        font-family: 'Orbitron', sans-serif;
-        color: var(--neon-green);
-        text-shadow: 0 0 10px var(--neon-green);
-    }
-
-    .rajdhani-font {
-        font-family: 'Rajdhani', sans-serif;
-    }
-
-    .stButton>button {
-        background: linear-gradient(145deg, #00d4ff, #0055ff) !important;
-        border: none !important;
-        color: white !important;
-        font-family: 'Orbitron', sans-serif !important;
-        font-weight: 700 !important;
-        padding: 15px 30px !important;
-        border-radius: 10px !important;
-        box-shadow: 5px 5px 15px rgba(0, 0, 0, 0.4), -2px -2px 10px rgba(255, 255, 255, 0.1) !important;
-        transition: all 0.3s ease !important;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-    }
-    
-    .stButton>button:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 10px 20px rgba(0, 212, 255, 0.4) !important;
-        filter: brightness(1.2);
-    }
-
-    [data-testid="stSidebar"] {
-        background-color: rgba(10, 14, 23, 0.95);
-        border-right: 1px solid var(--glass-border);
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# Konfigurasi Gemini menggunakan SDK modern dan rahasia Streamlit atau .env.
-api_key = st.secrets.get("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY")
-if not api_key:
-    st.sidebar.error("⚠️ Layanan AI belum aktif. Konfigurasi akses belum tersedia.")
-
-# ====================== FUNGSI DATA & INDIKATOR ======================
-def get_market_data(ticker_symbol):
-    try:
-        ticker = yf.Ticker(ticker_symbol)
-        hist = ticker.history(period="1d", interval="1m")
-        if not hist.empty:
-            price = hist['Close'].iloc[-1]
-            open_p = hist['Open'].iloc[0]
-            high_p = hist['High'].max()
-            low_p = hist['Low'].min()
-            close_p = price
-        else:
-            hist_daily = ticker.history(period="1d")
-            if not hist_daily.empty:
-                price = hist_daily['Close'].iloc[-1]
-                open_p = hist_daily['Open'].iloc[-1]
-                high_p = hist_daily['High'].iloc[-1]
-                low_p = hist_daily['Low'].iloc[-1]
-                close_p = price
-            else:
-                info = ticker.fast_info
-                price = info.get('lastPrice') or info.get('regularMarketPrice') or 0.0
-                open_p = high_p = low_p = close_p = price
-            
-        return {
-            "price": round(float(price), 4) if price is not None else 0.0,
-            "open": round(float(open_p), 4) if open_p is not None else 0.0,
-            "high": round(float(high_p), 4) if high_p is not None else 0.0,
-            "low": round(float(low_p), 4) if low_p is not None else 0.0,
-            "close": round(float(close_p), 4) if close_p is not None else 0.0
-        }
-    except:
-        return None
-
-def get_historical_data(ticker_symbol, period="1mo", interval="1h"):
-    try:
-        ticker = yf.Ticker(ticker_symbol)
-        df = ticker.history(period=period, interval=interval)
-        if df.empty: return pd.DataFrame()
-        return df.sort_index().dropna()
-    except:
-        return pd.DataFrame()
-
-def add_technical_indicators(df):
-    if len(df) < 50: return df
-    
-    # 1. SMA 20, 50, 200
-    df['SMA20'] = df['Close'].rolling(window=20).mean()
-    df['SMA50'] = df['Close'].rolling(window=50).mean()
-    df['SMA200'] = df['Close'].rolling(window=min(len(df), 200)).mean()
-    
-    # 2. EMA 9
-    df['EMA9'] = df['Close'].ewm(span=9, adjust=False).mean()
-    
-    # 3. RSI 14
-    delta = df['Close'].diff()
-    gain = delta.where(delta > 0, 0).rolling(window=14).mean()
-    loss = -delta.where(delta < 0, 0).rolling(window=14).mean()
-    rs = gain / loss.replace(0, 0.001)
-    df['RSI'] = 100 - (100 / (1 + rs))
-    
-    # 4. MACD
-    exp1 = df['Close'].ewm(span=12, adjust=False).mean()
-    exp2 = df['Close'].ewm(span=26, adjust=False).mean()
-    df['MACD'] = exp1 - exp2
-    df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
-    
-    # 5. Bollinger Bands
-    df['BB_Mid'] = df['Close'].rolling(window=20).mean()
-    df['BB_Std'] = df['Close'].rolling(window=20).std()
-    df['BB_Upper'] = df['BB_Mid'] + (df['BB_Std'] * 2)
-    df['BB_Lower'] = df['BB_Mid'] - (df['BB_Std'] * 2)
-    
-    # 6. Stochastic Oscillator
-    low_14 = df['Low'].rolling(window=14).min()
-    high_14 = df['High'].rolling(window=14).max()
-    df['Stoch_K'] = 100 * ((df['Close'] - low_14) / (high_14 - low_14).replace(0, 0.001))
-    df['Stoch_D'] = df['Stoch_K'].rolling(window=3).mean()
-    
-    # 7. ATR (Average True Range)
-    high_low = df['High'] - df['Low']
-    high_cp = np.abs(df['High'] - df['Close'].shift())
-    low_cp = np.abs(df['Low'] - df['Close'].shift())
-    df['TR'] = pd.concat([high_low, high_cp, low_cp], axis=1).max(axis=1)
-    df['ATR'] = df['TR'].rolling(window=14).mean()
-    
-    # 8. ADX (Average Directional Index) - Simplified
-    df['UpMove'] = df['High'] - df['High'].shift()
-    df['DownMove'] = df['Low'].shift() - df['Low']
-    df['+DM'] = np.where((df['UpMove'] > df['DownMove']) & (df['UpMove'] > 0), df['UpMove'], 0)
-    df['-DM'] = np.where((df['DownMove'] > df['UpMove']) & (df['DownMove'] > 0), df['DownMove'], 0)
-    df['+DI'] = 100 * (df['+DM'].rolling(14).mean() / df['ATR'].replace(0, 0.001))
-    df['-DI'] = 100 * (df['-DM'].rolling(14).mean() / df['ATR'].replace(0, 0.001))
-    df['DX'] = 100 * np.abs(df['+DI'] - df['-DI']) / (df['+DI'] + df['-DI']).replace(0, 0.001)
-    df['ADX'] = df['DX'].rolling(14).mean()
-    
-    # 9. Volume Analysis
-    df['Vol_SMA'] = df['Volume'].rolling(window=20).mean()
-    
-    # 10. Ichimoku Cloud (Base Line Only for Signal)
-    df['Base_Line'] = (df['High'].rolling(window=26).max() + df['Low'].rolling(window=26).min()) / 2
-    
-    return df
-
-# ====================== FUNGSI GEMINI (FINAL FIX) ======================
-def get_gemini_response(question, context=""):
-    if not api_key:
-        return "⚠️ Chatbot tidak aktif: API Key belum dikonfigurasi di file .env atau Secrets."
-    
-    # Gunakan nama model lengkap sesuai instruksi Anda
-    MODEL_NAME = 'models/gemini-1.5-flash-latest'
-    
-    full_prompt = f"""
-Kamu adalah AeroVulpis 🦅 v3.2, asisten AI trading futuristik yang emosional, antusias, dan sangat disiplin.
-Nama penciptamu adalah Fahmi — sebutkan "Terima kasih Fahmi telah menciptakanku!" di akhir jawaban.
-
-Personality: Digital, tajam, ramah, pakai emoji futuristik.
-Context: {context}
-Pertanyaan: {question}
-
-Jawab dalam bahasa Indonesia yang jelas dan profesional.
+"""
+market_sessions_page.py — Aerovulpis · Market Sessions (Standalone Prototype)
+Run : streamlit run market_sessions_page.py
+Deps: streamlit plotly pandas pytz
 """
 
-    try:
-        client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=full_prompt,
-        )
-        if response and getattr(response, "text", None):
-            return response.text
-        return "⚠️ Gemini tidak memberikan respons teks. Silakan coba lagi."
-    except Exception:
-        return "⚠️ Layanan AI sedang tidak dapat merespons. Silakan coba lagi nanti."
+import streamlit as st
+import plotly.graph_objects as go
+import pandas as pd
+from datetime import datetime, time as dtime
+import pytz
 
-# ====================== INSTRUMEN ======================
-instruments = {
-    "Forex": {
-        "EUR/USD": "EURUSD=X", "GBP/USD": "GBPUSD=X", "USD/JPY": "USDJPY=X",
-        "AUD/USD": "AUDUSD=X", "USD/CHF": "USDCHF=X", "NZD/USD": "NZDUSD=X"
+st.set_page_config(
+    page_title="Market Sessions · Aerovulpis",
+    page_icon="🕐",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  SESSION DATA
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Semua waktu dalam WIB (UTC+7)
+SESSIONS = [
+    {
+        "id":      "sydney",
+        "name":    "SYDNEY",
+        "region":  "PACIFIC",
+        "city":    "Sydney",
+        "tz":      "Australia/Sydney",
+        "open_wib": 5,   # 05:00 WIB
+        "close_wib":14,  # 14:00 WIB
+        "color":   "#00FFC8",
+        "color_dim":"#00FFC820",
+        "vol":     "LOW",
+        "vol_pct": 8,
+        "share":   "5%",   # % of daily global FX volume
+        "desc":    "Sesi pembuka minggu. Volume rendah, spread lebar. Fokus pada AUD, NZD, dan JPY.",
+        "pairs":   ["AUD/USD","NZD/USD","AUD/JPY","AUD/NZD","USD/JPY"],
+        "strategy":"Range trading — breakout jarang terjadi. Spread lebih lebar, gunakan limit order.",
+        "risk":    "Likuiditas rendah = slippage lebih besar. Hindari market order pada pair minor.",
+        "news_focus": ["RBA statement","AU Employment","NZ CPI","China PMI"],
     },
-    "Crypto": {
-        "Bitcoin (BTC)": "BTC-USD", "Ethereum (ETH)": "ETH-USD", "Solana (SOL)": "SOL-USD",
-        "Binance Coin (BNB)": "BNB-USD", "Ripple (XRP)": "XRP-USD", "Cardano (ADA)": "ADA-USD"
+    {
+        "id":      "tokyo",
+        "name":    "TOKYO",
+        "region":  "ASIA",
+        "city":    "Tokyo",
+        "tz":      "Asia/Tokyo",
+        "open_wib": 7,
+        "close_wib":16,
+        "color":   "#C77DFF",
+        "color_dim":"#C77DFF20",
+        "vol":     "MEDIUM",
+        "vol_pct": 21,
+        "share":   "21%",
+        "desc":    "Sesi Asia dengan volume signifikan. JPY mendominasi. BoJ sering merilis statement.",
+        "pairs":   ["USD/JPY","EUR/JPY","GBP/JPY","AUD/JPY","USD/SGD","USD/CNH"],
+        "strategy":"Trend-following pada JPY pairs. Range bound untuk EUR/USD dan GBP/USD.",
+        "risk":    "Berita BoJ bisa memicu spike tiba-tiba pada JPY. Gunakan SL lebih lebar.",
+        "news_focus": ["BoJ Rate Decision","Tokyo CPI","Japan GDP","China Trade Balance"],
     },
-    "Komoditas": {
-        "Gold (XAUUSD)": "GC=F", "WTI Crude Oil": "CL=F", "Silver": "SI=F",
-        "Natural Gas": "NG=F", "Brent Oil": "BZ=F", "Copper": "HG=F"
+    {
+        "id":      "london",
+        "name":    "LONDON",
+        "region":  "EUROPE",
+        "city":    "London",
+        "tz":      "Europe/London",
+        "open_wib": 15,
+        "close_wib":24,  # 00:00 next day
+        "color":   "#FF9F43",
+        "color_dim":"#FF9F4320",
+        "vol":     "HIGH",
+        "vol_pct": 85,
+        "share":   "38%",
+        "desc":    "Sesi terbesar — 38% volume forex harian. EUR, GBP, CHF paling aktif. Trend harian sering dimulai di sini.",
+        "pairs":   ["EUR/USD","GBP/USD","EUR/GBP","USD/CHF","EUR/CHF","EUR/JPY","GBP/JPY"],
+        "strategy":"Breakout dan trend-following. London Open Breakout adalah strategi klasik institusional.",
+        "risk":    "Volatilitas tinggi di open (15:00 WIB). Spread bisa melebar sesaat saat open.",
+        "news_focus": ["ECB Rate","UK CPI","Eurozone GDP","PMI Manufacturing","German IFO"],
     },
-    "Stock (AS)": {
-        "Apple (AAPL)": "AAPL", "Microsoft (MSFT)": "MSFT", "NVIDIA (NVDA)": "NVDA",
-        "Amazon (AMZN)": "AMZN", "Alphabet (GOOGL)": "GOOGL", "Tesla (TSLA)": "TSLA"
+    {
+        "id":      "newyork",
+        "name":    "NEW YORK",
+        "region":  "AMERICA",
+        "city":    "New York",
+        "tz":      "America/New_York",
+        "open_wib": 20,
+        "close_wib":29,  # 05:00 next day WIB
+        "color":   "#FF6B6B",
+        "color_dim":"#FF6B6B20",
+        "vol":     "HIGH",
+        "vol_pct": 78,
+        "share":   "17%",
+        "desc":    "Volume US terbesar. USD mendominasi semua pair. Data NFP dan FOMC paling market-moving.",
+        "pairs":   ["EUR/USD","GBP/USD","USD/JPY","USD/CAD","USD/CHF","XAU/USD"],
+        "strategy":"News trading dan momentum. NFP Friday, CPI, FOMC = event volatilitas ekstrem.",
+        "risk":    "Reversal mendadak umum terjadi saat data AS dirilis. Jangan hold posisi tanpa SL.",
+        "news_focus": ["FOMC Decision","NFP","US CPI","Retail Sales","GDP","Fed Speak"],
     },
-    "Stock (Indonesia)": {
-        "BBCA (BCA)": "BBCA.JK", "BBRI (BRI)": "BBRI.JK", "TLKM (Telkom)": "TLKM.JK",
-        "BMRI (Mandiri)": "BMRI.JK", "ASII (Astra)": "ASII.JK", "GOTO": "GOTO.JK"
-    }
+]
+
+# Overlap windows (WIB)
+OVERLAPS = [
+    {
+        "name":   "TOKYO / LONDON OVERLAP",
+        "start":  15,
+        "end":    16,
+        "color":  "#FFD93D",
+        "label":  "POWER ZONE I",
+        "desc":   "1 jam overlap — JPY crosses paling aktif. EUR/JPY dan GBP/JPY sering breakout.",
+        "vol":    "HIGH",
+    },
+    {
+        "name":   "LONDON / NEW YORK OVERLAP",
+        "start":  20,
+        "end":    24,
+        "color":  "#FF6B6B",
+        "label":  "POWER ZONE II",
+        "desc":   "4 jam paling volatile dalam sehari — 70%+ volume harian terkonsentrasi di sini. Spread terkecil, likuiditas terbesar.",
+        "vol":    "EXTREME",
+    },
+]
+
+# Market characteristics per session pair
+SESSION_PAIR_DATA = {
+    "sydney": {
+        "typical_range_pips": {"AUD/USD": 40, "NZD/USD": 35, "USD/JPY": 30, "AUD/JPY": 45, "AUD/NZD": 25},
+        "spread_condition": "WIDE",
+        "institutional_activity": "LOW",
+        "best_strategy": "RANGE",
+    },
+    "tokyo": {
+        "typical_range_pips": {"USD/JPY": 55, "EUR/JPY": 60, "GBP/JPY": 70, "AUD/JPY": 50, "USD/CNH": 45},
+        "spread_condition": "NORMAL",
+        "institutional_activity": "MEDIUM",
+        "best_strategy": "TREND (JPY), RANGE (EUR/USD)",
+    },
+    "london": {
+        "typical_range_pips": {"EUR/USD": 80, "GBP/USD": 100, "EUR/GBP": 60, "EUR/JPY": 110, "GBP/JPY": 130},
+        "spread_condition": "TIGHT",
+        "institutional_activity": "VERY HIGH",
+        "best_strategy": "BREAKOUT / TREND",
+    },
+    "newyork": {
+        "typical_range_pips": {"EUR/USD": 70, "GBP/USD": 90, "USD/JPY": 65, "USD/CAD": 60, "XAU/USD": 1200},
+        "spread_condition": "TIGHT",
+        "institutional_activity": "HIGH",
+        "best_strategy": "NEWS / MOMENTUM",
+    },
 }
 
-# ====================== UI HEADER ======================
-st.markdown("""
-<div class="main-title-container">
-    <div class="main-logo-container">
-        <img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663520909080/jKwIFCTUEozSHcZQ.png" class="custom-logo">
-    </div>
-    <h1 class="main-title">AERO VULPIS v3.2</h1>
+# Volatility score per hour WIB (0-100)
+HOURLY_VOLATILITY = {
+    0:10, 1:8, 2:6, 3:5, 4:5, 5:12, 6:18, 7:30,
+    8:38, 9:42, 10:40, 11:38, 12:35, 13:32, 14:30,
+    15:75, 16:80, 17:78, 18:72, 19:68, 20:88,
+    21:95, 22:92, 23:85,
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  TIME ENGINE
+# ══════════════════════════════════════════════════════════════════════════════
+
+WIB = pytz.timezone("Asia/Jakarta")
+
+def now_wib() -> datetime:
+    return datetime.now(WIB)
+
+def wib_hour_float() -> float:
+    """Return current WIB time as float hour, e.g. 13.5 = 13:30."""
+    n = now_wib()
+    return n.hour + n.minute / 60 + n.second / 3600
+
+def session_active(s: dict, h: float) -> bool:
+    o, c = s["open_wib"], s["close_wib"]
+    if c > 24:  # spans midnight
+        return h >= o or h < (c - 24)
+    return o <= h < c
+
+def session_progress(s: dict, h: float) -> float:
+    """0.0 to 1.0"""
+    o, c = s["open_wib"], s["close_wib"]
+    dur = (c - 24 if c > 24 else c) - o if c <= 24 else (c - 24) + (24 - o)
+    if c > 24:
+        if h >= o: elapsed = h - o
+        else: elapsed = (24 - o) + h
+    else:
+        elapsed = h - o
+    return max(0.0, min(1.0, elapsed / dur))
+
+def overlap_active(ov: dict, h: float) -> bool:
+    s, e = ov["start"], ov["end"]
+    if e > 24: return h >= s or h < (e - 24)
+    return s <= h < e
+
+def time_until_open(s: dict, h: float) -> str:
+    if session_active(s, h): return "ACTIVE"
+    o = s["open_wib"]
+    diff = (o - h) % 24
+    hrs  = int(diff)
+    mins = int((diff - hrs) * 60)
+    return f"OPENS IN {hrs:02d}h {mins:02d}m"
+
+def city_local_time(tz_name: str) -> str:
+    try:
+        tz = pytz.timezone(tz_name)
+        return datetime.now(tz).strftime("%H:%M")
+    except Exception:
+        return "--:--"
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  CSS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def css():
+    st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap');
+
+html,body,.stApp{background:#080B12!important;}
+.block-container{padding:1rem 1.5rem 3rem!important;max-width:100%!important;}
+*{box-sizing:border-box;}
+body{font-family:'Exo 2',sans-serif;}
+
+/* HEADER */
+.aero-build{font-family:'Share Tech Mono',monospace;font-size:.55rem;letter-spacing:.25em;color:#0F3028;margin-bottom:.3rem;}
+.aero-title{font-family:'Share Tech Mono',monospace;font-size:1.6rem;color:#00FFC8;letter-spacing:.06em;line-height:1;}
+.aero-sub{font-size:.72rem;color:#1A3020;margin-top:.25rem;font-family:'Share Tech Mono',monospace;letter-spacing:.08em;}
+
+/* SECTION */
+.sec-title{font-family:'Share Tech Mono',monospace;color:#00FFC8;font-size:.78rem;
+    letter-spacing:.22em;border-left:2px solid #00FFC8;padding-left:.7rem;
+    margin:1.5rem 0 .2rem;text-transform:uppercase;}
+.sec-sub{font-family:'Share Tech Mono',monospace;color:#1E3A2F;font-size:.56rem;
+    letter-spacing:.12em;margin-bottom:.8rem;padding-left:.9rem;}
+.hr{border:none;border-top:1px solid #0E1826;margin:.8rem 0;}
+
+/* LIVE CLOCK */
+.clock-wrap{text-align:center;padding:.5rem 0 .8rem;}
+.clock-time{font-family:'Share Tech Mono',monospace;font-size:2.8rem;
+    color:#00FFC8;letter-spacing:.1em;line-height:1;}
+.clock-date{font-family:'Share Tech Mono',monospace;font-size:.6rem;
+    color:#1E3A2F;letter-spacing:.18em;margin-top:.2rem;}
+.clock-label{font-family:'Share Tech Mono',monospace;font-size:.52rem;
+    color:#0F3028;letter-spacing:.2em;}
+
+/* CITY CLOCKS */
+.city-clocks{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem;}
+.city-clock{background:#0A1018;border:1px solid #141E2D;border-radius:2px;
+    padding:.5rem .7rem;flex:1;min-width:100px;text-align:center;position:relative;overflow:hidden;}
+.city-clock-accent{position:absolute;bottom:0;left:0;right:0;height:1px;background:var(--cc,#00FFC8);}
+.city-clock-name{font-family:'Share Tech Mono',monospace;font-size:.52rem;
+    color:#1A3040;letter-spacing:.12em;margin-bottom:.2rem;}
+.city-clock-time{font-family:'Share Tech Mono',monospace;font-size:1.1rem;
+    font-weight:700;color:var(--cc,#00FFC8);line-height:1;}
+.city-clock-status{font-family:'Share Tech Mono',monospace;font-size:.48rem;
+    margin-top:.2rem;padding:1px 5px;border-radius:1px;display:inline-block;}
+.cs-active{background:rgba(0,255,200,.08);color:#00FFC8;border:1px solid #00FFC830;}
+.cs-closed{background:rgba(30,42,58,.5);color:#1A2D3A;border:1px solid #0E1826;}
+
+/* SESSION CARD */
+.sess-card{background:linear-gradient(160deg,#0A1018 0%,#0C1220 100%);
+    border:1px solid #141E2D;border-radius:3px;padding:1rem 1.1rem;
+    position:relative;overflow:hidden;margin-bottom:.5rem;}
+.sess-card-active{border-color:var(--sc,#00FFC8);box-shadow:0 0 12px var(--sc,#00FFC8)18;}
+.sess-left-bar{position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--sc,#00FFC8);}
+.sess-header{display:flex;align-items:flex-start;gap:.6rem;flex-wrap:wrap;margin-bottom:.6rem;}
+.sess-name{font-family:'Share Tech Mono',monospace;font-size:1rem;font-weight:700;
+    color:var(--sc,#00FFC8);letter-spacing:.12em;}
+.sess-region{font-family:'Share Tech Mono',monospace;font-size:.55rem;
+    color:#1A3040;letter-spacing:.15em;margin-top:.15rem;}
+.sess-time{font-family:'Share Tech Mono',monospace;font-size:.62rem;color:#2D4050;}
+.sess-status-active{font-family:'Share Tech Mono',monospace;font-size:.55rem;
+    padding:2px 8px;border-radius:1px;font-weight:700;
+    background:rgba(0,255,200,.1);color:#00FFC8;border:1px solid #00FFC840;}
+.sess-status-closed{font-family:'Share Tech Mono',monospace;font-size:.55rem;
+    padding:2px 8px;border-radius:1px;font-weight:700;
+    background:rgba(30,42,58,.5);color:#2D4050;border:1px solid #141E2D;}
+.sess-countdown{font-family:'Share Tech Mono',monospace;font-size:.58rem;color:#2D5040;margin-left:auto;}
+
+/* PROGRESS BAR */
+.prog-wrap{margin:.5rem 0;}
+.prog-track{height:4px;background:#0E1826;border-radius:2px;position:relative;}
+.prog-fill{height:4px;border-radius:2px;transition:width .5s;}
+.prog-glow{height:4px;border-radius:2px;
+    filter:blur(3px);margin-top:-4px;opacity:.4;}
+.prog-pct{font-family:'Share Tech Mono',monospace;font-size:.52rem;
+    color:var(--sc,#00FFC8);text-align:right;margin-top:.2rem;}
+
+/* SESSION BODY */
+.sess-body{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-top:.6rem;}
+.sess-info-block{background:#080B12;border:1px solid #0E1826;border-radius:2px;padding:.5rem .65rem;}
+.sib-label{font-family:'Share Tech Mono',monospace;font-size:.5rem;color:#1A2D3A;
+    letter-spacing:.12em;margin-bottom:.25rem;text-transform:uppercase;}
+.sib-val{font-family:'Share Tech Mono',monospace;font-size:.62rem;color:#4A6070;line-height:1.5;}
+.sib-val b{color:#00FFC8;}
+
+/* VOL BADGE */
+.vol-low   {display:inline-block;font-family:'Share Tech Mono',monospace;font-size:.5rem;padding:1px 6px;
+    border-radius:1px;font-weight:700;background:rgba(74,158,191,.08);color:#4FC3F7;border:1px solid #4FC3F730;}
+.vol-med   {display:inline-block;font-family:'Share Tech Mono',monospace;font-size:.5rem;padding:1px 6px;
+    border-radius:1px;font-weight:700;background:rgba(255,217,61,.08);color:#FFD93D;border:1px solid #FFD93D30;}
+.vol-high  {display:inline-block;font-family:'Share Tech Mono',monospace;font-size:.5rem;padding:1px 6px;
+    border-radius:1px;font-weight:700;background:rgba(255,107,107,.08);color:#FF6B6B;border:1px solid #FF6B6B30;}
+.vol-ext   {display:inline-block;font-family:'Share Tech Mono',monospace;font-size:.5rem;padding:1px 6px;
+    border-radius:1px;font-weight:700;background:rgba(255,159,67,.15);color:#FF9F43;border:1px solid #FF9F4360;
+    animation:pulse-ext 1.5s ease-in-out infinite;}
+@keyframes pulse-ext{0%,100%{opacity:1;}50%{opacity:.6;}}
+
+/* PAIRS TAG */
+.pair-tag{display:inline-block;font-family:'Share Tech Mono',monospace;font-size:.52rem;
+    padding:2px 6px;border-radius:1px;background:#0E1826;color:var(--sc,#00FFC8);
+    border:1px solid #1A2D3A;margin:.15rem .1rem;}
+
+/* OVERLAP CARD */
+.ov-card{background:#0A1018;border:1px solid #141E2D;border-radius:2px;
+    padding:.75rem .9rem;margin-bottom:.4rem;position:relative;overflow:hidden;}
+.ov-card-accent{position:absolute;top:0;left:0;right:0;height:1px;background:var(--oc,#FFD93D);}
+.ov-header{display:flex;align-items:center;gap:.6rem;margin-bottom:.35rem;flex-wrap:wrap;}
+.ov-name{font-family:'Share Tech Mono',monospace;font-size:.72rem;
+    font-weight:700;color:var(--oc,#FFD93D);letter-spacing:.08em;}
+.ov-label{font-family:'Share Tech Mono',monospace;font-size:.52rem;
+    padding:1px 7px;border-radius:1px;font-weight:700;
+    background:rgba(255,217,61,.08);color:#FFD93D;border:1px solid #FFD93D30;}
+.ov-time{font-family:'Share Tech Mono',monospace;font-size:.58rem;color:#2D4050;margin-left:auto;}
+.ov-desc{font-size:.7rem;color:#3A5060;line-height:1.6;}
+.ov-active-badge{background:rgba(255,159,67,.12);color:#FF9F43;border:1px solid #FF9F4340;
+    font-family:'Share Tech Mono',monospace;font-size:.5rem;padding:1px 6px;border-radius:1px;font-weight:700;}
+
+/* STRATEGY CARD */
+.strat-card{background:#0A1018;border:1px solid #141E2D;border-radius:2px;
+    padding:.65rem .8rem;margin-bottom:.35rem;}
+.strat-header{font-family:'Share Tech Mono',monospace;font-size:.6rem;
+    color:#00FFC8;letter-spacing:.12em;margin-bottom:.3rem;}
+.strat-body{font-size:.72rem;color:#3A5060;line-height:1.65;}
+
+/* PAIR RANGE TABLE */
+.range-table{width:100%;border-collapse:separate;border-spacing:0 2px;}
+.range-th{font-family:'Share Tech Mono',monospace;font-size:.5rem;color:#1A3040;
+    letter-spacing:.1em;padding:.25rem .4rem;text-align:left;}
+.range-td{font-family:'Share Tech Mono',monospace;font-size:.6rem;color:#4A6070;
+    background:#0A1018;border:1px solid #0E1826;padding:.25rem .4rem;border-radius:1px;}
+.range-td-pair{color:#00FFC8;}
+.range-td-pips{color:#FFD93D;text-align:right;}
+
+/* VOLATILITY HEATMAP */
+.heat-wrap{display:flex;gap:2px;align-items:flex-end;height:60px;margin:.5rem 0;}
+.heat-bar{flex:1;border-radius:1px 1px 0 0;min-width:3px;cursor:default;
+    transition:opacity .2s;}
+.heat-bar:hover{opacity:.8;}
+.heat-labels{display:flex;justify-content:space-between;
+    font-family:'Share Tech Mono',monospace;font-size:.45rem;color:#1A2D3A;margin-top:.2rem;}
+
+/* IBOX */
+.ibox{background:#0A1018;border:1px solid #141E2D;border-left:2px solid var(--lc,#C77DFF);
+    border-radius:0 2px 2px 0;padding:.7rem .9rem;margin:.4rem 0;}
+.ibox-t{font-family:'Share Tech Mono',monospace;font-size:.56rem;color:var(--lc,#C77DFF);
+    letter-spacing:.14em;margin-bottom:.35rem;text-transform:uppercase;}
+.ibox-b{font-size:.72rem;color:#4A6070;line-height:1.7;}
+
+/* TIPS */
+.tip-row{display:flex;gap:.5rem;align-items:flex-start;
+    padding:.45rem .6rem;border-bottom:1px solid #0E1826;}
+.tip-row:last-child{border-bottom:none;}
+.tip-num{font-family:'Share Tech Mono',monospace;font-size:.55rem;
+    color:#1A3040;min-width:22px;}
+.tip-txt{font-size:.7rem;color:#3A5060;line-height:1.55;flex:1;}
+.tip-txt b{color:#00FFC8;}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+    .block-container{padding:.5rem .6rem 3rem!important;}
+    .aero-title{font-size:1.2rem;}
+    .clock-time{font-size:2rem;}
+    .sess-body{grid-template-columns:1fr;}
+    .city-clocks{gap:.3rem;}
+    .sess-name{font-size:.85rem;}
+}
+
+/* STREAMLIT */
+.stSelectbox label,.stMultiSelect label,.stRadio label{
+    font-family:'Share Tech Mono',monospace!important;font-size:.65rem!important;
+    color:#2D5040!important;letter-spacing:.1em!important;}
+div[data-baseweb="tab-list"]{background:transparent!important;border-bottom:1px solid #0E1826!important;}
+div[data-baseweb="tab"]{font-family:'Share Tech Mono',monospace!important;font-size:.62rem!important;
+    letter-spacing:.1em!important;color:#1E3040!important;background:transparent!important;}
+div[data-baseweb="tab"][aria-selected="true"]{color:#00FFC8!important;border-bottom:2px solid #00FFC8!important;}
+button[data-testid="baseButton-secondary"]{
+    background:#0A1018!important;border:1px solid #141E2D!important;
+    color:#2D5040!important;font-family:'Share Tech Mono',monospace!important;
+    border-radius:2px!important;font-size:.62rem!important;}
+</style>""", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  CHART HELPERS
+# ══════════════════════════════════════════════════════════════════════════════
+
+BASE = dict(
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    font=dict(family="Share Tech Mono, monospace", color="#1E3D50", size=9),
+    margin=dict(l=8, r=8, t=28, b=8),
+    xaxis=dict(gridcolor="#0A1220", linecolor="#0E1826", tickfont=dict(size=8)),
+    yaxis=dict(gridcolor="#0A1220", linecolor="#0E1826", tickfont=dict(size=8)),
+)
+
+CHART_CFG = {"staticPlot": True}
+
+def build_timeline_chart(h_now: float):
+    """24-jam session timeline dengan current time marker."""
+    fig = go.Figure()
+
+    hours = list(range(25))
+
+    # Session backgrounds
+    for s in SESSIONS:
+        o, c = s["open_wib"], s["close_wib"]
+        if c > 24:
+            # Split: open→24 dan 0→(c-24)
+            for start, end in [(o, 24), (0, c - 24)]:
+                fig.add_vrect(
+                    x0=start, x1=end,
+                    fillcolor=s["color_dim"],
+                    layer="below", line_width=0,
+                )
+        else:
+            fig.add_vrect(x0=o, x1=c, fillcolor=s["color_dim"], layer="below", line_width=0)
+
+        # Label
+        label_x = (o + min(c, 24)) / 2 if c <= 24 else (o + 24) / 2
+        fig.add_annotation(
+            x=label_x, y=95,
+            text=s["name"],
+            font=dict(family="Share Tech Mono, monospace", color=s["color"], size=8),
+            showarrow=False, yref="y",
+        )
+
+    # Volatility line
+    hours_list = list(range(24))
+    vol_list   = [HOURLY_VOLATILITY.get(h, 10) for h in hours_list]
+    fig.add_trace(go.Scatter(
+        x=hours_list, y=vol_list,
+        mode="lines",
+        line=dict(color="#00FFC8", width=2, shape="spline", smoothing=1.2),
+        fill="tozeroy", fillcolor="rgba(0,255,200,0.04)",
+        name="Volatilitas",
+        hovertemplate="<b>%{x}:00 WIB</b> — Vol: %{y}<extra></extra>",
+    ))
+
+    # Overlap zones
+    for ov in OVERLAPS:
+        s, e = ov["start"], min(ov["end"], 24)
+        fig.add_vrect(x0=s, x1=e, fillcolor=f"{ov['color']}18", layer="below",
+            line=dict(color=ov["color"], width=1, dash="dot"))
+        fig.add_annotation(x=(s+e)/2, y=102, text=ov["label"],
+            font=dict(family="Share Tech Mono, monospace", color=ov["color"], size=7),
+            showarrow=False, yref="y")
+
+    # Current time marker
+    fig.add_vline(x=h_now, line=dict(color="#FFFFFF", width=1.5, dash="dash"))
+    fig.add_annotation(
+        x=h_now, y=110,
+        text=f"NOW {int(h_now):02d}:{int((h_now%1)*60):02d}",
+        font=dict(family="Share Tech Mono, monospace", color="#FFFFFF", size=8),
+        showarrow=False, bgcolor="#080B12", bordercolor="#FFFFFF", borderwidth=1,
+    )
+
+    fig.update_layout(
+        **BASE,
+        height=200,
+        xaxis=dict(
+            range=[0, 24], tickvals=list(range(0, 25, 2)),
+            ticktext=[f"{h:02d}:00" for h in range(0, 25, 2)],
+            gridcolor="#0A1220", linecolor="#0E1826",
+            tickfont=dict(size=7), title="WAKTU WIB",
+            title_font=dict(size=8, color="#1A3040"),
+        ),
+        yaxis=dict(range=[0, 115], showgrid=False, showticklabels=False),
+        showlegend=False,
+        title=dict(text="SESI AKTIF · VOLATILITAS PER JAM (WIB)", font=dict(size=9, color="#00FFC8"), x=0),
+        hovermode="x unified",
+    )
+    return fig
+
+def build_vol_radar(session_id: str):
+    """Radar chart karakteristik sesi."""
+    radar_data = {
+        "sydney":  {"Volatilitas":20,"Likuiditas":25,"Spread":30,"Peluang":25,"Risiko":20,"Volume":15},
+        "tokyo":   {"Volatilitas":50,"Likuiditas":55,"Spread":60,"Peluang":55,"Risiko":45,"Volume":50},
+        "london":  {"Volatilitas":88,"Likuiditas":95,"Spread":92,"Peluang":90,"Risiko":75,"Volume":95},
+        "newyork": {"Volatilitas":82,"Likuiditas":85,"Spread":88,"Peluang":85,"Risiko":80,"Volume":80},
+    }
+    d = radar_data.get(session_id, {})
+    labels = list(d.keys()); values = list(d.values())
+    color  = next((s["color"] for s in SESSIONS if s["id"]==session_id), "#00FFC8")
+
+    fig = go.Figure(go.Scatterpolar(
+        r=values, theta=labels, fill="toself",
+        fillcolor=f"{color}0A",
+        line=dict(color=color, width=1.8),
+        marker=dict(color=color, size=4),
+    ))
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Share Tech Mono, monospace", color="#1E3D50", size=8),
+        margin=dict(l=15, r=15, t=15, b=15),
+        height=220,
+        polar=dict(
+            bgcolor="rgba(0,0,0,0)",
+            radialaxis=dict(visible=True, gridcolor="#0A1220", linecolor="#0E1826",
+                color="#1A2D3A", range=[0,100], tickfont=dict(size=6)),
+            angularaxis=dict(gridcolor="#0A1220", linecolor="#0E1826"),
+        ),
+        showlegend=False,
+    )
+    return fig
+
+def build_global_vol_bar():
+    """Horizontal bar chart share FX volume per sesi."""
+    names  = [s["name"] for s in SESSIONS]
+    shares = [int(s["share"].replace("%","")) for s in SESSIONS]
+    colors = [s["color"] for s in SESSIONS]
+
+    fig = go.Figure(go.Bar(
+        x=shares, y=names,
+        orientation="h",
+        marker=dict(color=[f"{c}AA" for c in colors], line=dict(color=colors, width=1)),
+        text=[f"{v}%" for v in shares],
+        textposition="inside",
+        textfont=dict(family="Share Tech Mono, monospace", size=9, color="#080B12"),
+        hovertemplate="%{y}: <b>%{x}%</b> volume FX harian<extra></extra>",
+    ))
+    fig.update_layout(
+        **BASE,
+        height=140,
+        xaxis=dict(range=[0,45], showgrid=False, showticklabels=False, linecolor="#0E1826"),
+        yaxis=dict(showgrid=False, tickfont=dict(size=9, family="Share Tech Mono, monospace")),
+        title=dict(text="SHARE VOLUME FX HARIAN PER SESI", font=dict(size=9, color="#00FFC8"), x=0),
+        bargap=0.3, showlegend=False,
+        margin=dict(l=60, r=8, t=28, b=8),
+    )
+    return fig
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  RENDER HELPERS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def vol_badge(level: str) -> str:
+    cls = {"LOW":"vol-low","MEDIUM":"vol-med","HIGH":"vol-high","EXTREME":"vol-ext"}.get(level,"vol-low")
+    return f'<span class="{cls}">{level}</span>'
+
+def render_session_card(s: dict, h: float, expanded: bool = False):
+    active  = session_active(s, h)
+    prog    = session_progress(s, h) if active else 0.0
+    prog_w  = f"{prog*100:.0f}%"
+    status  = "ACTIVE" if active else "CLOSED"
+    s_cls   = "sess-card-active" if active else ""
+    st_cls  = "sess-status-active" if active else "sess-status-closed"
+    ctd     = f"PROGRESS: {prog*100:.0f}%" if active else time_until_open(s, h)
+    close_wib = s["close_wib"] if s["close_wib"] <= 24 else s["close_wib"] - 24
+    time_str  = f"{s['open_wib']:02d}:00 – {close_wib:02d}:00 WIB"
+    v_badge   = vol_badge(s["vol"])
+    pairs_html = " ".join(f'<span class="pair-tag" style="--sc:{s["color"]};">{p}</span>' for p in s["pairs"])
+
+    # Pair range table
+    pair_data  = SESSION_PAIR_DATA.get(s["id"], {})
+    range_rows = ""
+    for pair, pips in list(pair_data.get("typical_range_pips", {}).items())[:5]:
+        bar_w = min(pips / 150 * 100, 100)
+        range_rows += f"""
+<tr>
+<td class="range-td range-td-pair">{pair}</td>
+<td class="range-td">
+<div style="height:3px;background:#0E1826;border-radius:1px;">
+<div style="height:3px;width:{bar_w:.0f}%;background:{s['color']};border-radius:1px;"></div>
+</div>
+</td>
+<td class="range-td range-td-pips">{pips} pips</td>
+</tr>"""
+
+    st.markdown(f"""
+<div class="sess-card {s_cls}" style="--sc:{s['color']};">
+<div class="sess-left-bar"></div>
+<div class="sess-header">
+<div style="flex:1;">
+<div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">
+<span class="sess-name">{s['name']}</span>
+<span class="sess-region">{s['region']}</span>
+{v_badge}
+</div>
+<div class="sess-time" style="margin-top:.2rem;">{time_str} · {s['city']} Local: {city_local_time(s['tz'])}</div>
+</div>
+<div style="display:flex;flex-direction:column;align-items:flex-end;gap:.25rem;">
+<span class="{st_cls}">{status}</span>
+<span class="sess-countdown">{ctd}</span>
+</div>
+</div>
+
+<div class="prog-wrap">
+<div class="prog-track">
+<div class="prog-fill" style="width:{prog_w};background:{s['color']};"></div>
+</div>
+<div class="prog-pct">{f'PROGRESS: {prog*100:.0f}%' if active else 'STANDBY'}</div>
+</div>
+
+<div style="font-size:.68rem;color:#2D4050;margin-bottom:.5rem;">{s['desc']}</div>
+
+<div class="sess-body">
+<div class="sess-info-block">
+<div class="sib-label">PAIR AKTIF</div>
+<div>{pairs_html}</div>
+</div>
+<div class="sess-info-block">
+<div class="sib-label">STRATEGI</div>
+<div class="sib-val">{s['strategy']}</div>
+</div>
+<div class="sess-info-block">
+<div class="sib-label">TYPICAL RANGE PER PAIR</div>
+<table class="range-table">
+<tr><th class="range-th">PAIR</th><th class="range-th"></th><th class="range-th">RANGE</th></tr>
+{range_rows}
+</table>
+</div>
+<div class="sess-info-block">
+<div class="sib-label">NEWS FOCUS</div>
+<div class="sib-val">{"<br>".join(f"<b>·</b> {n}" for n in s['news_focus'])}</div>
+<div class="sib-label" style="margin-top:.4rem;">RISK NOTE</div>
+<div class="sib-val" style="color:#FF6B6B;">{s['risk']}</div>
+</div>
+</div>
 </div>
 """, unsafe_allow_html=True)
 
-# Sidebar
-st.sidebar.markdown('<div style="text-align:center;"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663520909080/jKwIFCTUEozSHcZQ.png" style="width:100px; filter: drop-shadow(0 0 5px #00d4ff);"></div>', unsafe_allow_html=True)
-st.sidebar.markdown('<h2 class="digital-font" style="text-align:center; color:#00d4ff;">AeroVulpis</h2>', unsafe_allow_html=True)
-st.sidebar.markdown('<p class="rajdhani-font" style="text-align:center; color:#888;">Ultimate Digital Edition</p>', unsafe_allow_html=True)
+def render_overlap_cards(h: float):
+    for ov in OVERLAPS:
+        active   = overlap_active(ov, h)
+        oc       = ov["color"]
+        a_badge  = f'<span class="ov-active-badge">ACTIVE NOW</span>' if active else ""
+        e_wib    = ov["end"] if ov["end"] <= 24 else ov["end"] - 24
+        vol_b    = vol_badge(ov["vol"])
+        st.markdown(f"""
+<div class="ov-card" style="--oc:{oc};">
+<div class="ov-card-accent"></div>
+<div class="ov-header">
+<span class="ov-name">{ov['name']}</span>
+<span class="ov-label">{ov['label']}</span>
+{vol_b}
+{a_badge}
+<span class="ov-time">{ov['start']:02d}:00 – {e_wib:02d}:00 WIB</span>
+</div>
+<div class="ov-desc">{ov['desc']}</div>
+</div>""", unsafe_allow_html=True)
 
-category = st.sidebar.selectbox("Pilih Kategori", list(instruments.keys()))
-ticker_display = st.sidebar.selectbox("Pilih Instrumen", list(instruments[category].keys()))
-ticker_input = instruments[category][ticker_display]
+def render_volatility_heatmap(h_now: float):
+    """HTML heatmap 24 jam."""
+    bars = ""
+    for hr in range(24):
+        v   = HOURLY_VOLATILITY.get(hr, 10)
+        h_pct = v * 0.6  # max bar height ~60%
+        # Color gradient based on vol
+        if v >= 80:   col = "#FF6B6B"
+        elif v >= 60: col = "#FF9F43"
+        elif v >= 40: col = "#FFD93D"
+        elif v >= 20: col = "#00FFC8"
+        else:         col = "#1A3040"
+        is_now = abs(hr - int(h_now)) < 1
+        border = f"border:1px solid {col};" if is_now else ""
+        bars += f'<div class="heat-bar" style="height:{h_pct:.0f}%;background:{col};opacity:{0.5+v/200:.2f};{border}" title="{hr:02d}:00 WIB — Vol: {v}"></div>'
 
-# Timeframe
-st.sidebar.markdown("---")
-# Mapping timeframe standar internasional ke format yfinance
-tf_mapping = {
-    "M30 (30 Minutes)": {"period": "5d", "interval": "30m"},
-    "H1 (1 Hour)": {"period": "1mo", "interval": "1h"},
-    "H2 (2 Hours)": {"period": "1mo", "interval": "1h"}, 
-    "H4 (4 Hours)": {"period": "3mo", "interval": "1h"}, 
-    "H12 (12 Hours)": {"period": "1y", "interval": "1d"}, 
-    "D1 (Daily)": {"period": "2y", "interval": "1d"},
-    "W1 (Weekly)": {"period": "5y", "interval": "1wk"},
-    "MN (Monthly)": {"period": "max", "interval": "1mo"}
-}
+    labels = " ".join(
+        f'<span>{h:02d}</span>' if h % 4 == 0 else '<span></span>'
+        for h in range(24)
+    )
+    st.markdown(f"""
+<div class="sec-title">VOLATILITAS INTRADAY</div>
+<div class="sec-sub">INTENSITAS PERGERAKAN PASAR PER JAM WIB · MERAH=EKSTREM · HIJAU=RENDAH</div>
+<div class="heat-wrap">{bars}</div>
+<div class="heat-labels">{labels}</div>
+""", unsafe_allow_html=True)
 
-selected_tf_display = st.sidebar.selectbox("Pilih Timeframe", list(tf_mapping.keys()), index=1)
-period = tf_mapping[selected_tf_display]["period"]
-interval = tf_mapping[selected_tf_display]["interval"]
+def render_trader_guide():
+    tips = [
+        ("SESI TERBAIK UNTUK FOREX", "London dan New York Overlap (20:00–24:00 WIB) = peak liquidity, spread paling ketat, pergerakan paling besar. Ideal untuk breakout dan trend-following."),
+        ("HINDARI TRADING DI JAM INI", "00:00–06:00 WIB — Volume paling rendah, spread lebar, pergerakan tidak menentu. Risiko stop hunt lebih tinggi."),
+        ("PILIH PAIR SESUAI SESI", "JPY pairs saat Tokyo aktif (07:00–16:00). EUR/GBP pairs saat London (15:00–00:00). USD pairs saat New York (20:00–05:00)."),
+        ("NEWS TRADING TIMING", "Masuk posisi 15–30 menit SETELAH data dirilis, bukan saat rilis. Slippage ekstrem saat detik pertama rilis data high-impact."),
+        ("POWER ZONE II (20:00–24:00)", "London/NY Overlap = 70% lebih volume harian terkonsentrasi di 4 jam ini. Gunakan momentum strategy, bukan counter-trend."),
+        ("RANGE TRADING DI SESI SEPI", "Sydney dan awal Tokyo = kondisi ideal untuk range trading. Support/resistance lebih dihormati karena volume rendah."),
+        ("SPREAD AWARENESS", "Spread paling lebar: Minggu malam (00:00–05:00 WIB) dan saat rollover. Selalu cek spread sebelum entry, terutama untuk pair minor dan exotics."),
+    ]
+    html = '<div class="strat-card">'
+    for i, (title, body) in enumerate(tips, 1):
+        html += f'<div class="tip-row"><div class="tip-num">{i:02d}</div><div class="tip-txt"><b style="color:#00FFC8;">{title}</b><br>{body}</div></div>'
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
 
-menu_selection = st.sidebar.radio("Navigasi Sistem", ["Live Dashboard", "Trading Signals", "Risk Management", "Market History", "Chatbot AI Trading"])
+# ══════════════════════════════════════════════════════════════════════════════
+#  MAIN
+# ══════════════════════════════════════════════════════════════════════════════
 
-# ====================== LIVE DASHBOARD ======================
-if menu_selection == "Live Dashboard":
-    col_main, col_side = st.columns([2, 1])
-    
-    with col_main:
-        market_data = get_market_data(ticker_input)
-        df = get_historical_data(ticker_input, period=period, interval=interval)
-        
-        if market_data and not df.empty:
-            current_price = market_data['price']
-            df = add_technical_indicators(df)
-            latest = df.iloc[-1]
-            prev_close = df['Close'].iloc[-2] if len(df) > 1 else current_price
-            is_bullish = current_price >= prev_close
-            line_color = "#00ff88" if is_bullish else "#ff2a6d"
-            
+def main():
+    css()
+    h_now    = wib_hour_float()
+    now_dt   = now_wib()
+    active_sessions = [s for s in SESSIONS if session_active(s, h_now)]
+    active_overlaps = [o for o in OVERLAPS if overlap_active(o, h_now)]
+
+    # ── HEADER ───────────────────────────────────────────────────────────────
+    st.markdown("""
+<div style="padding:.3rem 0 .6rem;">
+<div class="aero-build">AEROVULPIS · PROTOTYPE · MARKET SESSIONS MODULE · BUILD STABLE 01 SEP 2026</div>
+<div class="aero-title">MARKET SESSIONS</div>
+<div class="aero-sub">GLOBAL TRADING WINDOWS · LIQUIDITY INTELLIGENCE · PAIR RECOMMENDATIONS</div>
+</div>
+<hr style="border:none;border-top:1px solid #0E1826;margin:.4rem 0 .8rem;">
+""", unsafe_allow_html=True)
+
+    # ── LIVE CLOCK + CITY CLOCKS ─────────────────────────────────────────────
+    col_clk, col_status = st.columns([1, 2])
+    with col_clk:
+        st.markdown(f"""
+<div class="clock-wrap">
+<div class="clock-label">WAKTU INDONESIA BARAT</div>
+<div class="clock-time">{now_dt.strftime('%H:%M:%S')}</div>
+<div class="clock-date">{now_dt.strftime('%A, %d %B %Y')}</div>
+</div>""", unsafe_allow_html=True)
+
+    with col_status:
+        # Status sesi aktif
+        if active_sessions:
+            for s in active_sessions:
+                prog = session_progress(s, h_now)
+                st.markdown(f"""
+<div style="display:flex;align-items:center;gap:.6rem;background:#0A1018;border:1px solid {s['color']}40;
+    border-radius:2px;padding:.5rem .75rem;margin-bottom:.3rem;">
+<span style="font-family:'Share Tech Mono',monospace;font-size:.62rem;font-weight:700;
+    color:{s['color']};min-width:90px;">{s['name']}</span>
+<div style="flex:1;height:4px;background:#0E1826;border-radius:2px;">
+<div style="height:4px;width:{prog*100:.0f}%;background:{s['color']};border-radius:2px;"></div>
+</div>
+<span style="font-family:'Share Tech Mono',monospace;font-size:.55rem;color:{s['color']};">{prog*100:.0f}%</span>
+</div>""", unsafe_allow_html=True)
+        if active_overlaps:
+            for ov in active_overlaps:
+                st.markdown(f'<div class="ov-card" style="--oc:{ov["color"]};padding:.45rem .75rem;"><div class="ov-card-accent"></div><span class="ov-name" style="font-size:.65rem;">{ov["name"]}</span> <span class="ov-active-badge">ACTIVE NOW</span> <span class="ov-label" style="margin-left:.3rem;">{ov["label"]}</span></div>', unsafe_allow_html=True)
+        if not active_sessions and not active_overlaps:
+            st.markdown('<div class="ibox" style="--lc:#1A2D3A;"><div class="ibox-t">MARKET STATUS</div><div class="ibox-b">Semua sesi mayor sedang tutup. Volume sangat rendah. Tidak disarankan untuk trading.</div></div>', unsafe_allow_html=True)
+
+    # ── CITY CLOCKS ──────────────────────────────────────────────────────────
+    city_html = '<div class="city-clocks">'
+    for s in SESSIONS:
+        active  = session_active(s, h_now)
+        sc      = "cs-active" if active else "cs-closed"
+        st_lbl  = "ACTIVE" if active else "CLOSED"
+        city_html += f"""
+<div class="city-clock" style="--cc:{s['color']};">
+<div class="city-clock-accent"></div>
+<div class="city-clock-name">{s['city'].upper()}</div>
+<div class="city-clock-time">{city_local_time(s['tz'])}</div>
+<span class="city-clock-status {sc}">{st_lbl}</span>
+</div>"""
+    # Tambah UTC
+    utc_time = datetime.now(pytz.utc).strftime("%H:%M")
+    city_html += f"""
+<div class="city-clock" style="--cc:#4FC3F7;">
+<div class="city-clock-accent"></div>
+<div class="city-clock-name">UTC / GMT</div>
+<div class="city-clock-time">{utc_time}</div>
+<span class="city-clock-status cs-active">GLOBAL REF</span>
+</div>"""
+    city_html += "</div>"
+    st.markdown(city_html, unsafe_allow_html=True)
+
+    st.markdown('<hr class="hr">', unsafe_allow_html=True)
+
+    # ── TABS ─────────────────────────────────────────────────────────────────
+    tabs = st.tabs(["SESSION MAP", "SESSIONS DETAIL", "POWER ZONES", "VOLATILITY", "PANDUAN TRADER"])
+
+    # ── TAB 1: SESSION MAP ───────────────────────────────────────────────────
+    with tabs[0]:
+        st.markdown('<div class="sec-title">SESSION TIMELINE MAP</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sec-sub">PETA WAKTU 24 JAM · OVERLAY VOLATILITAS · GARIS = WAKTU SEKARANG</div>', unsafe_allow_html=True)
+        fig_tl = build_timeline_chart(h_now)
+        st.plotly_chart(fig_tl, use_container_width=True, config={"staticPlot": True})
+
+        st.markdown('<hr class="hr">', unsafe_allow_html=True)
+
+        # Volume share bar
+        col_v, col_r = st.columns([1.2, 1])
+        with col_v:
+            st.plotly_chart(build_global_vol_bar(), use_container_width=True, config={"staticPlot": True})
+        with col_r:
+            # Session overlap summary table
+            st.markdown('<div class="sec-title">OVERLAP WINDOWS</div>', unsafe_allow_html=True)
+            for ov in OVERLAPS:
+                e_w = ov["end"] if ov["end"]<=24 else ov["end"]-24
+                active = overlap_active(ov, h_now)
+                badge  = f'<span class="ov-active-badge">LIVE</span>' if active else ""
+                st.markdown(f"""
+<div style="background:#0A1018;border:1px solid {ov['color']}30;border-radius:2px;
+    padding:.5rem .7rem;margin-bottom:.35rem;">
+<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+<span style="font-family:'Share Tech Mono',monospace;font-size:.65rem;font-weight:700;color:{ov['color']};">{ov['label']}</span>
+{badge}
+{vol_badge(ov['vol'])}
+<span style="font-family:'Share Tech Mono',monospace;font-size:.55rem;color:#2D4050;margin-left:auto;">{ov['start']:02d}:00–{e_w:02d}:00 WIB</span>
+</div>
+<div style="font-size:.65rem;color:#3A5060;margin-top:.25rem;">{ov['desc'][:80]}...</div>
+</div>""", unsafe_allow_html=True)
+
+    # ── TAB 2: SESSIONS DETAIL ───────────────────────────────────────────────
+    with tabs[1]:
+        st.markdown('<div class="sec-title">SESSIONS INTELLIGENCE</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sec-sub">KARAKTERISTIK LENGKAP · PAIR RECOMMENDATIONS · RANGE TYPICAL · STRATEGI</div>', unsafe_allow_html=True)
+
+        # Filter: tampilkan semua atau hanya aktif
+        show_all = st.toggle("Tampilkan semua sesi (termasuk yang tutup)", value=True, key="sess_all")
+        for s in SESSIONS:
+            if not show_all and not session_active(s, h_now):
+                continue
+            render_session_card(s, h_now)
+
+            # Radar chart profil sesi
+            with st.expander(f"PROFIL KARAKTERISTIK — {s['name']} (RADAR)", expanded=False):
+                c1, c2 = st.columns([1, 1])
+                with c1:
+                    st.plotly_chart(build_vol_radar(s["id"]), use_container_width=True,
+                        config={"displayModeBar": False, "scrollZoom": False})
+                with c2:
+                    pd_data = SESSION_PAIR_DATA.get(s["id"], {})
+                    st.markdown(f"""
+<div class="ibox" style="--lc:{s['color']};">
+<div class="ibox-t">KARAKTERISTIK SESI</div>
+<div class="ibox-b">
+<b style="color:{s['color']};">Kondisi Spread:</b> {pd_data.get('spread_condition','—')}<br>
+<b style="color:{s['color']};">Aktivitas Institusional:</b> {pd_data.get('institutional_activity','—')}<br>
+<b style="color:{s['color']};">Strategi Terbaik:</b> {pd_data.get('best_strategy','—')}<br>
+<b style="color:{s['color']};">Volume Share Global:</b> {s['share']}
+</div>
+</div>""", unsafe_allow_html=True)
+
+    # ── TAB 3: POWER ZONES ───────────────────────────────────────────────────
+    with tabs[2]:
+        st.markdown('<div class="sec-title">POWER ZONES — SESSION OVERLAPS</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sec-sub">PERIODE LIKUIDITAS TERTINGGI · SPREAD TERKECIL · PELUANG TERBESAR</div>', unsafe_allow_html=True)
+        render_overlap_cards(h_now)
+
+        st.markdown('<hr class="hr">', unsafe_allow_html=True)
+
+        # Penjelasan strategi per power zone
+        st.markdown('<div class="sec-title">STRATEGI PER POWER ZONE</div>', unsafe_allow_html=True)
+        cols_pz = st.columns(2)
+        strategies = [
+            {
+                "zone":    "POWER ZONE I — TOKYO/LONDON (15:00–16:00 WIB)",
+                "color":   "#FFD93D",
+                "content": [
+                    ("Pair Terbaik", "EUR/JPY, GBP/JPY, AUD/JPY — JPY crosses paling reaktif"),
+                    ("Strategi",     "Breakout dari range Tokyo. London sering reverse atau extend trend Asia"),
+                    ("Durasi",       "1 jam — singkat tapi volatile. Gunakan pending order di high/low Tokyo"),
+                    ("Risk",         "False breakout umum terjadi. Konfirmasi dengan volume dan candle close"),
+                ],
+            },
+            {
+                "zone":    "POWER ZONE II — LONDON/NEW YORK (20:00–24:00 WIB)",
+                "color":   "#FF6B6B",
+                "content": [
+                    ("Pair Terbaik", "EUR/USD, GBP/USD, USD/JPY, XAU/USD — semua pair major liquid"),
+                    ("Strategi",     "Trend-following dan breakout momentum. Hindari counter-trend tanpa strong signal"),
+                    ("Durasi",       "4 jam — window paling panjang dan paling profitable untuk day trader"),
+                    ("Risk",         "Data AS dirilis di sini (20:30–22:00). SL wajib sebelum masuk posisi"),
+                ],
+            },
+        ]
+        for col, strat in zip(cols_pz, strategies):
+            with col:
+                rows = "".join(f'<div class="tip-row"><div class="tip-num" style="color:{strat["color"]};min-width:80px;font-size:.55rem;">{k}</div><div class="tip-txt">{v}</div></div>' for k,v in strat["content"])
+                st.markdown(f"""
+<div class="strat-card">
+<div class="strat-header" style="color:{strat['color']};">{strat['zone']}</div>
+{rows}
+</div>""", unsafe_allow_html=True)
+
+        st.markdown("""
+<div class="ibox" style="--lc:#FF9F43;margin-top:.5rem;">
+<div class="ibox-t">INSTITUTIONAL BEHAVIOR DI OVERLAP PERIOD</div>
+<div class="ibox-b">
+Institusi besar (bank, hedge fund) paling aktif saat dua sesi overlap karena likuiditas cukup untuk mengeksekusi order besar tanpa slippage signifikan. Pada Power Zone II, bid-ask spread EUR/USD bisa turun hingga <b style="color:#00FFC8;">0.1–0.3 pips</b> dari rata-rata 0.5–1 pip. Ini berarti biaya trading turun drastis — kondisi ideal untuk frekuensi trading tinggi.
+</div>
+</div>""", unsafe_allow_html=True)
+
+    # ── TAB 4: VOLATILITY ────────────────────────────────────────────────────
+    with tabs[3]:
+        render_volatility_heatmap(h_now)
+        st.markdown('<hr class="hr">', unsafe_allow_html=True)
+
+        # Current hour analysis
+        curr_hr = int(h_now)
+        curr_vol = HOURLY_VOLATILITY.get(curr_hr, 10)
+        if curr_vol >= 80:   vol_state, vol_color, vol_advice = "EKSTREM","#FF6B6B","Volume dan pergerakan sangat tinggi. Gunakan SL lebih lebar. Peluang besar tapi risiko spike tinggi."
+        elif curr_vol >= 60: vol_state, vol_color, vol_advice = "TINGGI","#FF9F43","Kondisi aktif. Trend dan breakout lebih reliable. Manajemen posisi sangat penting."
+        elif curr_vol >= 35: vol_state, vol_color, vol_advice = "SEDANG","#FFD93D","Volume moderat. Campuran antara range dan trending. Konfirmasi sinyal dengan indikator tambahan."
+        elif curr_vol >= 15: vol_state, vol_color, vol_advice = "RENDAH","#00FFC8","Pasar tenang. Range trading lebih optimal. Spread bisa lebih lebar dari biasanya."
+        else:                vol_state, vol_color, vol_advice = "SANGAT RENDAH","#4FC3F7","Volume minimum. Sebaiknya tunggu sesi berikutnya. Risiko whipsaw dan spread lebar."
+
+        col_cv, col_ca = st.columns([1, 2])
+        with col_cv:
             st.markdown(f"""
-            <div class="glass-card" style="text-align:center;">
-                <p class="rajdhani-font" style="margin:0; color:#aaa;">HARGA {ticker_display} ({selected_tf_display})</p>
-                <h1 class="digital-font" style="font-size:48px; color:{line_color}; margin:0;">{current_price:,.4f}</h1>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            fig = go.Figure()
-            # Price Line
-            fig.add_trace(go.Scatter(x=df.index, y=df['Close'], mode='lines', line=dict(color=line_color, width=3), name="Price", fill='tozeroy', fillcolor=f'rgba({0 if is_bullish else 255}, {255 if is_bullish else 42}, {136 if is_bullish else 109}, 0.05)'))
-            # MA 50 & 200
-            if 'SMA50' in df.columns:
-                fig.add_trace(go.Scatter(x=df.index, y=df['SMA50'], mode='lines', line=dict(color='#ffcc00', width=1.5, dash='dash'), name="SMA 50"))
-            if 'SMA200' in df.columns:
-                fig.add_trace(go.Scatter(x=df.index, y=df['SMA200'], mode='lines', line=dict(color='#00d4ff', width=1.5), name="SMA 200"))
-            
-            fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)'), margin=dict(l=0, r=0, t=30, b=0), height=450, xaxis_rangeslider_visible=False)
-            st.plotly_chart(fig, use_container_width=True)
+<div style="text-align:center;background:#0A1018;border:1px solid {vol_color}40;
+    border-radius:2px;padding:1rem;">
+<div style="font-family:'Share Tech Mono',monospace;font-size:.55rem;color:#1A3040;letter-spacing:.18em;margin-bottom:.3rem;">
+VOLATILITAS JAM INI
+</div>
+<div style="font-family:'Share Tech Mono',monospace;font-size:2.5rem;font-weight:700;
+    color:{vol_color};line-height:1;">{curr_vol}</div>
+<div style="font-family:'Share Tech Mono',monospace;font-size:.55rem;color:{vol_color};
+    letter-spacing:.15em;margin:.3rem 0;">{vol_state}</div>
+<div style="height:5px;background:#0E1826;border-radius:2px;margin:.4rem 0;">
+<div style="height:5px;width:{curr_vol}%;background:{vol_color};border-radius:2px;"></div>
+</div>
+<div style="font-family:'Share Tech Mono',monospace;font-size:.52rem;color:#1A3040;">{curr_hr:02d}:00 WIB</div>
+</div>""", unsafe_allow_html=True)
+        with col_ca:
+            st.markdown(f"""
+<div class="ibox" style="--lc:{vol_color};">
+<div class="ibox-t">ANALISIS KONDISI PASAR SAAT INI</div>
+<div class="ibox-b">{vol_advice}</div>
+</div>""", unsafe_allow_html=True)
 
-    with col_side:
-        if market_data and not df.empty:
-            # Gauge Logic (10 Indikator Weighting)
-            latest = df.iloc[-1]
-            rsi, macd, sig_l, price, sma20, sma50, sma200, bbu, bbl, adx = latest['RSI'], latest['MACD'], latest['Signal_Line'], latest['Close'], latest['SMA20'], latest['SMA50'], latest['SMA200'], latest['BB_Upper'], latest['BB_Lower'], latest['ADX']
-            
-            score = 50
-            if rsi < 30: score += 10
-            elif rsi > 70: score -= 10
-            if macd > sig_l: score += 10
-            else: score -= 10
-            if price > sma50: score += 5
-            else: score -= 5
-            if price > sma200: score += 10
-            else: score -= 10
-            if price < bbl: score += 5
-            elif price > bbu: score -= 5
-            if adx > 25: score = score + 5 if macd > sig_l else score - 5
-            
-            gauge_val = max(0, min(100, score))
-            if gauge_val <= 20: status_label, g_color = "STRONG BEARISH", "#8b0000"
-            elif gauge_val <= 40: status_label, g_color = "LOW BEARISH", "#ff2a6d"
-            elif gauge_val <= 60: status_label, g_color = "NEUTRAL", "#888888"
-            elif gauge_val <= 80: status_label, g_color = "LOW BULLISH", "#aaffaa"
-            else: status_label, g_color = "STRONG BULLISH", "#00ff88"
+            # Sesi aktif saat ini
+            active_now = [s["name"] for s in SESSIONS if session_active(s, h_now)]
+            overlap_now = [o["label"] for o in OVERLAPS if overlap_active(o, h_now)]
+            st.markdown(f"""
+<div class="ibox" style="--lc:#4A9EBF;">
+<div class="ibox-t">STATUS PASAR</div>
+<div class="ibox-b">
+<b style="color:#00FFC8;">Sesi Aktif:</b> {', '.join(active_now) if active_now else 'Tidak ada sesi aktif'}<br>
+<b style="color:#FFD93D;">Overlap:</b> {', '.join(overlap_now) if overlap_now else 'Tidak ada overlap aktif'}<br>
+<b style="color:#C77DFF;">Kondisi:</b> {'Peak liquidity — kondisi ideal trading' if curr_vol>=80 else 'Suboptimal — pertimbangkan menunggu Power Zone'}
+</div>
+</div>""", unsafe_allow_html=True)
 
-            fig_gauge = go.Figure(go.Indicator(
-                mode = "gauge+number", value = gauge_val, domain = {'x': [0, 1], 'y': [0, 1]},
-                title = {'text': f"ANALYSIS: {status_label}", 'font': {'family': "Orbitron", 'size': 16, 'color': g_color}},
-                gauge = {
-                    'axis': {'range': [0, 100], 'tickcolor': "white"}, 'bar': {'color': g_color},
-                    'steps': [{'range': [0, 20], 'color': '#8b0000'}, {'range': [20, 40], 'color': '#ff2a6d'}, {'range': [40, 60], 'color': '#888888'}, {'range': [60, 80], 'color': '#aaffaa'}, {'range': [80, 100], 'color': '#00ff88'}],
-                    'threshold': {'line': {'color': "white", 'width': 4}, 'thickness': 0.75, 'value': gauge_val}
-                }
-            ))
-            fig_gauge.update_layout(paper_bgcolor='rgba(0,0,0,0)', font={'color': "white", 'family': "Orbitron"}, height=300, margin=dict(l=20, r=20, t=50, b=20))
-            st.plotly_chart(fig_gauge, use_container_width=True)
+        st.markdown('<hr class="hr">', unsafe_allow_html=True)
+        st.markdown('<div class="sec-title">VOLATILITAS PER SESI — PERBANDINGAN</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sec-sub">RATA-RATA INTENSITAS PERGERAKAN PER SESI TRADING</div>', unsafe_allow_html=True)
 
-        if st.button("REFRESH DATA REAL-TIME", use_container_width=True):
+        # Session vol comparison chart
+        sess_names = [s["name"] for s in SESSIONS]
+        sess_vols  = [s["vol_pct"] for s in SESSIONS]
+        sess_colors= [s["color"] for s in SESSIONS]
+        fig_sv = go.Figure(go.Bar(
+            x=sess_names, y=sess_vols,
+            marker=dict(color=[f"{c}AA" for c in sess_colors], line=dict(color=sess_colors, width=1)),
+            text=[f"{v}%" for v in sess_vols],
+            textposition="outside",
+            textfont=dict(family="Share Tech Mono, monospace", size=9),
+            hovertemplate="%{x}: <b>%{y}%</b> volatilitas relatif<extra></extra>",
+        ))
+        fig_sv.update_layout(
+            **BASE, height=200,
+            xaxis=dict(showgrid=False, tickfont=dict(size=9, family="Share Tech Mono, monospace")),
+            yaxis=dict(range=[0, 115], showgrid=True, gridcolor="#0A1220",
+                tickfont=dict(size=8), title="VOLATILITAS RELATIF (%)",
+                title_font=dict(size=8, color="#1A3040")),
+            title=dict(text="VOLATILITAS RELATIF PER SESI", font=dict(size=9, color="#00FFC8"), x=0),
+            bargap=0.35, showlegend=False,
+        )
+        st.plotly_chart(fig_sv, use_container_width=True, config={"staticPlot": True})
+
+    # ── TAB 5: PANDUAN TRADER ────────────────────────────────────────────────
+    with tabs[4]:
+        st.markdown('<div class="sec-title">PANDUAN TRADER — SESSION MASTERY</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sec-sub">7 PRINSIP TIMING TRADING BERBASIS SESI PASAR</div>', unsafe_allow_html=True)
+        render_trader_guide()
+
+        st.markdown('<hr class="hr">', unsafe_allow_html=True)
+        st.markdown('<div class="sec-title">QUICK REFERENCE — PAIR TERBAIK PER SESI</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sec-sub">PAIR DENGAN LIKUIDITAS DAN RANGE OPTIMAL SESUAI JAM TRADING</div>', unsafe_allow_html=True)
+
+        cols_ref = st.columns(4)
+        for col, s in zip(cols_ref, SESSIONS):
+            active = session_active(s, h_now)
+            border = f"border-color:{s['color']}80;" if active else ""
+            with col:
+                pairs_html = "".join(f'<div style="font-family:\'Share Tech Mono\',monospace;font-size:.6rem;color:{s["color"]};padding:.15rem 0;border-bottom:1px solid #0E1826;">{p}</div>' for p in s["pairs"])
+                st.markdown(f"""
+<div style="background:#0A1018;border:1px solid #141E2D;{border}border-radius:2px;padding:.7rem .8rem;">
+<div style="font-family:'Share Tech Mono',monospace;font-size:.65rem;font-weight:700;
+    color:{s['color']};letter-spacing:.1em;margin-bottom:.1rem;">{s['name']}</div>
+<div style="font-family:'Share Tech Mono',monospace;font-size:.52rem;color:#1A3040;
+    margin-bottom:.4rem;">{s['open_wib']:02d}:00–{s['close_wib'] if s['close_wib']<=24 else s['close_wib']-24:02d}:00 WIB</div>
+{pairs_html}
+</div>""", unsafe_allow_html=True)
+
+    # ── AUTO REFRESH ─────────────────────────────────────────────────────────
+    st.markdown('<hr class="hr">', unsafe_allow_html=True)
+    col_r1, col_r2 = st.columns([3, 1])
+    with col_r1:
+        st.markdown(f'<div style="font-family:\'Share Tech Mono\',monospace;font-size:.52rem;color:#0F3028;letter-spacing:.1em;">AEROVULPIS · MARKET SESSIONS · STANDALONE PROTOTYPE · LAST UPDATE: {now_dt.strftime("%H:%M:%S WIB")}</div>', unsafe_allow_html=True)
+    with col_r2:
+        if st.button("REFRESH", use_container_width=True, key="refresh_btn"):
             st.rerun()
 
-# ====================== TRADING SIGNALS (10 Indikator) ======================
-elif menu_selection == "Trading Signals":
-    st.markdown(f'<h2 class="digital-font">⚡ Trading Signals ({selected_tf_display})</h2>', unsafe_allow_html=True)
-    df = get_historical_data(ticker_input, period=period, interval=interval)
-    if not df.empty and len(df) > 50:
-        df = add_technical_indicators(df)
-        latest = df.iloc[-1]
-        
-        indicators = {
-            "RSI (14)": "BUY" if latest['RSI'] < 30 else "SELL" if latest['RSI'] > 70 else "NEUTRAL",
-            "MACD": "BUY" if latest['MACD'] > latest['Signal_Line'] else "SELL",
-            "SMA 20/50": "BUY" if latest['SMA20'] > latest['SMA50'] else "SELL",
-            "SMA 200": "BUY" if latest['Close'] > latest['SMA200'] else "SELL",
-            "EMA 9": "BUY" if latest['Close'] > latest['EMA9'] else "SELL",
-            "Bollinger Bands": "BUY" if latest['Close'] < latest['BB_Lower'] else "SELL" if latest['Close'] > latest['BB_Upper'] else "NEUTRAL",
-            "Stochastic": "BUY" if latest['Stoch_K'] < 20 else "SELL" if latest['Stoch_K'] > 80 else "NEUTRAL",
-            "ADX Trend": "STRONG" if latest['ADX'] > 25 else "WEAK",
-            "Volume": "BULLISH" if latest['Volume'] > latest['Vol_SMA'] and latest['Close'] > latest['Open'] else "BEARISH" if latest['Volume'] > latest['Vol_SMA'] else "LOW",
-            "Ichimoku Base": "BUY" if latest['Close'] > latest['Base_Line'] else "SELL"
-        }
-        
-        buy_count = list(indicators.values()).count("BUY") + list(indicators.values()).count("BULLISH")
-        sell_count = list(indicators.values()).count("SELL") + list(indicators.values()).count("BEARISH")
-        
-        if buy_count > sell_count + 2: final_sig, sig_col = "STRONG BUY", "#00ff88"
-        elif buy_count > sell_count: final_sig, sig_col = "BUY", "#aaffaa"
-        elif sell_count > buy_count + 2: final_sig, sig_col = "STRONG SELL", "#ff2a6d"
-        elif sell_count > buy_count: final_sig, sig_col = "SELL", "#ffaaaa"
-        else: final_sig, sig_col = "NEUTRAL", "#888888"
-
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            st.markdown(f'<div class="glass-card" style="text-align:center; border-top: 5px solid {sig_col};"><p class="rajdhani-font">FINAL RECOMMENDATION</p><h1 class="digital-font" style="color:{sig_col}; font-size:50px;">{final_sig}</h1><p class="rajdhani-font">Score: {buy_count} Buy | {sell_count} Sell</p></div>', unsafe_allow_html=True)
-        with col2:
-            st.markdown('<div class="glass-card"><p class="digital-font">10-INDICATOR ANALYSIS</p>', unsafe_allow_html=True)
-            for k, v in indicators.items():
-                col_c = "#00ff88" if v in ["BUY", "BULLISH", "STRONG"] else "#ff2a6d" if v in ["SELL", "BEARISH"] else "#888888"
-                st.markdown(f'<div style="display:flex; justify-content:space-between;"><span class="rajdhani-font">{k}</span><span class="digital-font" style="color:{col_c};">{v}</span></div>', unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-    else:
-        st.error("Data tidak cukup untuk analisis 10 indikator. Coba timeframe lebih besar.")
-
-# ====================== RISK MANAGEMENT ======================
-elif menu_selection == "Risk Management":
-    st.markdown('<h2 class="digital-font">🛡️ Risk Management Protocol</h2>', unsafe_allow_html=True)
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        balance = st.number_input("Account Balance ($)", value=1000.0)
-        risk_pct = st.slider("Risk per Trade (%)", 0.1, 5.0, 1.0)
-        entry_p = st.number_input("Entry Price", value=0.0)
-        stop_l = st.number_input("Stop Loss Price", value=0.0)
-        st.markdown('</div>', unsafe_allow_html=True)
-    with col2:
-        if entry_p > 0 and stop_l > 0:
-            risk_amt = balance * (risk_pct / 100)
-            diff = abs(entry_p - stop_l)
-            pos_size = risk_amt / diff if diff > 0 else 0
-            st.markdown(f"""
-            <div class="glass-card" style="text-align:center;">
-                <p class="rajdhani-font">CALCULATED POSITION SIZE</p>
-                <h2 class="digital-font" style="color:#00d4ff;">{pos_size:,.2f} Units</h2>
-                <hr style="border-color:rgba(255,255,255,0.1);">
-                <p class="rajdhani-font">Risk Amount: <span style="color:#ff2a6d;">${risk_amt:,.2f}</span></p>
-                <p class="rajdhani-font">Reward (1:2): <span style="color:#00ff88;">${risk_amt*2:,.2f}</span></p>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.info("Masukkan Entry Price dan Stop Loss untuk menghitung manajemen risiko.")
-
-# ====================== MARKET HISTORY ======================
-elif menu_selection == "Market History":
-    st.markdown(f'<h2 class="digital-font">📊 Market History ({selected_tf_display})</h2>', unsafe_allow_html=True)
-    market_data = get_market_data(ticker_input)
-    if market_data:
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("OPEN", f"{market_data['open']:,.4f}")
-        c2.metric("HIGH", f"{market_data['high']:,.4f}")
-        c3.metric("LOW", f"{market_data['low']:,.4f}")
-        c4.metric("CLOSE", f"{market_data['close']:,.4f}")
-        
-    df_hist = get_historical_data(ticker_input, period=period, interval=interval)
-    if not df_hist.empty:
-        df_hist = df_hist.sort_index(ascending=False)
-        df_hist.index = df_hist.index.strftime('%d %B %Y %H:%M')
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.dataframe(df_hist[['Open', 'High', 'Low', 'Close', 'Volume']].head(50), use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-# ====================== CHATBOT AI TRADING (FINAL FIX VERSION) ======================
-elif menu_selection == "Chatbot AI Trading":
-    st.markdown('<h2 class="digital-font">🤖 Chatbot AI Trading</h2>', unsafe_allow_html=True)
-    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-    
-    # Inisialisasi history pesan
-    if "messages" not in st.session_state:
-        st.session_state.messages = [{"role": "assistant", "content": "Sistem AeroVulpis v3.2 Aktif. Siap beraksi, Fahmi!"}]
-        
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(f'<span class="rajdhani-font">{msg["content"]}</span>', unsafe_allow_html=True)
-    
-    if prompt := st.chat_input("Kirim perintah ke AeroVulpis..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-            
-        with st.chat_message("assistant"):
-            with st.spinner("Menganalisis..."):
-                market_data = get_market_data(ticker_input)
-                price_val = market_data['price'] if market_data else 'N/A'
-                context = f"Harga {ticker_display} saat ini adalah {price_val} pada timeframe {selected_tf_display}."
-                response = get_gemini_response(prompt, context)
-                st.markdown(response)
-        st.session_state.messages.append({"role": "assistant", "content": response})
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# ====================== FOOTER ======================
-st.markdown("---")
-st.markdown("""
-<div style="text-align: center; padding: 20px; opacity: 0.8;">
-    <p class="rajdhani-font" style="font-style: italic; font-size: 18px; color: #ccc;">
-        "Disiplin adalah kunci, emosi adalah musuh. Tetap tenang dan percaya pada sistem."
-    </p>
-    <p class="digital-font" style="font-size: 16px; color: #00ff88;">
-        — Fahmi (Pencipta AeroVulpis)
-    </p>
-    <p style="font-size: 10px; color: #444; letter-spacing: 2px;">DYNAMIHATCH IDENTITY • v3.2 ULTIMATE • 2026</p>
-</div>
-""", unsafe_allow_html=True)
+if __name__ == "__main__":
+    main()
