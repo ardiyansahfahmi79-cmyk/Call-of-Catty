@@ -171,7 +171,8 @@ def now_wib() -> datetime:
 def wib_hour_float() -> float:
     """Return current WIB time as float hour, e.g. 13.5 = 13:30."""
     n = now_wib()
-    return n.hour + n.minute / 60 + n.second / 3600
+    # Snapshot per menit agar UI tidak bergerak tanpa refresh atau animasi.
+    return n.hour + n.minute / 60
 
 def session_active(s: dict, h: float) -> bool:
     o, c = s["open_wib"], s["close_wib"]
@@ -227,13 +228,13 @@ body{font-family:'Exo 2',sans-serif;}
 /* HEADER */
 .aero-build{font-family:'Share Tech Mono',monospace;font-size:.55rem;letter-spacing:.25em;color:#0F3028;margin-bottom:.3rem;}
 .aero-title{font-family:'Share Tech Mono',monospace;font-size:1.6rem;color:#00FFC8;letter-spacing:.06em;line-height:1;}
-.aero-sub{font-size:.72rem;color:#1A3020;margin-top:.25rem;font-family:'Share Tech Mono',monospace;letter-spacing:.08em;}
+.aero-sub{font-size:.72rem;color:#8EA3B8;margin-top:.25rem;font-family:'Share Tech Mono',monospace;letter-spacing:.08em;}
 
 /* SECTION */
 .sec-title{font-family:'Share Tech Mono',monospace;color:#00FFC8;font-size:.78rem;
     letter-spacing:.22em;border-left:2px solid #00FFC8;padding-left:.7rem;
     margin:1.5rem 0 .2rem;text-transform:uppercase;}
-.sec-sub{font-family:'Share Tech Mono',monospace;color:#1E3A2F;font-size:.56rem;
+.sec-sub{font-family:'Share Tech Mono',monospace;color:#8298AD;font-size:.56rem;
     letter-spacing:.12em;margin-bottom:.8rem;padding-left:.9rem;}
 .hr{border:none;border-top:1px solid #0E1826;margin:.8rem 0;}
 
@@ -242,23 +243,23 @@ body{font-family:'Exo 2',sans-serif;}
 .clock-time{font-family:'Share Tech Mono',monospace;font-size:2.8rem;
     color:#00FFC8;letter-spacing:.1em;line-height:1;}
 .clock-date{font-family:'Share Tech Mono',monospace;font-size:.6rem;
-    color:#1E3A2F;letter-spacing:.18em;margin-top:.2rem;}
+    color:#87A0B7;letter-spacing:.18em;margin-top:.2rem;}
 .clock-label{font-family:'Share Tech Mono',monospace;font-size:.52rem;
-    color:#0F3028;letter-spacing:.2em;}
+    color:#7F95AA;letter-spacing:.2em;}
 
 /* CITY CLOCKS */
 .city-clocks{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem;}
 .city-clock{background:#0A1018;border:1px solid #141E2D;border-radius:2px;
     padding:.5rem .7rem;flex:1;min-width:100px;text-align:center;position:relative;overflow:hidden;}
 .city-clock-accent{position:absolute;bottom:0;left:0;right:0;height:1px;background:var(--cc,#00FFC8);}
-.city-clock-name{font-family:'Share Tech Mono',monospace;font-size:.52rem;
-    color:#1A3040;letter-spacing:.12em;margin-bottom:.2rem;}
+.city-clock-name{font-family:'Share Tech Mono',monospace;font-size:.58rem;
+    color:#B7C7D9;letter-spacing:.12em;margin-bottom:.2rem;font-weight:700;}
 .city-clock-time{font-family:'Share Tech Mono',monospace;font-size:1.1rem;
     font-weight:700;color:var(--cc,#00FFC8);line-height:1;}
 .city-clock-status{font-family:'Share Tech Mono',monospace;font-size:.48rem;
     margin-top:.2rem;padding:1px 5px;border-radius:1px;display:inline-block;}
 .cs-active{background:rgba(0,255,200,.08);color:#00FFC8;border:1px solid #00FFC830;}
-.cs-closed{background:rgba(30,42,58,.5);color:#1A2D3A;border:1px solid #0E1826;}
+.cs-closed{background:rgba(30,42,58,.7);color:#8298AD;border:1px solid #26384A;}
 
 /* SESSION CARD */
 .sess-card{background:linear-gradient(160deg,#0A1018 0%,#0C1220 100%);
@@ -408,6 +409,17 @@ BASE = dict(
 
 CHART_CFG = {"staticPlot": True}
 
+def hex_to_rgba(color: str, alpha: float) -> str:
+    """Convert a six-digit hex color to a Plotly-compatible rgba color."""
+    value = color.lstrip("#")
+    if len(value) != 6:
+        return color
+    try:
+        red, green, blue = (int(value[i:i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        return color
+    return f"rgba({red},{green},{blue},{alpha})"
+
 def build_timeline_chart(h_now: float):
     """24-jam session timeline dengan current time marker."""
     fig = go.Figure()
@@ -422,11 +434,11 @@ def build_timeline_chart(h_now: float):
             for start, end in [(o, 24), (0, c - 24)]:
                 fig.add_vrect(
                     x0=start, x1=end,
-                    fillcolor=s["color_dim"],
+                    fillcolor=hex_to_rgba(s["color"], 0.125),
                     layer="below", line_width=0,
                 )
         else:
-            fig.add_vrect(x0=o, x1=c, fillcolor=s["color_dim"], layer="below", line_width=0)
+            fig.add_vrect(x0=o, x1=c, fillcolor=hex_to_rgba(s["color"], 0.125), layer="below", line_width=0)
 
         # Label
         label_x = (o + min(c, 24)) / 2 if c <= 24 else (o + 24) / 2
@@ -452,7 +464,7 @@ def build_timeline_chart(h_now: float):
     # Overlap zones
     for ov in OVERLAPS:
         s, e = ov["start"], min(ov["end"], 24)
-        fig.add_vrect(x0=s, x1=e, fillcolor=f"{ov['color']}18", layer="below",
+        fig.add_vrect(x0=s, x1=e, fillcolor=hex_to_rgba(ov["color"], 0.10), layer="below",
             line=dict(color=ov["color"], width=1, dash="dot"))
         fig.add_annotation(x=(s+e)/2, y=102, text=ov["label"],
             font=dict(family="Share Tech Mono, monospace", color=ov["color"], size=7),
@@ -467,21 +479,22 @@ def build_timeline_chart(h_now: float):
         showarrow=False, bgcolor="#080B12", bordercolor="#FFFFFF", borderwidth=1,
     )
 
-    fig.update_layout(
-        **BASE,
+    timeline_layout = dict(BASE)
+    timeline_layout.update(
         height=200,
         xaxis=dict(
             range=[0, 24], tickvals=list(range(0, 25, 2)),
             ticktext=[f"{h:02d}:00" for h in range(0, 25, 2)],
             gridcolor="#0A1220", linecolor="#0E1826",
-            tickfont=dict(size=7), title="WAKTU WIB",
-            title_font=dict(size=8, color="#1A3040"),
+            tickfont=dict(size=7),
+            title=dict(text="WAKTU WIB", font=dict(size=8, color="#8298AD")),
         ),
         yaxis=dict(range=[0, 115], showgrid=False, showticklabels=False),
         showlegend=False,
         title=dict(text="SESI AKTIF · VOLATILITAS PER JAM (WIB)", font=dict(size=9, color="#00FFC8"), x=0),
         hovermode="x unified",
     )
+    fig.update_layout(**timeline_layout)
     return fig
 
 def build_vol_radar(session_id: str):
@@ -723,7 +736,7 @@ def main():
         st.markdown(f"""
 <div class="clock-wrap">
 <div class="clock-label">WAKTU INDONESIA BARAT</div>
-<div class="clock-time">{now_dt.strftime('%H:%M:%S')}</div>
+<div class="clock-time">{now_dt.strftime('%H:%M')}</div>
 <div class="clock-date">{now_dt.strftime('%A, %d %B %Y')}</div>
 </div>""", unsafe_allow_html=True)
 
@@ -994,14 +1007,12 @@ VOLATILITAS JAM INI
 {pairs_html}
 </div>""", unsafe_allow_html=True)
 
-    # ── AUTO REFRESH ─────────────────────────────────────────────────────────
+    # ── SNAPSHOT STATUS ───────────────────────────────────────────────────────
     st.markdown('<hr class="hr">', unsafe_allow_html=True)
-    col_r1, col_r2 = st.columns([3, 1])
-    with col_r1:
-        st.markdown(f'<div style="font-family:\'Share Tech Mono\',monospace;font-size:.52rem;color:#0F3028;letter-spacing:.1em;">AEROVULPIS · MARKET SESSIONS · STANDALONE PROTOTYPE · LAST UPDATE: {now_dt.strftime("%H:%M:%S WIB")}</div>', unsafe_allow_html=True)
-    with col_r2:
-        if st.button("REFRESH", use_container_width=True, key="refresh_btn"):
-            st.rerun()
+    st.markdown(
+        f'<div style="font-family:\'Share Tech Mono\',monospace;font-size:.52rem;color:#8298AD;letter-spacing:.1em;">SNAPSHOT WAKTU WIB: {now_dt.strftime("%H:%M WIB")}</div>',
+        unsafe_allow_html=True,
+    )
 
 if __name__ == "__main__":
     main()
