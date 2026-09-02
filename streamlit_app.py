@@ -7,7 +7,7 @@ Deps: streamlit plotly pandas pytz
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
-from datetime import datetime, time as dtime
+from datetime import datetime, time as dtime, timedelta
 import pytz
 
 st.set_page_config(
@@ -29,8 +29,8 @@ SESSIONS = [
         "region":  "PACIFIC",
         "city":    "Sydney",
         "tz":      "Australia/Sydney",
-        "open_wib": 5,   # 05:00 WIB
-        "close_wib":14,  # 14:00 WIB
+        "open_local": 8,
+        "close_local": 17,
         "color":   "#00FFC8",
         "color_dim":"#00FFC820",
         "vol":     "LOW",
@@ -48,8 +48,8 @@ SESSIONS = [
         "region":  "ASIA",
         "city":    "Tokyo",
         "tz":      "Asia/Tokyo",
-        "open_wib": 7,
-        "close_wib":16,
+        "open_local": 9,
+        "close_local": 18,
         "color":   "#C77DFF",
         "color_dim":"#C77DFF20",
         "vol":     "MEDIUM",
@@ -67,8 +67,8 @@ SESSIONS = [
         "region":  "EUROPE",
         "city":    "London",
         "tz":      "Europe/London",
-        "open_wib": 15,
-        "close_wib":24,  # 00:00 next day
+        "open_local": 8,
+        "close_local": 17,
         "color":   "#FF9F43",
         "color_dim":"#FF9F4320",
         "vol":     "HIGH",
@@ -86,8 +86,8 @@ SESSIONS = [
         "region":  "AMERICA",
         "city":    "New York",
         "tz":      "America/New_York",
-        "open_wib": 20,
-        "close_wib":29,  # 05:00 next day WIB
+        "open_local": 8,
+        "close_local": 17,
         "color":   "#FF6B6B",
         "color_dim":"#FF6B6B20",
         "vol":     "HIGH",
@@ -107,6 +107,7 @@ OVERLAPS = [
         "name":   "TOKYO / LONDON OVERLAP",
         "start":  15,
         "end":    16,
+        "session_ids": ("tokyo", "london"),
         "color":  "#FFD93D",
         "label":  "POWER ZONE I",
         "desc":   "1 jam overlap — JPY crosses paling aktif. EUR/JPY dan GBP/JPY sering breakout.",
@@ -116,6 +117,7 @@ OVERLAPS = [
         "name":   "LONDON / NEW YORK OVERLAP",
         "start":  20,
         "end":    24,
+        "session_ids": ("london", "newyork"),
         "color":  "#FF6B6B",
         "label":  "POWER ZONE II",
         "desc":   "4 jam paling volatile dalam sehari — 70%+ volume harian terkonsentrasi di sini. Spread terkecil, likuiditas terbesar.",
@@ -174,33 +176,63 @@ def wib_hour_float() -> float:
     # Snapshot per menit agar UI tidak bergerak tanpa refresh atau animasi.
     return n.hour + n.minute / 60
 
+def session_wib_window(s: dict, reference: datetime | None = None) -> tuple[float, float]:
+    """Return today's session window in WIB, including a close after midnight."""
+    reference_wib = (reference or now_wib()).astimezone(WIB)
+    local_tz = pytz.timezone(s["tz"])
+    local_date = reference_wib.astimezone(local_tz).date()
+    local_open = local_tz.localize(datetime.combine(local_date, dtime(hour=s["open_local"])))
+    close_date = local_date + timedelta(days=1) if s["close_local"] <= s["open_local"] else local_date
+    local_close = local_tz.localize(datetime.combine(close_date, dtime(hour=s["close_local"])))
+    open_wib = local_open.astimezone(WIB)
+    close_wib = local_close.astimezone(WIB)
+    base_date = open_wib.date()
+    open_hour = open_wib.hour + open_wib.minute / 60
+    close_hour = ((close_wib.date() - base_date).days * 24
+                  + close_wib.hour + close_wib.minute / 60)
+    return open_hour, close_hour
+
 def session_active(s: dict, h: float) -> bool:
-    o, c = s["open_wib"], s["close_wib"]
-    if c > 24:  # spans midnight
+    o, c = session_wib_window(s)
+    if c > 24:
         return h >= o or h < (c - 24)
     return o <= h < c
 
 def session_progress(s: dict, h: float) -> float:
-    """0.0 to 1.0"""
-    o, c = s["open_wib"], s["close_wib"]
-    dur = (c - 24 if c > 24 else c) - o if c <= 24 else (c - 24) + (24 - o)
-    if c > 24:
-        if h >= o: elapsed = h - o
-        else: elapsed = (24 - o) + h
-    else:
-        elapsed = h - o
-    return max(0.0, min(1.0, elapsed / dur))
+    """Return progress from 0.0 to 1.0 for the current local session window."""
+    o, c = session_wib_window(s)
+    duration = c - o
+    elapsed = (h - o) % 24 if c > 24 else h - o
+    return max(0.0, min(1.0, elapsed / duration))
+
+def resolved_overlap(ov: dict, reference: datetime | None = None) -> dict:
+    """Resolve an overlap into today's WIB hours using local session timezones."""
+    if not ov.get("session_ids"):
+        return dict(ov)
+    windows = {
+        session["id"]: session_wib_window(session, reference)
+        for session in SESSIONS
+        if session["id"] in ov["session_ids"]
+    }
+    starts = [windows[sid][0] for sid in ov["session_ids"]]
+    ends = [windows[sid][1] for sid in ov["session_ids"]]
+    return {**ov, "start": max(starts), "end": min(ends)}
+
+def resolved_overlaps(reference: datetime | None = None) -> list[dict]:
+    return [resolved_overlap(ov, reference) for ov in OVERLAPS]
 
 def overlap_active(ov: dict, h: float) -> bool:
-    s, e = ov["start"], ov["end"]
+    current = resolved_overlap(ov)
+    s, e = current["start"], current["end"]
     if e > 24: return h >= s or h < (e - 24)
     return s <= h < e
 
 def time_until_open(s: dict, h: float) -> str:
-    if session_active(s, h): return "ACTIVE"
-    o = s["open_wib"]
+    if session_active(s, h):
+        return "ACTIVE"
+    o, _ = session_wib_window(s)
     diff = (o - h) % 24
-    hrs  = int(diff)
+    hrs = int(diff)
     mins = int((diff - hrs) * 60)
     return f"OPENS IN {hrs:02d}h {mins:02d}m"
 
@@ -428,7 +460,7 @@ def build_timeline_chart(h_now: float):
 
     # Session backgrounds
     for s in SESSIONS:
-        o, c = s["open_wib"], s["close_wib"]
+        o, c = session_wib_window(s)
         if c > 24:
             # Split: open→24 dan 0→(c-24)
             for start, end in [(o, 24), (0, c - 24)]:
@@ -462,7 +494,7 @@ def build_timeline_chart(h_now: float):
     ))
 
     # Overlap zones
-    for ov in OVERLAPS:
+    for ov in resolved_overlaps():
         s, e = ov["start"], min(ov["end"], 24)
         fig.add_vrect(x0=s, x1=e, fillcolor=hex_to_rgba(ov["color"], 0.10), layer="below",
             line=dict(color=ov["color"], width=1, dash="dot"))
@@ -511,7 +543,7 @@ def build_vol_radar(session_id: str):
 
     fig = go.Figure(go.Scatterpolar(
         r=values, theta=labels, fill="toself",
-        fillcolor=f"{color}0A",
+        fillcolor=hex_to_rgba(color, 0.04),
         line=dict(color=color, width=1.8),
         marker=dict(color=color, size=4),
     ))
@@ -539,14 +571,14 @@ def build_global_vol_bar():
     fig = go.Figure(go.Bar(
         x=shares, y=names,
         orientation="h",
-        marker=dict(color=[f"{c}AA" for c in colors], line=dict(color=colors, width=1)),
+        marker=dict(color=[hex_to_rgba(c, 0.67) for c in colors], line=dict(color=colors, width=1)),
         text=[f"{v}%" for v in shares],
         textposition="inside",
         textfont=dict(family="Share Tech Mono, monospace", size=9, color="#080B12"),
         hovertemplate="%{y}: <b>%{x}%</b> volume FX harian<extra></extra>",
     ))
-    fig.update_layout(
-        **BASE,
+    bar_layout = dict(BASE)
+    bar_layout.update(
         height=140,
         xaxis=dict(range=[0,45], showgrid=False, showticklabels=False, linecolor="#0E1826"),
         yaxis=dict(showgrid=False, tickfont=dict(size=9, family="Share Tech Mono, monospace")),
@@ -554,6 +586,7 @@ def build_global_vol_bar():
         bargap=0.3, showlegend=False,
         margin=dict(l=60, r=8, t=28, b=8),
     )
+    fig.update_layout(**bar_layout)
     return fig
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -572,8 +605,9 @@ def render_session_card(s: dict, h: float, expanded: bool = False):
     s_cls   = "sess-card-active" if active else ""
     st_cls  = "sess-status-active" if active else "sess-status-closed"
     ctd     = f"PROGRESS: {prog*100:.0f}%" if active else time_until_open(s, h)
-    close_wib = s["close_wib"] if s["close_wib"] <= 24 else s["close_wib"] - 24
-    time_str  = f"{s['open_wib']:02d}:00 – {close_wib:02d}:00 WIB"
+    open_wib, close_wib = session_wib_window(s)
+    close_display = close_wib if close_wib <= 24 else close_wib - 24
+    time_str = f"{int(open_wib):02d}:00 – {int(close_display):02d}:00 WIB"
     v_badge   = vol_badge(s["vol"])
     pairs_html = " ".join(f'<span class="pair-tag" style="--sc:{s["color"]};">{p}</span>' for p in s["pairs"])
 
@@ -647,7 +681,7 @@ def render_session_card(s: dict, h: float, expanded: bool = False):
 """, unsafe_allow_html=True)
 
 def render_overlap_cards(h: float):
-    for ov in OVERLAPS:
+    for ov in resolved_overlaps():
         active   = overlap_active(ov, h)
         oc       = ov["color"]
         a_badge  = f'<span class="ov-active-badge">ACTIVE NOW</span>' if active else ""
@@ -774,14 +808,14 @@ def main():
 <div class="city-clock-time">{city_local_time(s['tz'])}</div>
 <span class="city-clock-status {sc}">{st_lbl}</span>
 </div>"""
-    # Tambah UTC
-    utc_time = datetime.now(pytz.utc).strftime("%H:%M")
+    # Referensi waktu lokal aplikasi dalam WIB.
+    wib_time = now_wib().strftime("%H:%M")
     city_html += f"""
 <div class="city-clock" style="--cc:#4FC3F7;">
 <div class="city-clock-accent"></div>
-<div class="city-clock-name">UTC / GMT</div>
-<div class="city-clock-time">{utc_time}</div>
-<span class="city-clock-status cs-active">GLOBAL REF</span>
+<div class="city-clock-name">WIB / JAKARTA</div>
+<div class="city-clock-time">{wib_time}</div>
+<span class="city-clock-status cs-active">LOCAL REF</span>
 </div>"""
     city_html += "</div>"
     st.markdown(city_html, unsafe_allow_html=True)
@@ -807,7 +841,7 @@ def main():
         with col_r:
             # Session overlap summary table
             st.markdown('<div class="sec-title">OVERLAP WINDOWS</div>', unsafe_allow_html=True)
-            for ov in OVERLAPS:
+            for ov in resolved_overlaps():
                 e_w = ov["end"] if ov["end"]<=24 else ov["end"]-24
                 active = overlap_active(ov, h_now)
                 badge  = f'<span class="ov-active-badge">LIVE</span>' if active else ""
@@ -971,15 +1005,17 @@ VOLATILITAS JAM INI
             textfont=dict(family="Share Tech Mono, monospace", size=9),
             hovertemplate="%{x}: <b>%{y}%</b> volatilitas relatif<extra></extra>",
         ))
-        fig_sv.update_layout(
-            **BASE, height=200,
+        volatility_layout = dict(BASE)
+        volatility_layout.update(
+            height=200,
             xaxis=dict(showgrid=False, tickfont=dict(size=9, family="Share Tech Mono, monospace")),
             yaxis=dict(range=[0, 115], showgrid=True, gridcolor="#0A1220",
-                tickfont=dict(size=8), title="VOLATILITAS RELATIF (%)",
-                title_font=dict(size=8, color="#1A3040")),
+                tickfont=dict(size=8),
+                title=dict(text="VOLATILITAS RELATIF (%)", font=dict(size=8, color="#8298AD"))),
             title=dict(text="VOLATILITAS RELATIF PER SESI", font=dict(size=9, color="#00FFC8"), x=0),
             bargap=0.35, showlegend=False,
         )
+        fig_sv.update_layout(**volatility_layout)
         st.plotly_chart(fig_sv, use_container_width=True, config={"staticPlot": True})
 
     # ── TAB 5: PANDUAN TRADER ────────────────────────────────────────────────
@@ -1003,7 +1039,7 @@ VOLATILITAS JAM INI
 <div style="font-family:'Share Tech Mono',monospace;font-size:.65rem;font-weight:700;
     color:{s['color']};letter-spacing:.1em;margin-bottom:.1rem;">{s['name']}</div>
 <div style="font-family:'Share Tech Mono',monospace;font-size:.52rem;color:#1A3040;
-    margin-bottom:.4rem;">{s['open_wib']:02d}:00–{s['close_wib'] if s['close_wib']<=24 else s['close_wib']-24:02d}:00 WIB</div>
+    margin-bottom:.4rem;">{int(session_wib_window(s)[0]):02d}:00–{int(session_wib_window(s)[1] if session_wib_window(s)[1] <= 24 else session_wib_window(s)[1] - 24):02d}:00 WIB</div>
 {pairs_html}
 </div>""", unsafe_allow_html=True)
 
