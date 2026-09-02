@@ -173,10 +173,9 @@ def now_wib() -> datetime:
 def wib_hour_float() -> float:
     """Return current WIB time as float hour, e.g. 13.5 = 13:30."""
     n = now_wib()
-    # Snapshot per menit agar UI tidak bergerak tanpa refresh atau animasi.
     return n.hour + n.minute / 60
 
-def session_wib_window(s: dict, reference: datetime | None = None) -> tuple[float, float]:
+def session_wib_window(s: dict, reference: datetime = None) -> tuple:
     """Return today's session window in WIB, including a close after midnight."""
     reference_wib = (reference or now_wib()).astimezone(WIB)
     local_tz = pytz.timezone(s["tz"])
@@ -205,7 +204,7 @@ def session_progress(s: dict, h: float) -> float:
     elapsed = (h - o) % 24 if c > 24 else h - o
     return max(0.0, min(1.0, elapsed / duration))
 
-def resolved_overlap(ov: dict, reference: datetime | None = None) -> dict:
+def resolved_overlap(ov: dict, reference: datetime = None) -> dict:
     """Resolve an overlap into today's WIB hours using local session timezones."""
     if not ov.get("session_ids"):
         return dict(ov)
@@ -218,7 +217,7 @@ def resolved_overlap(ov: dict, reference: datetime | None = None) -> dict:
     ends = [windows[sid][1] for sid in ov["session_ids"]]
     return {**ov, "start": max(starts), "end": min(ends)}
 
-def resolved_overlaps(reference: datetime | None = None) -> list[dict]:
+def resolved_overlaps(reference: datetime = None) -> list:
     return [resolved_overlap(ov, reference) for ov in OVERLAPS]
 
 def overlap_active(ov: dict, h: float) -> bool:
@@ -297,7 +296,7 @@ body{font-family:'Exo 2',sans-serif;}
 .sess-card{background:linear-gradient(160deg,#0A1018 0%,#0C1220 100%);
     border:1px solid #141E2D;border-radius:3px;padding:1rem 1.1rem;
     position:relative;overflow:hidden;margin-bottom:.5rem;}
-.sess-card-active{border-color:var(--sc,#00FFC8);box-shadow:0 0 12px var(--sc,#00FFC8)18;}
+.sess-card-active{border-color:var(--sc,#00FFC8);box-shadow:0 0 12px rgba(0,255,200,0.12);}
 .sess-left-bar{position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--sc,#00FFC8);}
 .sess-header{display:flex;align-items:flex-start;gap:.6rem;flex-wrap:wrap;margin-bottom:.6rem;}
 .sess-name{font-family:'Share Tech Mono',monospace;font-size:1rem;font-weight:700;
@@ -402,6 +401,11 @@ body{font-family:'Exo 2',sans-serif;}
 .tip-txt{font-size:.7rem;color:#3A5060;line-height:1.55;flex:1;}
 .tip-txt b{color:#00FFC8;}
 
+/* QUICK REF PAIR LIST */
+.qr-pair{font-family:'Share Tech Mono',monospace;font-size:.6rem;color:var(--pc,#00FFC8);
+    padding:.2rem 0;border-bottom:1px solid #0E1826;line-height:1.4;}
+.qr-pair:last-child{border-bottom:none;}
+
 /* RESPONSIVE */
 @media(max-width:768px){
     .block-container{padding:.5rem .6rem 3rem!important;}
@@ -456,13 +460,10 @@ def build_timeline_chart(h_now: float):
     """24-jam session timeline dengan current time marker."""
     fig = go.Figure()
 
-    hours = list(range(25))
-
     # Session backgrounds
     for s in SESSIONS:
         o, c = session_wib_window(s)
         if c > 24:
-            # Split: open→24 dan 0→(c-24)
             for start, end in [(o, 24), (0, c - 24)]:
                 fig.add_vrect(
                     x0=start, x1=end,
@@ -743,6 +744,28 @@ def render_trader_guide():
     html += "</div>"
     st.markdown(html, unsafe_allow_html=True)
 
+def render_quick_reference(h: float):
+    """Quick reference card — pair terbaik per sesi."""
+    cols_ref = st.columns(4)
+    for col, s in zip(cols_ref, SESSIONS):
+        active = session_active(s, h)
+        border = f"border-color:{s['color']}80;" if active else ""
+        pairs_html = "".join(
+            f'<div class="qr-pair" style="--pc:{s["color"]};">{p}</div>'
+            for p in s["pairs"]
+        )
+        active_badge = '<span class="ov-active-badge" style="margin-top:.3rem;">ACTIVE NOW</span>' if active else ""
+        with col:
+            st.markdown(f"""
+<div style="background:#0A1018;border:1px solid #141E2D;{border}border-radius:2px;padding:.7rem .8rem;">
+<div style="font-family:'Share Tech Mono',monospace;font-size:.65rem;font-weight:700;
+    color:{s['color']};letter-spacing:.1em;margin-bottom:.15rem;">{s['name']}</div>
+<div style="font-family:'Share Tech Mono',monospace;font-size:.48rem;color:#2D4050;
+    letter-spacing:.08em;margin-bottom:.35rem;">{s['region']} · {vol_badge(s['vol'])}</div>
+{pairs_html}
+{active_badge}
+</div>""", unsafe_allow_html=True)
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  MAIN
 # ══════════════════════════════════════════════════════════════════════════════
@@ -870,7 +893,7 @@ def main():
             render_session_card(s, h_now)
 
             # Radar chart profil sesi
-            with st.expander(f"PROFIL KARAKTERISTIK — {s['name']} (RADAR)", expanded=False):
+            with st.expander(f"PROFIL KARAKTERISTIK — {s['NAME'] if 'NAME' in s else s['name']} (RADAR)", expanded=False):
                 c1, c2 = st.columns([1, 1])
                 with c1:
                     st.plotly_chart(build_vol_radar(s["id"]), use_container_width=True,
@@ -1028,27 +1051,29 @@ VOLATILITAS JAM INI
         st.markdown('<div class="sec-title">QUICK REFERENCE — PAIR TERBAIK PER SESI</div>', unsafe_allow_html=True)
         st.markdown('<div class="sec-sub">PAIR DENGAN LIKUIDITAS DAN RANGE OPTIMAL SESUAI JAM TRADING</div>', unsafe_allow_html=True)
 
-        cols_ref = st.columns(4)
-        for col, s in zip(cols_ref, SESSIONS):
-            active = session_active(s, h_now)
-            border = f"border-color:{s['color']}80;" if active else ""
-            with col:
-                pairs_html = "".join(f'<div style="font-family:\'Share Tech Mono\',monospace;font-size:.6rem;color:{s["color"]};padding:.15rem 0;border-bottom:1px solid #0E1826;">{p}</div>' for p in s["pairs"])
-                st.markdown(f"""
-<div style="background:#0A1018;border:1px solid #141E2D;{border}border-radius:2px;padding:.7rem .8rem;">
-<div style="font-family:'Share Tech Mono',monospace;font-size:.65rem;font-weight:700;
-    color:{s['color']};letter-spacing:.1em;margin-bottom:.1rem;">{s['name']}</div>
-<div style="font-family:'Share Tech Mono',monospace;font-size:.52rem;color:#1A3040;
-    margin-bottom:.4rem;">{int(session_wib_window(s)[0]):02d}:00–{int(session_wib_window(s)[1] if session_wib_window(s)[1] <= 24 else session_wib_window(s)[1] - 24):02d}:00 WIB</div>
-{pairs_html}
+        render_quick_reference(h_now)
+
+        st.markdown('<hr class="hr">', unsafe_allow_html=True)
+
+        # Disclaimer
+        st.markdown("""
+<div class="ibox" style="--lc:#1A2D3A;">
+<div class="ibox-t">DISCLAIMER</div>
+<div class="ibox-b">
+Data waktu, volatilitas, dan range adalah estimasi berdasarkan kondisi pasar rata-rata. Kondisi aktual dapat berbeda secara signifikan tergantung event ekonomi, geopolitik, dan sentimen pasar. Selalu gunakan manajemen risiko yang ketat — tidak ada jaminan profit dalam trading forex.
+</div>
 </div>""", unsafe_allow_html=True)
 
-    # ── SNAPSHOT STATUS ───────────────────────────────────────────────────────
-    st.markdown('<hr class="hr">', unsafe_allow_html=True)
-    st.markdown(
-        f'<div style="font-family:\'Share Tech Mono\',monospace;font-size:.52rem;color:#8298AD;letter-spacing:.1em;">SNAPSHOT WAKTU WIB: {now_dt.strftime("%H:%M WIB")}</div>',
-        unsafe_allow_html=True,
-    )
+    # ── FOOTER ───────────────────────────────────────────────────────────────
+    st.markdown("""
+<hr style="border:none;border-top:1px solid #0E1826;margin:1.5rem 0 .5rem;">
+<div style="text-align:center;padding:.5rem 0;">
+<div style="font-family:'Share Tech Mono',monospace;font-size:.45rem;color:#0F1A24;letter-spacing:.2em;">
+AEROVULPIS · MARKET SESSIONS MODULE · PROTOTYPE · DATA REFRESH SETIAP MENIT
+</div>
+</div>
+""", unsafe_allow_html=True)
+
 
 if __name__ == "__main__":
     main()
