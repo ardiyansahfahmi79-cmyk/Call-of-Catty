@@ -1,5 +1,5 @@
 """
-market_sessions_page.py — Aerovulpis · Market Sessions (Standalone Prototype)
+market_sessions_page.py — Aerovulpis · Market Sessions
 Run : streamlit run market_sessions_page.py
 Deps: streamlit plotly pandas pytz
 """
@@ -18,10 +18,16 @@ st.set_page_config(
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  SESSION DATA
+#  SESSION DATA — Jam berdasarkan UTC konstan, dikonversi otomatis ke WIB
+#  Sumber: babypips.com, dukascopy.com, myfxbook.com, fundedfast.com
+#  Sydney:   21:00–06:00 UTC → 04:00–13:00 WIB
+#  Tokyo:    00:00–09:00 UTC → 07:00–16:00 WIB
+#  London:   07:00–16:00 UTC → 14:00–23:00 WIB (BST/summer), 15:00–00:00 (GMT/winter)
+#  New York: 12:00–21:00 UTC → 19:00–04:00 WIB (EDT/summer), 20:00–05:00 (EST/winter)
 # ══════════════════════════════════════════════════════════════════════════════
 
-# Semua waktu dalam WIB (UTC+7)
+# Definisi sesi menggunakan open/close UTC konstan (tidak berubah karena DST)
+# Konversi ke WIB dilakukan secara dinamis oleh session_wib_window()
 SESSIONS = [
     {
         "id":      "sydney",
@@ -29,18 +35,18 @@ SESSIONS = [
         "region":  "PACIFIC",
         "city":    "Sydney",
         "tz":      "Australia/Sydney",
-        "open_local": 8,
-        "close_local": 17,
+        "open_utc":  21,   # 21:00 UTC = 04:00 WIB
+        "close_utc": 6,    # 06:00 UTC = 13:00 WIB
         "color":   "#00FFC8",
         "color_dim":"#00FFC820",
         "vol":     "LOW",
         "vol_pct": 8,
-        "share":   "5%",   # % of daily global FX volume
+        "share":   "5",
         "desc":    "Sesi pembuka minggu. Volume rendah, spread lebar. Fokus pada AUD, NZD, dan JPY.",
         "pairs":   ["AUD/USD","NZD/USD","AUD/JPY","AUD/NZD","USD/JPY"],
         "strategy":"Range trading — breakout jarang terjadi. Spread lebih lebar, gunakan limit order.",
         "risk":    "Likuiditas rendah = slippage lebih besar. Hindari market order pada pair minor.",
-        "news_focus": ["RBA statement","AU Employment","NZ CPI","China PMI"],
+        "news_focus": ["RBA Statement","AU Employment","NZ CPI","China PMI"],
     },
     {
         "id":      "tokyo",
@@ -48,13 +54,13 @@ SESSIONS = [
         "region":  "ASIA",
         "city":    "Tokyo",
         "tz":      "Asia/Tokyo",
-        "open_local": 9,
-        "close_local": 18,
+        "open_utc":  0,    # 00:00 UTC = 07:00 WIB
+        "close_utc": 9,    # 09:00 UTC = 16:00 WIB
         "color":   "#C77DFF",
         "color_dim":"#C77DFF20",
         "vol":     "MEDIUM",
         "vol_pct": 21,
-        "share":   "21%",
+        "share":   "21",
         "desc":    "Sesi Asia dengan volume signifikan. JPY mendominasi. BoJ sering merilis statement.",
         "pairs":   ["USD/JPY","EUR/JPY","GBP/JPY","AUD/JPY","USD/SGD","USD/CNH"],
         "strategy":"Trend-following pada JPY pairs. Range bound untuk EUR/USD dan GBP/USD.",
@@ -67,17 +73,17 @@ SESSIONS = [
         "region":  "EUROPE",
         "city":    "London",
         "tz":      "Europe/London",
-        "open_local": 8,
-        "close_local": 17,
+        "open_utc":  7,    # 07:00 UTC = 14:00 WIB (BST) / 08:00 UTC = 15:00 WIB (GMT)
+        "close_utc": 16,   # 16:00 UTC = 23:00 WIB (BST) / 17:00 UTC = 00:00 WIB (GMT)
         "color":   "#FF9F43",
         "color_dim":"#FF9F4320",
         "vol":     "HIGH",
         "vol_pct": 85,
-        "share":   "38%",
+        "share":   "38",
         "desc":    "Sesi terbesar — 38% volume forex harian. EUR, GBP, CHF paling aktif. Trend harian sering dimulai di sini.",
         "pairs":   ["EUR/USD","GBP/USD","EUR/GBP","USD/CHF","EUR/CHF","EUR/JPY","GBP/JPY"],
         "strategy":"Breakout dan trend-following. London Open Breakout adalah strategi klasik institusional.",
-        "risk":    "Volatilitas tinggi di open (15:00 WIB). Spread bisa melebar sesaat saat open.",
+        "risk":    "Volatilitas tinggi di open (14:00 WIB). Spread bisa melebar sesaat saat open.",
         "news_focus": ["ECB Rate","UK CPI","Eurozone GDP","PMI Manufacturing","German IFO"],
     },
     {
@@ -86,13 +92,13 @@ SESSIONS = [
         "region":  "AMERICA",
         "city":    "New York",
         "tz":      "America/New_York",
-        "open_local": 8,
-        "close_local": 17,
+        "open_utc":  12,   # 12:00 UTC = 19:00 WIB (EDT) / 13:00 UTC = 20:00 WIB (EST)
+        "close_utc": 21,   # 21:00 UTC = 04:00 WIB (EDT) / 22:00 UTC = 05:00 WIB (EST)
         "color":   "#FF6B6B",
         "color_dim":"#FF6B6B20",
         "vol":     "HIGH",
         "vol_pct": 78,
-        "share":   "17%",
+        "share":   "17",
         "desc":    "Volume US terbesar. USD mendominasi semua pair. Data NFP dan FOMC paling market-moving.",
         "pairs":   ["EUR/USD","GBP/USD","USD/JPY","USD/CAD","USD/CHF","XAU/USD"],
         "strategy":"News trading dan momentum. NFP Friday, CPI, FOMC = event volatilitas ekstrem.",
@@ -101,22 +107,18 @@ SESSIONS = [
     },
 ]
 
-# Overlap windows (WIB)
+# Overlap windows — dihitung dinamis dari sesi UTC
 OVERLAPS = [
     {
         "name":   "TOKYO / LONDON OVERLAP",
-        "start":  15,
-        "end":    16,
         "session_ids": ("tokyo", "london"),
         "color":  "#FFD93D",
         "label":  "POWER ZONE I",
-        "desc":   "1 jam overlap — JPY crosses paling aktif. EUR/JPY dan GBP/JPY sering breakout.",
+        "desc":   "~1 jam overlap saat Tokyo menutup dan London membuka. JPY crosses paling aktif. EUR/JPY dan GBP/JPY sering breakout.",
         "vol":    "HIGH",
     },
     {
         "name":   "LONDON / NEW YORK OVERLAP",
-        "start":  20,
-        "end":    24,
         "session_ids": ("london", "newyork"),
         "color":  "#FF6B6B",
         "label":  "POWER ZONE II",
@@ -125,7 +127,6 @@ OVERLAPS = [
     },
 ]
 
-# Market characteristics per session pair
 SESSION_PAIR_DATA = {
     "sydney": {
         "typical_range_pips": {"AUD/USD": 40, "NZD/USD": 35, "USD/JPY": 30, "AUD/JPY": 45, "AUD/NZD": 25},
@@ -153,12 +154,36 @@ SESSION_PAIR_DATA = {
     },
 }
 
-# Volatility score per hour WIB (0-100)
+# Volatility score per hour WIB (0-100) — disesuaikan dengan jam sesi WIB yang benar
+# Sydney:    04:00–13:00 WIB
+# Tokyo:     07:00–16:00 WIB
+# London:    14:00–23:00 WIB
+# New York:  19:00–04:00 WIB
 HOURLY_VOLATILITY = {
-    0:10, 1:8, 2:6, 3:5, 4:5, 5:12, 6:18, 7:30,
-    8:38, 9:42, 10:40, 11:38, 12:35, 13:32, 14:30,
-    15:75, 16:80, 17:78, 18:72, 19:68, 20:88,
-    21:95, 22:92, 23:85,
+    0:  25,  # NY masih aktif
+    1:  18,  # NY menjelang tutup
+    2:  12,  # NY tutup, Sydney buka
+    3:  10,
+    4:  15,  # Sydney buka (04:00)
+    5:  18,
+    6:  22,
+    7:  38,  # Tokyo buka (07:00)
+    8:  45,
+    9:  48,
+    10: 45,
+    11: 42,
+    12: 38,
+    13: 35,  # Sydney tutup (13:00)
+    14: 72,  # LONDON BUKA (14:00) ← perubahan besar
+    15: 82,
+    16: 80,  # Tokyo tutup (16:00)
+    17: 75,
+    18: 70,
+    19: 88,  # NEW YORK BUKA (19:00) ← overlap London/NY mulai
+    20: 95,
+    21: 92,
+    22: 88,
+    23: 78,  # London tutup (23:00)
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -166,30 +191,59 @@ HOURLY_VOLATILITY = {
 # ══════════════════════════════════════════════════════════════════════════════
 
 WIB = pytz.timezone("Asia/Jakarta")
+UTC = pytz.utc
 
 def now_wib() -> datetime:
     return datetime.now(WIB)
 
+def now_utc() -> datetime:
+    return datetime.now(UTC)
+
 def wib_hour_float() -> float:
-    """Return current WIB time as float hour, e.g. 13.5 = 13:30."""
     n = now_wib()
     return n.hour + n.minute / 60
 
-def session_wib_window(s: dict, reference: datetime = None) -> tuple:
-    """Return today's session window in WIB, including a close after midnight."""
-    reference_wib = (reference or now_wib()).astimezone(WIB)
+def session_wib_window(s: dict, reference: datetime | None = None) -> tuple[float, float]:
+    """
+    Hitung jam buka/tutup sesi dalam WIB berdasarkan UTC open/close.
+    Menggunakan timezone asli kota untuk DST-aware conversion.
+    """
+    ref_utc = (reference or now_utc()).astimezone(UTC)
     local_tz = pytz.timezone(s["tz"])
-    local_date = reference_wib.astimezone(local_tz).date()
-    local_open = local_tz.localize(datetime.combine(local_date, dtime(hour=s["open_local"])))
-    close_date = local_date + timedelta(days=1) if s["close_local"] <= s["open_local"] else local_date
-    local_close = local_tz.localize(datetime.combine(close_date, dtime(hour=s["close_local"])))
-    open_wib = local_open.astimezone(WIB)
-    close_wib = local_close.astimezone(WIB)
-    base_date = open_wib.date()
-    open_hour = open_wib.hour + open_wib.minute / 60
-    close_hour = ((close_wib.date() - base_date).days * 24
-                  + close_wib.hour + close_wib.minute / 60)
-    return open_hour, close_hour
+    
+    # Ambil tanggal lokal kota tersebut saat ini
+    local_now = ref_utc.astimezone(local_tz)
+    local_date = local_now.date()
+    
+    # Buat open/close dalam timezone kota
+    open_local_naive = datetime.combine(local_date, dtime(hour=s["open_local"] if "open_local" in s else 0))
+    # Untuk Sydney: open jam 8 pagi lokal, close jam 5 sore lokal
+    # Kita pakai pendekatan UTC langsung untuk akurasi
+    
+    # Gunakan UTC open/close
+    open_utc_h = s["open_utc"]
+    close_utc_h = s["close_utc"]
+    
+    # Buat datetime UTC hari ini
+    utc_date = ref_utc.date()
+    open_utc_dt = UTC.localize(datetime.combine(utc_date, dtime(hour=open_utc_h)))
+    
+    # Jika close <= open, close adalah hari berikutnya
+    if close_utc_h <= open_utc_h:
+        close_utc_dt = UTC.localize(datetime.combine(utc_date + timedelta(days=1), dtime(hour=close_utc_h)))
+    else:
+        close_utc_dt = UTC.localize(datetime.combine(utc_date, dtime(hour=close_utc_h)))
+    
+    # Konversi ke WIB
+    open_wib_dt  = open_utc_dt.astimezone(WIB)
+    close_wib_dt = close_utc_dt.astimezone(WIB)
+    
+    open_h  = open_wib_dt.hour  + open_wib_dt.minute  / 60
+    # Hitung selisih hari
+    day_diff = (close_wib_dt.date() - open_wib_dt.date()).days
+    close_h  = day_diff * 24 + close_wib_dt.hour + close_wib_dt.minute / 60
+    
+    return open_h, close_h
 
 def session_active(s: dict, h: float) -> bool:
     o, c = session_wib_window(s)
@@ -198,32 +252,42 @@ def session_active(s: dict, h: float) -> bool:
     return o <= h < c
 
 def session_progress(s: dict, h: float) -> float:
-    """Return progress from 0.0 to 1.0 for the current local session window."""
     o, c = session_wib_window(s)
     duration = c - o
-    elapsed = (h - o) % 24 if c > 24 else h - o
+    if duration <= 0:
+        return 0.0
+    if c > 24:
+        if h >= o:
+            elapsed = h - o
+        else:
+            elapsed = (24 - o) + h
+    else:
+        elapsed = h - o
     return max(0.0, min(1.0, elapsed / duration))
 
-def resolved_overlap(ov: dict, reference: datetime = None) -> dict:
-    """Resolve an overlap into today's WIB hours using local session timezones."""
-    if not ov.get("session_ids"):
-        return dict(ov)
-    windows = {
-        session["id"]: session_wib_window(session, reference)
-        for session in SESSIONS
-        if session["id"] in ov["session_ids"]
-    }
-    starts = [windows[sid][0] for sid in ov["session_ids"]]
-    ends = [windows[sid][1] for sid in ov["session_ids"]]
-    return {**ov, "start": max(starts), "end": min(ends)}
+def resolved_overlap(ov: dict, reference: datetime | None = None) -> dict:
+    windows = {}
+    for session in SESSIONS:
+        if session["id"] in ov["session_ids"]:
+            windows[session["id"]] = session_wib_window(session, reference)
+    starts = [windows[sid][0] for sid in ov["session_ids"] if sid in windows]
+    ends   = [windows[sid][1] for sid in ov["session_ids"] if sid in windows]
+    if not starts or not ends:
+        return dict(ov, start=0, end=0)
+    ov_start = max(starts)
+    ov_end   = min(ends)
+    return {**ov, "start": ov_start, "end": ov_end}
 
-def resolved_overlaps(reference: datetime = None) -> list:
+def resolved_overlaps(reference: datetime | None = None) -> list[dict]:
     return [resolved_overlap(ov, reference) for ov in OVERLAPS]
 
 def overlap_active(ov: dict, h: float) -> bool:
-    current = resolved_overlap(ov)
-    s, e = current["start"], current["end"]
-    if e > 24: return h >= s or h < (e - 24)
+    cur = resolved_overlap(ov)
+    s, e = cur["start"], cur["end"]
+    if e <= s:
+        return False
+    if e > 24:
+        return h >= s or h < (e - 24)
     return s <= h < e
 
 def time_until_open(s: dict, h: float) -> str:
@@ -231,7 +295,7 @@ def time_until_open(s: dict, h: float) -> str:
         return "ACTIVE"
     o, _ = session_wib_window(s)
     diff = (o - h) % 24
-    hrs = int(diff)
+    hrs  = int(diff)
     mins = int((diff - hrs) * 60)
     return f"OPENS IN {hrs:02d}h {mins:02d}m"
 
@@ -241,6 +305,13 @@ def city_local_time(tz_name: str) -> str:
         return datetime.now(tz).strftime("%H:%M")
     except Exception:
         return "--:--"
+
+def format_wib_hour(h: float) -> str:
+    """Convert float hour ke string HH:MM WIB, handle > 24."""
+    h_mod = h % 24
+    hh = int(h_mod)
+    mm = int((h_mod - hh) * 60)
+    return f"{hh:02d}:{mm:02d}"
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  CSS
@@ -256,12 +327,10 @@ html,body,.stApp{background:#080B12!important;}
 *{box-sizing:border-box;}
 body{font-family:'Exo 2',sans-serif;}
 
-/* HEADER */
 .aero-build{font-family:'Share Tech Mono',monospace;font-size:.55rem;letter-spacing:.25em;color:#0F3028;margin-bottom:.3rem;}
 .aero-title{font-family:'Share Tech Mono',monospace;font-size:1.6rem;color:#00FFC8;letter-spacing:.06em;line-height:1;}
 .aero-sub{font-size:.72rem;color:#8EA3B8;margin-top:.25rem;font-family:'Share Tech Mono',monospace;letter-spacing:.08em;}
 
-/* SECTION */
 .sec-title{font-family:'Share Tech Mono',monospace;color:#00FFC8;font-size:.78rem;
     letter-spacing:.22em;border-left:2px solid #00FFC8;padding-left:.7rem;
     margin:1.5rem 0 .2rem;text-transform:uppercase;}
@@ -269,7 +338,6 @@ body{font-family:'Exo 2',sans-serif;}
     letter-spacing:.12em;margin-bottom:.8rem;padding-left:.9rem;}
 .hr{border:none;border-top:1px solid #0E1826;margin:.8rem 0;}
 
-/* LIVE CLOCK */
 .clock-wrap{text-align:center;padding:.5rem 0 .8rem;}
 .clock-time{font-family:'Share Tech Mono',monospace;font-size:2.8rem;
     color:#00FFC8;letter-spacing:.1em;line-height:1;}
@@ -278,7 +346,6 @@ body{font-family:'Exo 2',sans-serif;}
 .clock-label{font-family:'Share Tech Mono',monospace;font-size:.52rem;
     color:#7F95AA;letter-spacing:.2em;}
 
-/* CITY CLOCKS */
 .city-clocks{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem;}
 .city-clock{background:#0A1018;border:1px solid #141E2D;border-radius:2px;
     padding:.5rem .7rem;flex:1;min-width:100px;text-align:center;position:relative;overflow:hidden;}
@@ -292,11 +359,10 @@ body{font-family:'Exo 2',sans-serif;}
 .cs-active{background:rgba(0,255,200,.08);color:#00FFC8;border:1px solid #00FFC830;}
 .cs-closed{background:rgba(30,42,58,.7);color:#8298AD;border:1px solid #26384A;}
 
-/* SESSION CARD */
 .sess-card{background:linear-gradient(160deg,#0A1018 0%,#0C1220 100%);
     border:1px solid #141E2D;border-radius:3px;padding:1rem 1.1rem;
     position:relative;overflow:hidden;margin-bottom:.5rem;}
-.sess-card-active{border-color:var(--sc,#00FFC8);box-shadow:0 0 12px rgba(0,255,200,0.12);}
+.sess-card-active{border-color:var(--sc,#00FFC8);box-shadow:0 0 12px rgba(0,255,200,.08);}
 .sess-left-bar{position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--sc,#00FFC8);}
 .sess-header{display:flex;align-items:flex-start;gap:.6rem;flex-wrap:wrap;margin-bottom:.6rem;}
 .sess-name{font-family:'Share Tech Mono',monospace;font-size:1rem;font-weight:700;
@@ -312,16 +378,12 @@ body{font-family:'Exo 2',sans-serif;}
     background:rgba(30,42,58,.5);color:#2D4050;border:1px solid #141E2D;}
 .sess-countdown{font-family:'Share Tech Mono',monospace;font-size:.58rem;color:#2D5040;margin-left:auto;}
 
-/* PROGRESS BAR */
 .prog-wrap{margin:.5rem 0;}
 .prog-track{height:4px;background:#0E1826;border-radius:2px;position:relative;}
 .prog-fill{height:4px;border-radius:2px;transition:width .5s;}
-.prog-glow{height:4px;border-radius:2px;
-    filter:blur(3px);margin-top:-4px;opacity:.4;}
 .prog-pct{font-family:'Share Tech Mono',monospace;font-size:.52rem;
     color:var(--sc,#00FFC8);text-align:right;margin-top:.2rem;}
 
-/* SESSION BODY */
 .sess-body{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-top:.6rem;}
 .sess-info-block{background:#080B12;border:1px solid #0E1826;border-radius:2px;padding:.5rem .65rem;}
 .sib-label{font-family:'Share Tech Mono',monospace;font-size:.5rem;color:#1A2D3A;
@@ -329,24 +391,21 @@ body{font-family:'Exo 2',sans-serif;}
 .sib-val{font-family:'Share Tech Mono',monospace;font-size:.62rem;color:#4A6070;line-height:1.5;}
 .sib-val b{color:#00FFC8;}
 
-/* VOL BADGE */
-.vol-low   {display:inline-block;font-family:'Share Tech Mono',monospace;font-size:.5rem;padding:1px 6px;
+.vol-low{display:inline-block;font-family:'Share Tech Mono',monospace;font-size:.5rem;padding:1px 6px;
     border-radius:1px;font-weight:700;background:rgba(74,158,191,.08);color:#4FC3F7;border:1px solid #4FC3F730;}
-.vol-med   {display:inline-block;font-family:'Share Tech Mono',monospace;font-size:.5rem;padding:1px 6px;
+.vol-med{display:inline-block;font-family:'Share Tech Mono',monospace;font-size:.5rem;padding:1px 6px;
     border-radius:1px;font-weight:700;background:rgba(255,217,61,.08);color:#FFD93D;border:1px solid #FFD93D30;}
-.vol-high  {display:inline-block;font-family:'Share Tech Mono',monospace;font-size:.5rem;padding:1px 6px;
+.vol-high{display:inline-block;font-family:'Share Tech Mono',monospace;font-size:.5rem;padding:1px 6px;
     border-radius:1px;font-weight:700;background:rgba(255,107,107,.08);color:#FF6B6B;border:1px solid #FF6B6B30;}
-.vol-ext   {display:inline-block;font-family:'Share Tech Mono',monospace;font-size:.5rem;padding:1px 6px;
+.vol-ext{display:inline-block;font-family:'Share Tech Mono',monospace;font-size:.5rem;padding:1px 6px;
     border-radius:1px;font-weight:700;background:rgba(255,159,67,.15);color:#FF9F43;border:1px solid #FF9F4360;
     animation:pulse-ext 1.5s ease-in-out infinite;}
 @keyframes pulse-ext{0%,100%{opacity:1;}50%{opacity:.6;}}
 
-/* PAIRS TAG */
 .pair-tag{display:inline-block;font-family:'Share Tech Mono',monospace;font-size:.52rem;
     padding:2px 6px;border-radius:1px;background:#0E1826;color:var(--sc,#00FFC8);
     border:1px solid #1A2D3A;margin:.15rem .1rem;}
 
-/* OVERLAP CARD */
 .ov-card{background:#0A1018;border:1px solid #141E2D;border-radius:2px;
     padding:.75rem .9rem;margin-bottom:.4rem;position:relative;overflow:hidden;}
 .ov-card-accent{position:absolute;top:0;left:0;right:0;height:1px;background:var(--oc,#FFD93D);}
@@ -361,14 +420,12 @@ body{font-family:'Exo 2',sans-serif;}
 .ov-active-badge{background:rgba(255,159,67,.12);color:#FF9F43;border:1px solid #FF9F4340;
     font-family:'Share Tech Mono',monospace;font-size:.5rem;padding:1px 6px;border-radius:1px;font-weight:700;}
 
-/* STRATEGY CARD */
 .strat-card{background:#0A1018;border:1px solid #141E2D;border-radius:2px;
     padding:.65rem .8rem;margin-bottom:.35rem;}
 .strat-header{font-family:'Share Tech Mono',monospace;font-size:.6rem;
     color:#00FFC8;letter-spacing:.12em;margin-bottom:.3rem;}
 .strat-body{font-size:.72rem;color:#3A5060;line-height:1.65;}
 
-/* PAIR RANGE TABLE */
 .range-table{width:100%;border-collapse:separate;border-spacing:0 2px;}
 .range-th{font-family:'Share Tech Mono',monospace;font-size:.5rem;color:#1A3040;
     letter-spacing:.1em;padding:.25rem .4rem;text-align:left;}
@@ -377,36 +434,25 @@ body{font-family:'Exo 2',sans-serif;}
 .range-td-pair{color:#00FFC8;}
 .range-td-pips{color:#FFD93D;text-align:right;}
 
-/* VOLATILITY HEATMAP */
 .heat-wrap{display:flex;gap:2px;align-items:flex-end;height:60px;margin:.5rem 0;}
-.heat-bar{flex:1;border-radius:1px 1px 0 0;min-width:3px;cursor:default;
-    transition:opacity .2s;}
+.heat-bar{flex:1;border-radius:1px 1px 0 0;min-width:3px;cursor:default;transition:opacity .2s;}
 .heat-bar:hover{opacity:.8;}
 .heat-labels{display:flex;justify-content:space-between;
     font-family:'Share Tech Mono',monospace;font-size:.45rem;color:#1A2D3A;margin-top:.2rem;}
 
-/* IBOX */
 .ibox{background:#0A1018;border:1px solid #141E2D;border-left:2px solid var(--lc,#C77DFF);
     border-radius:0 2px 2px 0;padding:.7rem .9rem;margin:.4rem 0;}
 .ibox-t{font-family:'Share Tech Mono',monospace;font-size:.56rem;color:var(--lc,#C77DFF);
     letter-spacing:.14em;margin-bottom:.35rem;text-transform:uppercase;}
 .ibox-b{font-size:.72rem;color:#4A6070;line-height:1.7;}
 
-/* TIPS */
 .tip-row{display:flex;gap:.5rem;align-items:flex-start;
     padding:.45rem .6rem;border-bottom:1px solid #0E1826;}
 .tip-row:last-child{border-bottom:none;}
-.tip-num{font-family:'Share Tech Mono',monospace;font-size:.55rem;
-    color:#1A3040;min-width:22px;}
+.tip-num{font-family:'Share Tech Mono',monospace;font-size:.55rem;color:#1A3040;min-width:22px;}
 .tip-txt{font-size:.7rem;color:#3A5060;line-height:1.55;flex:1;}
 .tip-txt b{color:#00FFC8;}
 
-/* QUICK REF PAIR LIST */
-.qr-pair{font-family:'Share Tech Mono',monospace;font-size:.6rem;color:var(--pc,#00FFC8);
-    padding:.2rem 0;border-bottom:1px solid #0E1826;line-height:1.4;}
-.qr-pair:last-child{border-bottom:none;}
-
-/* RESPONSIVE */
 @media(max-width:768px){
     .block-container{padding:.5rem .6rem 3rem!important;}
     .aero-title{font-size:1.2rem;}
@@ -416,7 +462,6 @@ body{font-family:'Exo 2',sans-serif;}
     .sess-name{font-size:.85rem;}
 }
 
-/* STREAMLIT */
 .stSelectbox label,.stMultiSelect label,.stRadio label{
     font-family:'Share Tech Mono',monospace!important;font-size:.65rem!important;
     color:#2D5040!important;letter-spacing:.1em!important;}
@@ -431,58 +476,53 @@ button[data-testid="baseButton-secondary"]{
 </style>""", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  CHART HELPERS
+#  PLOTLY BASE CONFIG
 # ══════════════════════════════════════════════════════════════════════════════
 
-BASE = dict(
-    paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(0,0,0,0)",
-    font=dict(family="Share Tech Mono, monospace", color="#1E3D50", size=9),
-    margin=dict(l=8, r=8, t=28, b=8),
-    xaxis=dict(gridcolor="#0A1220", linecolor="#0E1826", tickfont=dict(size=8)),
-    yaxis=dict(gridcolor="#0A1220", linecolor="#0E1826", tickfont=dict(size=8)),
-)
-
-CHART_CFG = {"staticPlot": True}
+def get_base_layout(**overrides):
+    """Return plotly layout dict — tidak menggunakan spread operator di update_layout."""
+    layout = dict(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Share Tech Mono, monospace", color="#1E3D50", size=9),
+        margin=dict(l=8, r=8, t=28, b=8),
+        xaxis=dict(gridcolor="#0A1220", linecolor="#0E1826", tickfont=dict(size=8)),
+        yaxis=dict(gridcolor="#0A1220", linecolor="#0E1826", tickfont=dict(size=8)),
+    )
+    layout.update(overrides)
+    return layout
 
 def hex_to_rgba(color: str, alpha: float) -> str:
-    """Convert a six-digit hex color to a Plotly-compatible rgba color."""
     value = color.lstrip("#")
     if len(value) != 6:
         return color
     try:
-        red, green, blue = (int(value[i:i + 2], 16) for i in (0, 2, 4))
+        r, g, b = (int(value[i:i+2], 16) for i in (0, 2, 4))
     except ValueError:
         return color
-    return f"rgba({red},{green},{blue},{alpha})"
+    return f"rgba({r},{g},{b},{alpha})"
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  CHART BUILDERS
+# ══════════════════════════════════════════════════════════════════════════════
 
 def build_timeline_chart(h_now: float):
-    """24-jam session timeline dengan current time marker."""
     fig = go.Figure()
 
-    # Session backgrounds
     for s in SESSIONS:
         o, c = session_wib_window(s)
         if c > 24:
             for start, end in [(o, 24), (0, c - 24)]:
-                fig.add_vrect(
-                    x0=start, x1=end,
-                    fillcolor=hex_to_rgba(s["color"], 0.125),
-                    layer="below", line_width=0,
-                )
+                fig.add_vrect(x0=start, x1=end,
+                    fillcolor=hex_to_rgba(s["color"], 0.12), layer="below", line_width=0)
         else:
-            fig.add_vrect(x0=o, x1=c, fillcolor=hex_to_rgba(s["color"], 0.125), layer="below", line_width=0)
-
-        # Label
+            fig.add_vrect(x0=o, x1=c,
+                fillcolor=hex_to_rgba(s["color"], 0.12), layer="below", line_width=0)
         label_x = (o + min(c, 24)) / 2 if c <= 24 else (o + 24) / 2
-        fig.add_annotation(
-            x=label_x, y=95,
-            text=s["name"],
+        fig.add_annotation(x=label_x, y=95, text=s["name"],
             font=dict(family="Share Tech Mono, monospace", color=s["color"], size=8),
-            showarrow=False, yref="y",
-        )
+            showarrow=False, yref="y")
 
-    # Volatility line
     hours_list = list(range(24))
     vol_list   = [HOURLY_VOLATILITY.get(h, 10) for h in hours_list]
     fig.add_trace(go.Scatter(
@@ -494,26 +534,25 @@ def build_timeline_chart(h_now: float):
         hovertemplate="<b>%{x}:00 WIB</b> — Vol: %{y}<extra></extra>",
     ))
 
-    # Overlap zones
     for ov in resolved_overlaps():
-        s, e = ov["start"], min(ov["end"], 24)
-        fig.add_vrect(x0=s, x1=e, fillcolor=hex_to_rgba(ov["color"], 0.10), layer="below",
-            line=dict(color=ov["color"], width=1, dash="dot"))
-        fig.add_annotation(x=(s+e)/2, y=102, text=ov["label"],
-            font=dict(family="Share Tech Mono, monospace", color=ov["color"], size=7),
-            showarrow=False, yref="y")
+        s_h, e_h = ov["start"], min(ov["end"], 24)
+        if s_h < e_h:
+            fig.add_vrect(x0=s_h, x1=e_h,
+                fillcolor=hex_to_rgba(ov["color"], 0.10), layer="below",
+                line=dict(color=ov["color"], width=1, dash="dot"))
+            fig.add_annotation(x=(s_h+e_h)/2, y=105, text=ov["label"],
+                font=dict(family="Share Tech Mono, monospace", color=ov["color"], size=7),
+                showarrow=False, yref="y")
 
-    # Current time marker
     fig.add_vline(x=h_now, line=dict(color="#FFFFFF", width=1.5, dash="dash"))
     fig.add_annotation(
-        x=h_now, y=110,
+        x=h_now, y=112,
         text=f"NOW {int(h_now):02d}:{int((h_now%1)*60):02d}",
         font=dict(family="Share Tech Mono, monospace", color="#FFFFFF", size=8),
         showarrow=False, bgcolor="#080B12", bordercolor="#FFFFFF", borderwidth=1,
     )
 
-    timeline_layout = dict(BASE)
-    timeline_layout.update(
+    fig.update_layout(**get_base_layout(
         height=200,
         xaxis=dict(
             range=[0, 24], tickvals=list(range(0, 25, 2)),
@@ -522,16 +561,15 @@ def build_timeline_chart(h_now: float):
             tickfont=dict(size=7),
             title=dict(text="WAKTU WIB", font=dict(size=8, color="#8298AD")),
         ),
-        yaxis=dict(range=[0, 115], showgrid=False, showticklabels=False),
+        yaxis=dict(range=[0, 118], showgrid=False, showticklabels=False),
         showlegend=False,
         title=dict(text="SESI AKTIF · VOLATILITAS PER JAM (WIB)", font=dict(size=9, color="#00FFC8"), x=0),
         hovermode="x unified",
-    )
-    fig.update_layout(**timeline_layout)
+    ))
     return fig
 
+
 def build_vol_radar(session_id: str):
-    """Radar chart karakteristik sesi."""
     radar_data = {
         "sydney":  {"Volatilitas":20,"Likuiditas":25,"Spread":30,"Peluang":25,"Risiko":20,"Volume":15},
         "tokyo":   {"Volatilitas":50,"Likuiditas":55,"Spread":60,"Peluang":55,"Risiko":45,"Volume":50},
@@ -539,8 +577,9 @@ def build_vol_radar(session_id: str):
         "newyork": {"Volatilitas":82,"Likuiditas":85,"Spread":88,"Peluang":85,"Risiko":80,"Volume":80},
     }
     d = radar_data.get(session_id, {})
-    labels = list(d.keys()); values = list(d.values())
-    color  = next((s["color"] for s in SESSIONS if s["id"]==session_id), "#00FFC8")
+    labels = list(d.keys())
+    values = list(d.values())
+    color  = next((s["color"] for s in SESSIONS if s["id"] == session_id), "#00FFC8")
 
     fig = go.Figure(go.Scatterpolar(
         r=values, theta=labels, fill="toself",
@@ -556,38 +595,71 @@ def build_vol_radar(session_id: str):
         polar=dict(
             bgcolor="rgba(0,0,0,0)",
             radialaxis=dict(visible=True, gridcolor="#0A1220", linecolor="#0E1826",
-                color="#1A2D3A", range=[0,100], tickfont=dict(size=6)),
+                color="#1A2D3A", range=[0, 100], tickfont=dict(size=6)),
             angularaxis=dict(gridcolor="#0A1220", linecolor="#0E1826"),
         ),
         showlegend=False,
     )
     return fig
 
+
 def build_global_vol_bar():
-    """Horizontal bar chart share FX volume per sesi."""
     names  = [s["name"] for s in SESSIONS]
-    shares = [int(s["share"].replace("%","")) for s in SESSIONS]
+    shares = [int(s["share"]) for s in SESSIONS]
     colors = [s["color"] for s in SESSIONS]
 
     fig = go.Figure(go.Bar(
         x=shares, y=names,
         orientation="h",
-        marker=dict(color=[hex_to_rgba(c, 0.67) for c in colors], line=dict(color=colors, width=1)),
+        marker=dict(
+            color=[hex_to_rgba(c, 0.67) for c in colors],
+            line=dict(color=colors, width=1),
+        ),
         text=[f"{v}%" for v in shares],
         textposition="inside",
         textfont=dict(family="Share Tech Mono, monospace", size=9, color="#080B12"),
         hovertemplate="%{y}: <b>%{x}%</b> volume FX harian<extra></extra>",
     ))
-    bar_layout = dict(BASE)
-    bar_layout.update(
+    fig.update_layout(**get_base_layout(
         height=140,
-        xaxis=dict(range=[0,45], showgrid=False, showticklabels=False, linecolor="#0E1826"),
+        xaxis=dict(range=[0, 45], showgrid=False, showticklabels=False, linecolor="#0E1826"),
         yaxis=dict(showgrid=False, tickfont=dict(size=9, family="Share Tech Mono, monospace")),
         title=dict(text="SHARE VOLUME FX HARIAN PER SESI", font=dict(size=9, color="#00FFC8"), x=0),
-        bargap=0.3, showlegend=False,
-        margin=dict(l=60, r=8, t=28, b=8),
-    )
-    fig.update_layout(**bar_layout)
+        bargap=0.3,
+        showlegend=False,
+        margin=dict(l=70, r=8, t=28, b=8),
+    ))
+    return fig
+
+
+def build_session_vol_bar(h_now: float):
+    sess_names  = [s["name"] for s in SESSIONS]
+    sess_vols   = [s["vol_pct"] for s in SESSIONS]
+    sess_colors = [s["color"] for s in SESSIONS]
+
+    fig = go.Figure(go.Bar(
+        x=sess_names, y=sess_vols,
+        marker=dict(
+            color=[f"{c}AA" for c in sess_colors],
+            line=dict(color=sess_colors, width=1),
+        ),
+        text=[f"{v}%" for v in sess_vols],
+        textposition="outside",
+        textfont=dict(family="Share Tech Mono, monospace", size=9),
+        hovertemplate="%{x}: <b>%{y}%</b> volatilitas relatif<extra></extra>",
+    ))
+    fig.update_layout(**get_base_layout(
+        height=200,
+        xaxis=dict(showgrid=False, tickfont=dict(size=9, family="Share Tech Mono, monospace")),
+        yaxis=dict(
+            range=[0, 115], showgrid=True, gridcolor="#0A1220",
+            tickfont=dict(size=8),
+            title=dict(text="VOLATILITAS RELATIF (%)", font=dict(size=8, color="#8298AD")),
+        ),
+        title=dict(text="VOLATILITAS RELATIF PER SESI", font=dict(size=9, color="#00FFC8"), x=0),
+        bargap=0.35,
+        showlegend=False,
+    ))
     return fig
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -595,24 +667,25 @@ def build_global_vol_bar():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def vol_badge(level: str) -> str:
-    cls = {"LOW":"vol-low","MEDIUM":"vol-med","HIGH":"vol-high","EXTREME":"vol-ext"}.get(level,"vol-low")
+    cls = {"LOW": "vol-low", "MEDIUM": "vol-med", "HIGH": "vol-high", "EXTREME": "vol-ext"}.get(level, "vol-low")
     return f'<span class="{cls}">{level}</span>'
 
-def render_session_card(s: dict, h: float, expanded: bool = False):
-    active  = session_active(s, h)
-    prog    = session_progress(s, h) if active else 0.0
-    prog_w  = f"{prog*100:.0f}%"
-    status  = "ACTIVE" if active else "CLOSED"
-    s_cls   = "sess-card-active" if active else ""
-    st_cls  = "sess-status-active" if active else "sess-status-closed"
-    ctd     = f"PROGRESS: {prog*100:.0f}%" if active else time_until_open(s, h)
-    open_wib, close_wib = session_wib_window(s)
-    close_display = close_wib if close_wib <= 24 else close_wib - 24
-    time_str = f"{int(open_wib):02d}:00 – {int(close_display):02d}:00 WIB"
-    v_badge   = vol_badge(s["vol"])
-    pairs_html = " ".join(f'<span class="pair-tag" style="--sc:{s["color"]};">{p}</span>' for p in s["pairs"])
 
-    # Pair range table
+def render_session_card(s: dict, h: float):
+    active   = session_active(s, h)
+    prog     = session_progress(s, h) if active else 0.0
+    prog_w   = f"{prog*100:.0f}%"
+    status   = "ACTIVE" if active else "CLOSED"
+    s_cls    = "sess-card-active" if active else ""
+    st_cls   = "sess-status-active" if active else "sess-status-closed"
+    ctd      = f"PROGRESS: {prog*100:.0f}%" if active else time_until_open(s, h)
+    open_wib, close_wib = session_wib_window(s)
+    time_str = f"{format_wib_hour(open_wib)} – {format_wib_hour(close_wib)} WIB"
+    v_badge  = vol_badge(s["vol"])
+    pairs_html = " ".join(
+        f'<span class="pair-tag" style="--sc:{s["color"]};">{p}</span>' for p in s["pairs"]
+    )
+
     pair_data  = SESSION_PAIR_DATA.get(s["id"], {})
     range_rows = ""
     for pair, pips in list(pair_data.get("typical_range_pips", {}).items())[:5]:
@@ -638,23 +711,20 @@ def render_session_card(s: dict, h: float, expanded: bool = False):
 <span class="sess-region">{s['region']}</span>
 {v_badge}
 </div>
-<div class="sess-time" style="margin-top:.2rem;">{time_str} · {s['city']} Local: {city_local_time(s['tz'])}</div>
+<div class="sess-time" style="margin-top:.2rem;">{time_str} · {s['city']}: {city_local_time(s['tz'])}</div>
 </div>
 <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.25rem;">
 <span class="{st_cls}">{status}</span>
 <span class="sess-countdown">{ctd}</span>
 </div>
 </div>
-
 <div class="prog-wrap">
 <div class="prog-track">
 <div class="prog-fill" style="width:{prog_w};background:{s['color']};"></div>
 </div>
 <div class="prog-pct">{f'PROGRESS: {prog*100:.0f}%' if active else 'STANDBY'}</div>
 </div>
-
 <div style="font-size:.68rem;color:#2D4050;margin-bottom:.5rem;">{s['desc']}</div>
-
 <div class="sess-body">
 <div class="sess-info-block">
 <div class="sib-label">PAIR AKTIF</div>
@@ -675,19 +745,21 @@ def render_session_card(s: dict, h: float, expanded: bool = False):
 <div class="sib-label">NEWS FOCUS</div>
 <div class="sib-val">{"<br>".join(f"<b>·</b> {n}" for n in s['news_focus'])}</div>
 <div class="sib-label" style="margin-top:.4rem;">RISK NOTE</div>
-<div class="sib-val" style="color:#FF6B6B;">{s['risk']}</div>
+<div class="sib-val" style="color:#FF6B6B80;">{s['risk']}</div>
 </div>
 </div>
 </div>
 """, unsafe_allow_html=True)
 
+
 def render_overlap_cards(h: float):
     for ov in resolved_overlaps():
-        active   = overlap_active(ov, h)
-        oc       = ov["color"]
-        a_badge  = f'<span class="ov-active-badge">ACTIVE NOW</span>' if active else ""
-        e_wib    = ov["end"] if ov["end"] <= 24 else ov["end"] - 24
-        vol_b    = vol_badge(ov["vol"])
+        active  = overlap_active(ov, h)
+        oc      = ov["color"]
+        a_badge = '<span class="ov-active-badge">ACTIVE NOW</span>' if active else ""
+        vol_b   = vol_badge(ov["vol"])
+        s_str   = format_wib_hour(ov["start"])
+        e_str   = format_wib_hour(ov["end"])
         st.markdown(f"""
 <div class="ov-card" style="--oc:{oc};">
 <div class="ov-card-accent"></div>
@@ -696,26 +768,25 @@ def render_overlap_cards(h: float):
 <span class="ov-label">{ov['label']}</span>
 {vol_b}
 {a_badge}
-<span class="ov-time">{ov['start']:02d}:00 – {e_wib:02d}:00 WIB</span>
+<span class="ov-time">{s_str} – {e_str} WIB</span>
 </div>
 <div class="ov-desc">{ov['desc']}</div>
 </div>""", unsafe_allow_html=True)
 
+
 def render_volatility_heatmap(h_now: float):
-    """HTML heatmap 24 jam."""
     bars = ""
     for hr in range(24):
-        v   = HOURLY_VOLATILITY.get(hr, 10)
-        h_pct = v * 0.6  # max bar height ~60%
-        # Color gradient based on vol
+        v     = HOURLY_VOLATILITY.get(hr, 10)
+        h_pct = v * 0.6
         if v >= 80:   col = "#FF6B6B"
         elif v >= 60: col = "#FF9F43"
         elif v >= 40: col = "#FFD93D"
         elif v >= 20: col = "#00FFC8"
         else:         col = "#1A3040"
-        is_now = abs(hr - int(h_now)) < 1
-        border = f"border:1px solid {col};" if is_now else ""
-        bars += f'<div class="heat-bar" style="height:{h_pct:.0f}%;background:{col};opacity:{0.5+v/200:.2f};{border}" title="{hr:02d}:00 WIB — Vol: {v}"></div>'
+        is_now  = abs(hr - int(h_now)) < 1
+        border  = f"border:1px solid {col};" if is_now else ""
+        bars   += f'<div class="heat-bar" style="height:{h_pct:.0f}%;background:{col};opacity:{0.5+v/200:.2f};{border}" title="{hr:02d}:00 WIB — Vol: {v}"></div>'
 
     labels = " ".join(
         f'<span>{h:02d}</span>' if h % 4 == 0 else '<span></span>'
@@ -728,15 +799,23 @@ def render_volatility_heatmap(h_now: float):
 <div class="heat-labels">{labels}</div>
 """, unsafe_allow_html=True)
 
+
 def render_trader_guide():
     tips = [
-        ("SESI TERBAIK UNTUK FOREX", "London dan New York Overlap (20:00–24:00 WIB) = peak liquidity, spread paling ketat, pergerakan paling besar. Ideal untuk breakout dan trend-following."),
-        ("HINDARI TRADING DI JAM INI", "00:00–06:00 WIB — Volume paling rendah, spread lebar, pergerakan tidak menentu. Risiko stop hunt lebih tinggi."),
-        ("PILIH PAIR SESUAI SESI", "JPY pairs saat Tokyo aktif (07:00–16:00). EUR/GBP pairs saat London (15:00–00:00). USD pairs saat New York (20:00–05:00)."),
-        ("NEWS TRADING TIMING", "Masuk posisi 15–30 menit SETELAH data dirilis, bukan saat rilis. Slippage ekstrem saat detik pertama rilis data high-impact."),
-        ("POWER ZONE II (20:00–24:00)", "London/NY Overlap = 70% lebih volume harian terkonsentrasi di 4 jam ini. Gunakan momentum strategy, bukan counter-trend."),
-        ("RANGE TRADING DI SESI SEPI", "Sydney dan awal Tokyo = kondisi ideal untuk range trading. Support/resistance lebih dihormati karena volume rendah."),
-        ("SPREAD AWARENESS", "Spread paling lebar: Minggu malam (00:00–05:00 WIB) dan saat rollover. Selalu cek spread sebelum entry, terutama untuk pair minor dan exotics."),
+        ("SESI TERBAIK UNTUK FOREX",
+         "London dan New York Overlap (19:00–23:00 WIB) = peak liquidity, spread paling ketat, pergerakan terbesar. Ideal untuk breakout dan trend-following."),
+        ("HINDARI TRADING DI JAM INI",
+         "02:00–06:00 WIB — Volume paling rendah, spread lebar, pergerakan tidak menentu. Risiko stop hunt lebih tinggi."),
+        ("PILIH PAIR SESUAI SESI",
+         "JPY pairs saat Tokyo aktif (07:00–16:00). EUR/GBP pairs saat London (14:00–23:00). USD pairs saat New York (19:00–04:00)."),
+        ("NEWS TRADING TIMING",
+         "Masuk posisi 15–30 menit SETELAH data dirilis, bukan saat rilis. Slippage ekstrem saat detik pertama rilis data high-impact."),
+        ("POWER ZONE II (19:00–23:00 WIB)",
+         "London/NY Overlap = 70%+ volume harian terkonsentrasi di 4 jam ini. Gunakan momentum strategy, bukan counter-trend."),
+        ("RANGE TRADING DI SESI SEPI",
+         "Sydney dan awal Tokyo (04:00–10:00 WIB) = kondisi ideal untuk range trading. Support/resistance lebih dihormati karena volume rendah."),
+        ("SPREAD AWARENESS",
+         "Spread paling lebar: 02:00–04:00 WIB dan saat rollover. Selalu cek spread sebelum entry, terutama untuk pair minor dan exotics."),
     ]
     html = '<div class="strat-card">'
     for i, (title, body) in enumerate(tips, 1):
@@ -744,50 +823,28 @@ def render_trader_guide():
     html += "</div>"
     st.markdown(html, unsafe_allow_html=True)
 
-def render_quick_reference(h: float):
-    """Quick reference card — pair terbaik per sesi."""
-    cols_ref = st.columns(4)
-    for col, s in zip(cols_ref, SESSIONS):
-        active = session_active(s, h)
-        border = f"border-color:{s['color']}80;" if active else ""
-        pairs_html = "".join(
-            f'<div class="qr-pair" style="--pc:{s["color"]};">{p}</div>'
-            for p in s["pairs"]
-        )
-        active_badge = '<span class="ov-active-badge" style="margin-top:.3rem;">ACTIVE NOW</span>' if active else ""
-        with col:
-            st.markdown(f"""
-<div style="background:#0A1018;border:1px solid #141E2D;{border}border-radius:2px;padding:.7rem .8rem;">
-<div style="font-family:'Share Tech Mono',monospace;font-size:.65rem;font-weight:700;
-    color:{s['color']};letter-spacing:.1em;margin-bottom:.15rem;">{s['name']}</div>
-<div style="font-family:'Share Tech Mono',monospace;font-size:.48rem;color:#2D4050;
-    letter-spacing:.08em;margin-bottom:.35rem;">{s['region']} · {vol_badge(s['vol'])}</div>
-{pairs_html}
-{active_badge}
-</div>""", unsafe_allow_html=True)
-
 # ══════════════════════════════════════════════════════════════════════════════
 #  MAIN
 # ══════════════════════════════════════════════════════════════════════════════
 
 def main():
     css()
-    h_now    = wib_hour_float()
-    now_dt   = now_wib()
+    h_now           = wib_hour_float()
+    now_dt          = now_wib()
     active_sessions = [s for s in SESSIONS if session_active(s, h_now)]
-    active_overlaps = [o for o in OVERLAPS if overlap_active(o, h_now)]
+    active_overlaps = [resolved_overlap(o) for o in OVERLAPS if overlap_active(o, h_now)]
 
     # ── HEADER ───────────────────────────────────────────────────────────────
     st.markdown("""
 <div style="padding:.3rem 0 .6rem;">
-<div class="aero-build">AEROVULPIS · PROTOTYPE · MARKET SESSIONS MODULE · BUILD STABLE 01 SEP 2026</div>
+<div class="aero-build">AEROVULPIS · PROTOTYPE · MARKET SESSIONS MODULE · BUILD STABLE 02 SEP 2026</div>
 <div class="aero-title">MARKET SESSIONS</div>
 <div class="aero-sub">GLOBAL TRADING WINDOWS · LIQUIDITY INTELLIGENCE · PAIR RECOMMENDATIONS</div>
 </div>
 <hr style="border:none;border-top:1px solid #0E1826;margin:.4rem 0 .8rem;">
 """, unsafe_allow_html=True)
 
-    # ── LIVE CLOCK + CITY CLOCKS ─────────────────────────────────────────────
+    # ── LIVE CLOCK + STATUS ──────────────────────────────────────────────────
     col_clk, col_status = st.columns([1, 2])
     with col_clk:
         st.markdown(f"""
@@ -798,13 +855,12 @@ def main():
 </div>""", unsafe_allow_html=True)
 
     with col_status:
-        # Status sesi aktif
         if active_sessions:
             for s in active_sessions:
                 prog = session_progress(s, h_now)
                 st.markdown(f"""
-<div style="display:flex;align-items:center;gap:.6rem;background:#0A1018;border:1px solid {s['color']}40;
-    border-radius:2px;padding:.5rem .75rem;margin-bottom:.3rem;">
+<div style="display:flex;align-items:center;gap:.6rem;background:#0A1018;
+    border:1px solid {s['color']}40;border-radius:2px;padding:.5rem .75rem;margin-bottom:.3rem;">
 <span style="font-family:'Share Tech Mono',monospace;font-size:.62rem;font-weight:700;
     color:{s['color']};min-width:90px;">{s['name']}</span>
 <div style="flex:1;height:4px;background:#0E1826;border-radius:2px;">
@@ -812,11 +868,25 @@ def main():
 </div>
 <span style="font-family:'Share Tech Mono',monospace;font-size:.55rem;color:{s['color']};">{prog*100:.0f}%</span>
 </div>""", unsafe_allow_html=True)
-        if active_overlaps:
-            for ov in active_overlaps:
-                st.markdown(f'<div class="ov-card" style="--oc:{ov["color"]};padding:.45rem .75rem;"><div class="ov-card-accent"></div><span class="ov-name" style="font-size:.65rem;">{ov["name"]}</span> <span class="ov-active-badge">ACTIVE NOW</span> <span class="ov-label" style="margin-left:.3rem;">{ov["label"]}</span></div>', unsafe_allow_html=True)
+
+        for ov in active_overlaps:
+            st.markdown(
+                f'<div class="ov-card" style="--oc:{ov["color"]};padding:.45rem .75rem;">'
+                f'<div class="ov-card-accent"></div>'
+                f'<span class="ov-name" style="font-size:.65rem;">{ov["name"]}</span> '
+                f'<span class="ov-active-badge">ACTIVE NOW</span> '
+                f'<span class="ov-label" style="margin-left:.3rem;">{ov["label"]}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
         if not active_sessions and not active_overlaps:
-            st.markdown('<div class="ibox" style="--lc:#1A2D3A;"><div class="ibox-t">MARKET STATUS</div><div class="ibox-b">Semua sesi mayor sedang tutup. Volume sangat rendah. Tidak disarankan untuk trading.</div></div>', unsafe_allow_html=True)
+            st.markdown(
+                '<div class="ibox" style="--lc:#1A2D3A;">'
+                '<div class="ibox-t">MARKET STATUS</div>'
+                '<div class="ibox-b">Semua sesi mayor sedang tutup. Volume sangat rendah. Tidak disarankan untuk trading.</div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
 
     # ── CITY CLOCKS ──────────────────────────────────────────────────────────
     city_html = '<div class="city-clocks">'
@@ -831,13 +901,12 @@ def main():
 <div class="city-clock-time">{city_local_time(s['tz'])}</div>
 <span class="city-clock-status {sc}">{st_lbl}</span>
 </div>"""
-    # Referensi waktu lokal aplikasi dalam WIB.
-    wib_time = now_wib().strftime("%H:%M")
+    # WIB — waktu referensi lokal
     city_html += f"""
 <div class="city-clock" style="--cc:#4FC3F7;">
 <div class="city-clock-accent"></div>
-<div class="city-clock-name">WIB / JAKARTA</div>
-<div class="city-clock-time">{wib_time}</div>
+<div class="city-clock-name">JAKARTA / WIB</div>
+<div class="city-clock-time">{now_dt.strftime('%H:%M')}</div>
 <span class="city-clock-status cs-active">LOCAL REF</span>
 </div>"""
     city_html += "</div>"
@@ -852,22 +921,19 @@ def main():
     with tabs[0]:
         st.markdown('<div class="sec-title">SESSION TIMELINE MAP</div>', unsafe_allow_html=True)
         st.markdown('<div class="sec-sub">PETA WAKTU 24 JAM · OVERLAY VOLATILITAS · GARIS = WAKTU SEKARANG</div>', unsafe_allow_html=True)
-        fig_tl = build_timeline_chart(h_now)
-        st.plotly_chart(fig_tl, use_container_width=True, config={"staticPlot": True})
-
+        st.plotly_chart(build_timeline_chart(h_now), use_container_width=True, config={"staticPlot": True})
         st.markdown('<hr class="hr">', unsafe_allow_html=True)
 
-        # Volume share bar
         col_v, col_r = st.columns([1.2, 1])
         with col_v:
             st.plotly_chart(build_global_vol_bar(), use_container_width=True, config={"staticPlot": True})
         with col_r:
-            # Session overlap summary table
             st.markdown('<div class="sec-title">OVERLAP WINDOWS</div>', unsafe_allow_html=True)
             for ov in resolved_overlaps():
-                e_w = ov["end"] if ov["end"]<=24 else ov["end"]-24
-                active = overlap_active(ov, h_now)
-                badge  = f'<span class="ov-active-badge">LIVE</span>' if active else ""
+                active  = overlap_active(ov, h_now)
+                badge   = '<span class="ov-active-badge">LIVE</span>' if active else ""
+                s_str   = format_wib_hour(ov["start"])
+                e_str   = format_wib_hour(ov["end"])
                 st.markdown(f"""
 <div style="background:#0A1018;border:1px solid {ov['color']}30;border-radius:2px;
     padding:.5rem .7rem;margin-bottom:.35rem;">
@@ -875,25 +941,21 @@ def main():
 <span style="font-family:'Share Tech Mono',monospace;font-size:.65rem;font-weight:700;color:{ov['color']};">{ov['label']}</span>
 {badge}
 {vol_badge(ov['vol'])}
-<span style="font-family:'Share Tech Mono',monospace;font-size:.55rem;color:#2D4050;margin-left:auto;">{ov['start']:02d}:00–{e_w:02d}:00 WIB</span>
+<span style="font-family:'Share Tech Mono',monospace;font-size:.55rem;color:#2D4050;margin-left:auto;">{s_str}–{e_str} WIB</span>
 </div>
-<div style="font-size:.65rem;color:#3A5060;margin-top:.25rem;">{ov['desc'][:80]}...</div>
+<div style="font-size:.65rem;color:#3A5060;margin-top:.25rem;">{ov['desc'][:90]}...</div>
 </div>""", unsafe_allow_html=True)
 
     # ── TAB 2: SESSIONS DETAIL ───────────────────────────────────────────────
     with tabs[1]:
         st.markdown('<div class="sec-title">SESSIONS INTELLIGENCE</div>', unsafe_allow_html=True)
         st.markdown('<div class="sec-sub">KARAKTERISTIK LENGKAP · PAIR RECOMMENDATIONS · RANGE TYPICAL · STRATEGI</div>', unsafe_allow_html=True)
-
-        # Filter: tampilkan semua atau hanya aktif
         show_all = st.toggle("Tampilkan semua sesi (termasuk yang tutup)", value=True, key="sess_all")
         for s in SESSIONS:
             if not show_all and not session_active(s, h_now):
                 continue
             render_session_card(s, h_now)
-
-            # Radar chart profil sesi
-            with st.expander(f"PROFIL KARAKTERISTIK — {s['NAME'] if 'NAME' in s else s['name']} (RADAR)", expanded=False):
+            with st.expander(f"PROFIL KARAKTERISTIK — {s['name']} (RADAR)", expanded=False):
                 c1, c2 = st.columns([1, 1])
                 with c1:
                     st.plotly_chart(build_vol_radar(s["id"]), use_container_width=True,
@@ -907,7 +969,7 @@ def main():
 <b style="color:{s['color']};">Kondisi Spread:</b> {pd_data.get('spread_condition','—')}<br>
 <b style="color:{s['color']};">Aktivitas Institusional:</b> {pd_data.get('institutional_activity','—')}<br>
 <b style="color:{s['color']};">Strategi Terbaik:</b> {pd_data.get('best_strategy','—')}<br>
-<b style="color:{s['color']};">Volume Share Global:</b> {s['share']}
+<b style="color:{s['color']};">Volume Share Global:</b> {s['share']}%
 </div>
 </div>""", unsafe_allow_html=True)
 
@@ -916,37 +978,48 @@ def main():
         st.markdown('<div class="sec-title">POWER ZONES — SESSION OVERLAPS</div>', unsafe_allow_html=True)
         st.markdown('<div class="sec-sub">PERIODE LIKUIDITAS TERTINGGI · SPREAD TERKECIL · PELUANG TERBESAR</div>', unsafe_allow_html=True)
         render_overlap_cards(h_now)
-
         st.markdown('<hr class="hr">', unsafe_allow_html=True)
-
-        # Penjelasan strategi per power zone
         st.markdown('<div class="sec-title">STRATEGI PER POWER ZONE</div>', unsafe_allow_html=True)
+
+        # Hitung jam overlap dinamis untuk tampilan
+        ovs = resolved_overlaps()
+        pz1 = ovs[0] if len(ovs) > 0 else {}
+        pz2 = ovs[1] if len(ovs) > 1 else {}
+        pz1_time = f"{format_wib_hour(pz1.get('start',14))}–{format_wib_hour(pz1.get('end',16))} WIB" if pz1 else "—"
+        pz2_time = f"{format_wib_hour(pz2.get('start',19))}–{format_wib_hour(pz2.get('end',23))} WIB" if pz2 else "—"
+
         cols_pz = st.columns(2)
         strategies = [
             {
-                "zone":    "POWER ZONE I — TOKYO/LONDON (15:00–16:00 WIB)",
+                "zone":    f"POWER ZONE I — TOKYO/LONDON ({pz1_time})",
                 "color":   "#FFD93D",
                 "content": [
                     ("Pair Terbaik", "EUR/JPY, GBP/JPY, AUD/JPY — JPY crosses paling reaktif"),
                     ("Strategi",     "Breakout dari range Tokyo. London sering reverse atau extend trend Asia"),
-                    ("Durasi",       "1 jam — singkat tapi volatile. Gunakan pending order di high/low Tokyo"),
+                    ("Durasi",       "~1 jam — singkat tapi volatile. Gunakan pending order di high/low Tokyo"),
                     ("Risk",         "False breakout umum terjadi. Konfirmasi dengan volume dan candle close"),
                 ],
             },
             {
-                "zone":    "POWER ZONE II — LONDON/NEW YORK (20:00–24:00 WIB)",
+                "zone":    f"POWER ZONE II — LONDON/NEW YORK ({pz2_time})",
                 "color":   "#FF6B6B",
                 "content": [
                     ("Pair Terbaik", "EUR/USD, GBP/USD, USD/JPY, XAU/USD — semua pair major liquid"),
                     ("Strategi",     "Trend-following dan breakout momentum. Hindari counter-trend tanpa strong signal"),
                     ("Durasi",       "4 jam — window paling panjang dan paling profitable untuk day trader"),
-                    ("Risk",         "Data AS dirilis di sini (20:30–22:00). SL wajib sebelum masuk posisi"),
+                    ("Risk",         "Data AS dirilis di sini. SL wajib sebelum masuk posisi"),
                 ],
             },
         ]
         for col, strat in zip(cols_pz, strategies):
             with col:
-                rows = "".join(f'<div class="tip-row"><div class="tip-num" style="color:{strat["color"]};min-width:80px;font-size:.55rem;">{k}</div><div class="tip-txt">{v}</div></div>' for k,v in strat["content"])
+                rows = "".join(
+                    f'<div class="tip-row">'
+                    f'<div class="tip-num" style="color:{strat["color"]};min-width:80px;font-size:.55rem;">{k}</div>'
+                    f'<div class="tip-txt">{v}</div>'
+                    f'</div>'
+                    for k, v in strat["content"]
+                )
                 st.markdown(f"""
 <div class="strat-card">
 <div class="strat-header" style="color:{strat['color']};">{strat['zone']}</div>
@@ -966,14 +1039,18 @@ Institusi besar (bank, hedge fund) paling aktif saat dua sesi overlap karena lik
         render_volatility_heatmap(h_now)
         st.markdown('<hr class="hr">', unsafe_allow_html=True)
 
-        # Current hour analysis
-        curr_hr = int(h_now)
+        curr_hr  = int(h_now)
         curr_vol = HOURLY_VOLATILITY.get(curr_hr, 10)
-        if curr_vol >= 80:   vol_state, vol_color, vol_advice = "EKSTREM","#FF6B6B","Volume dan pergerakan sangat tinggi. Gunakan SL lebih lebar. Peluang besar tapi risiko spike tinggi."
-        elif curr_vol >= 60: vol_state, vol_color, vol_advice = "TINGGI","#FF9F43","Kondisi aktif. Trend dan breakout lebih reliable. Manajemen posisi sangat penting."
-        elif curr_vol >= 35: vol_state, vol_color, vol_advice = "SEDANG","#FFD93D","Volume moderat. Campuran antara range dan trending. Konfirmasi sinyal dengan indikator tambahan."
-        elif curr_vol >= 15: vol_state, vol_color, vol_advice = "RENDAH","#00FFC8","Pasar tenang. Range trading lebih optimal. Spread bisa lebih lebar dari biasanya."
-        else:                vol_state, vol_color, vol_advice = "SANGAT RENDAH","#4FC3F7","Volume minimum. Sebaiknya tunggu sesi berikutnya. Risiko whipsaw dan spread lebar."
+        if curr_vol >= 80:
+            vol_state, vol_color, vol_advice = "EKSTREM",    "#FF6B6B", "Volume dan pergerakan sangat tinggi. Gunakan SL lebih lebar. Peluang besar tapi risiko spike tinggi."
+        elif curr_vol >= 60:
+            vol_state, vol_color, vol_advice = "TINGGI",     "#FF9F43", "Kondisi aktif. Trend dan breakout lebih reliable. Manajemen posisi sangat penting."
+        elif curr_vol >= 35:
+            vol_state, vol_color, vol_advice = "SEDANG",     "#FFD93D", "Volume moderat. Campuran antara range dan trending. Konfirmasi sinyal dengan indikator tambahan."
+        elif curr_vol >= 15:
+            vol_state, vol_color, vol_advice = "RENDAH",     "#00FFC8", "Pasar tenang. Range trading lebih optimal. Spread bisa lebih lebar dari biasanya."
+        else:
+            vol_state, vol_color, vol_advice = "SANGAT RENDAH", "#4FC3F7", "Volume minimum. Sebaiknya tunggu sesi berikutnya. Risiko whipsaw dan spread lebar."
 
         col_cv, col_ca = st.columns([1, 2])
         with col_cv:
@@ -992,15 +1069,14 @@ VOLATILITAS JAM INI
 </div>
 <div style="font-family:'Share Tech Mono',monospace;font-size:.52rem;color:#1A3040;">{curr_hr:02d}:00 WIB</div>
 </div>""", unsafe_allow_html=True)
+
         with col_ca:
             st.markdown(f"""
 <div class="ibox" style="--lc:{vol_color};">
 <div class="ibox-t">ANALISIS KONDISI PASAR SAAT INI</div>
 <div class="ibox-b">{vol_advice}</div>
 </div>""", unsafe_allow_html=True)
-
-            # Sesi aktif saat ini
-            active_now = [s["name"] for s in SESSIONS if session_active(s, h_now)]
+            active_now  = [s["name"] for s in SESSIONS if session_active(s, h_now)]
             overlap_now = [o["label"] for o in OVERLAPS if overlap_active(o, h_now)]
             st.markdown(f"""
 <div class="ibox" style="--lc:#4A9EBF;">
@@ -1008,72 +1084,52 @@ VOLATILITAS JAM INI
 <div class="ibox-b">
 <b style="color:#00FFC8;">Sesi Aktif:</b> {', '.join(active_now) if active_now else 'Tidak ada sesi aktif'}<br>
 <b style="color:#FFD93D;">Overlap:</b> {', '.join(overlap_now) if overlap_now else 'Tidak ada overlap aktif'}<br>
-<b style="color:#C77DFF;">Kondisi:</b> {'Peak liquidity — kondisi ideal trading' if curr_vol>=80 else 'Suboptimal — pertimbangkan menunggu Power Zone'}
+<b style="color:#C77DFF;">Kondisi:</b> {'Peak liquidity — kondisi ideal trading' if curr_vol >= 80 else 'Suboptimal — pertimbangkan menunggu Power Zone'}
 </div>
 </div>""", unsafe_allow_html=True)
 
         st.markdown('<hr class="hr">', unsafe_allow_html=True)
         st.markdown('<div class="sec-title">VOLATILITAS PER SESI — PERBANDINGAN</div>', unsafe_allow_html=True)
         st.markdown('<div class="sec-sub">RATA-RATA INTENSITAS PERGERAKAN PER SESI TRADING</div>', unsafe_allow_html=True)
-
-        # Session vol comparison chart
-        sess_names = [s["name"] for s in SESSIONS]
-        sess_vols  = [s["vol_pct"] for s in SESSIONS]
-        sess_colors= [s["color"] for s in SESSIONS]
-        fig_sv = go.Figure(go.Bar(
-            x=sess_names, y=sess_vols,
-            marker=dict(color=[f"{c}AA" for c in sess_colors], line=dict(color=sess_colors, width=1)),
-            text=[f"{v}%" for v in sess_vols],
-            textposition="outside",
-            textfont=dict(family="Share Tech Mono, monospace", size=9),
-            hovertemplate="%{x}: <b>%{y}%</b> volatilitas relatif<extra></extra>",
-        ))
-        volatility_layout = dict(BASE)
-        volatility_layout.update(
-            height=200,
-            xaxis=dict(showgrid=False, tickfont=dict(size=9, family="Share Tech Mono, monospace")),
-            yaxis=dict(range=[0, 115], showgrid=True, gridcolor="#0A1220",
-                tickfont=dict(size=8),
-                title=dict(text="VOLATILITAS RELATIF (%)", font=dict(size=8, color="#8298AD"))),
-            title=dict(text="VOLATILITAS RELATIF PER SESI", font=dict(size=9, color="#00FFC8"), x=0),
-            bargap=0.35, showlegend=False,
-        )
-        fig_sv.update_layout(**volatility_layout)
-        st.plotly_chart(fig_sv, use_container_width=True, config={"staticPlot": True})
+        st.plotly_chart(build_session_vol_bar(h_now), use_container_width=True, config={"staticPlot": True})
 
     # ── TAB 5: PANDUAN TRADER ────────────────────────────────────────────────
     with tabs[4]:
         st.markdown('<div class="sec-title">PANDUAN TRADER — SESSION MASTERY</div>', unsafe_allow_html=True)
         st.markdown('<div class="sec-sub">7 PRINSIP TIMING TRADING BERBASIS SESI PASAR</div>', unsafe_allow_html=True)
         render_trader_guide()
-
         st.markdown('<hr class="hr">', unsafe_allow_html=True)
         st.markdown('<div class="sec-title">QUICK REFERENCE — PAIR TERBAIK PER SESI</div>', unsafe_allow_html=True)
-        st.markdown('<div class="sec-sub">PAIR DENGAN LIKUIDITAS DAN RANGE OPTIMAL SESUAI JAM TRADING</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sec-sub">PAIR DENGAN LIKUIDITAS DAN RANGE OPTIMAL SESUAI JAM TRADING WIB</div>', unsafe_allow_html=True)
 
-        render_quick_reference(h_now)
-
-        st.markdown('<hr class="hr">', unsafe_allow_html=True)
-
-        # Disclaimer
-        st.markdown("""
-<div class="ibox" style="--lc:#1A2D3A;">
-<div class="ibox-t">DISCLAIMER</div>
-<div class="ibox-b">
-Data waktu, volatilitas, dan range adalah estimasi berdasarkan kondisi pasar rata-rata. Kondisi aktual dapat berbeda secara signifikan tergantung event ekonomi, geopolitik, dan sentimen pasar. Selalu gunakan manajemen risiko yang ketat — tidak ada jaminan profit dalam trading forex.
-</div>
+        cols_ref = st.columns(4)
+        for col, s in zip(cols_ref, SESSIONS):
+            active  = session_active(s, h_now)
+            border  = f"border-color:{s['color']}80;" if active else ""
+            o_h, c_h = session_wib_window(s)
+            with col:
+                pairs_html = "".join(
+                    f'<div style="font-family:\'Share Tech Mono\',monospace;font-size:.6rem;'
+                    f'color:{s["color"]};padding:.15rem 0;border-bottom:1px solid #0E1826;">{p}</div>'
+                    for p in s["pairs"]
+                )
+                st.markdown(f"""
+<div style="background:#0A1018;border:1px solid #141E2D;{border}border-radius:2px;padding:.7rem .8rem;">
+<div style="font-family:'Share Tech Mono',monospace;font-size:.65rem;font-weight:700;
+    color:{s['color']};letter-spacing:.1em;margin-bottom:.1rem;">{s['name']}</div>
+<div style="font-family:'Share Tech Mono',monospace;font-size:.52rem;color:#1A3040;
+    margin-bottom:.4rem;">{format_wib_hour(o_h)}–{format_wib_hour(c_h)} WIB</div>
+{pairs_html}
 </div>""", unsafe_allow_html=True)
 
-    # ── FOOTER ───────────────────────────────────────────────────────────────
-    st.markdown("""
-<hr style="border:none;border-top:1px solid #0E1826;margin:1.5rem 0 .5rem;">
-<div style="text-align:center;padding:.5rem 0;">
-<div style="font-family:'Share Tech Mono',monospace;font-size:.45rem;color:#0F1A24;letter-spacing:.2em;">
-AEROVULPIS · MARKET SESSIONS MODULE · PROTOTYPE · DATA REFRESH SETIAP MENIT
-</div>
-</div>
-""", unsafe_allow_html=True)
-
+    # ── FOOTER ────────────────────────────────────────────────────────────────
+    st.markdown('<hr class="hr">', unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="font-family:\'Share Tech Mono\',monospace;font-size:.52rem;color:#1A3040;letter-spacing:.1em;">'
+        f'SNAPSHOT: {now_dt.strftime("%H:%M WIB · %d %b %Y")} · '
+        f'SUMBER JAM SESI: babypips.com · dukascopy.com · myfxbook.com (UTC-based, DST-aware)</div>',
+        unsafe_allow_html=True,
+    )
 
 if __name__ == "__main__":
     main()
